@@ -75,3 +75,4 @@
 - 2026-08-08: phase-stream-view-20260806/change_stream_view_20260806.md  # task013 natural navigation + confirm/abort expanded edit
 - 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task014 date/tag/title Stream rows
 - 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task015 trailing Stream tags
+- 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task016 creation-day Stream groups

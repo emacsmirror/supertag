@@ -89,3 +89,9 @@
   - 产出：每行顺序改为 `[YYYY-MM-DD Day HH:MM]  标题  #tag…`
   - 验证方式：失败优先 Runtime ERT 锁定标题先于标签，并继续断言稳定 node key/title face
   - 影响范围：现有 Stream text widget 的字符串拼接与当前产品文档；不改数据、视觉组件或交互
+
+- task016 [x] 将日期改为创建日分组标题
+  - 依据：2026-08-09 用户可读性反馈
+  - 产出：每个本地创建日显示一次 `YYYY-MM-DD Day`；组内 node 行为 `标题  #tag…`，缺失时间进入 `No date` 组
+  - 验证方式：失败优先 Runtime ERT 覆盖同日日期去重、node 行无日期、稳定 key/title face，以及日期 header 上的导航/编辑兼容
+  - 影响范围：Stream presentation grouping 与当前产品文档；不改 Store state、排序、Runtime 或源编辑语义

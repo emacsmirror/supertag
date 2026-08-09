@@ -1,5 +1,13 @@
 # change_stream_view_20260806
 
+## 2026-08-09 — task016 — Modify
+
+- Files: `supertag-view-stream.el`、`test/test-view-stream.el`、README/CHANGELOG/View guide 与 Stream phase 当前产品文档。
+- Behavior: Stream 不再在每条 node 前重复时间；已排序节点按本地创建日分组，每组显示一次 `YYYY-MM-DD Day`，组内保持 `标题  #tag…`。
+- Compatibility: 日期 header 本身没有 node key；光标位于 header 时向后解析该组第一条 node ID，因此 `n`/`e` 与直接 Runtime open 仍可用。
+- Simplification: 只在 renderer 增加连续分组和两层既有 stack/text widgets；不改 state、排序、Store、Runtime、Widget 类型或配置。
+- Verification: 同日分组回归在逐行日期实现上 8/9 失败；首版分组暴露 header 命令回归 7/9，补齐兼容后 focused 9/9、相关 View 49/49、full ERT 401/401；strict byte compile、checkdoc、check-parens、diff-check 与 repo-local `.elc` zero 通过。
+
 ## 2026-08-09 — task015 — Modify
 
 - Files: `supertag-view-stream.el`、`test/test-view-stream.el` 与 Stream phase 当前产品文档。

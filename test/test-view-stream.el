@@ -73,10 +73,17 @@
       (should
        (equal (mapcar (lambda (node) (plist-get node :id))
                       (plist-get state :nodes))
-              '("early" "late" "untimed-a" "untimed-b"))))))
+              '("early" "late" "untimed-a" "untimed-b")))
+      (let ((undated
+             (car (last (supertag-view-stream--group-nodes-by-date
+                         (plist-get state :nodes))))))
+        (should (equal (car undated) "No date"))
+        (should (equal (mapcar (lambda (node) (plist-get node :id))
+                               (cdr undated))
+                       '("untimed-a" "untimed-b")))))))
 
-(ert-deftest supertag-view-stream-runtime-renders-metadata-title-list ()
-  "The Runtime must render keyed date/tag/title rows without body projections."
+(ert-deftest supertag-view-stream-runtime-renders-date-grouped-title-list ()
+  "The Runtime must group keyed title/tag rows by creation day."
   (supertag-view-stream-test--with-store
     (unwind-protect
         (progn
@@ -86,6 +93,12 @@
            "A paragraph.\n\n| Name | URL |\n| GNU | elpa.gnu.org |\n\n#+begin_quote\nKeep it small.\n#+end_quote"
            (encode-time 0 14 7 2 11 2025)
            "/tmp/private-note.org")
+          (supertag-view-stream-test--put-node
+           "node-2" "Second package" '("emacs") "Second body"
+           (encode-time 0 45 9 2 11 2025))
+          (supertag-view-stream-test--put-node
+           "node-3" "Next day" '("emacs") "Next body"
+           (encode-time 0 0 8 3 11 2025))
           (let ((system-time-locale "C"))
             (cl-letf (((symbol-function 'display-buffer) #'ignore))
               (let ((buffer
@@ -96,11 +109,20 @@
                   (should (derived-mode-p 'supertag-view-stream-mode))
                   (should (equal (plist-get supertag-view--instance :view-id)
                                  'stream))
-                  (should (string-match-p "\\[2025-11-02 Sun 07:14\\]"
-                                          (buffer-string)))
+                  (should (= (how-many "^2025-11-02 Sun$"
+                                       (point-min) (point-max))
+                             1))
+                  (should (= (how-many "^2025-11-03 Mon$"
+                                       (point-min) (point-max))
+                             1))
+                  (should-not (string-match-p "07:14" (buffer-string)))
                   (should (string-match-p
                            "Package archives  #emacs #elpa"
                            (buffer-string)))
+                  (should (string-match-p "Second package  #emacs"
+                                          (buffer-string)))
+                  (should (string-match-p "Next day  #emacs"
+                                          (buffer-string)))
                   (should (string-match-p "Package archives" (buffer-string)))
                   (should-not (string-match-p "A paragraph" (buffer-string)))
                   (should-not (string-match-p "| GNU | elpa.gnu.org |"
@@ -109,7 +131,14 @@
                   (should-not (string-match-p "/tmp/private-note.org"
                                               (buffer-string)))
                   (goto-char (point-min))
+                  (should (eq (get-text-property (point) 'font-lock-face)
+                              'org-level-3))
+                  (search-forward "2025-11-02 Sun")
                   (search-forward "Package archives")
+                  (should (equal (buffer-substring-no-properties
+                                  (line-beginning-position)
+                                  (line-end-position))
+                                 "Package archives  #emacs #elpa"))
                   (let ((position (1- (point))))
                     (should (equal (get-text-property
                                     position 'supertag-entity-id)
@@ -121,7 +150,10 @@
                   (search-forward "#emacs")
                   (should (equal (get-text-property
                                   (1- (point)) 'supertag-entity-id)
-                                 "node-1")))))))
+                                 "node-1"))
+                  (search-forward "Second package")
+                  (search-forward "2025-11-03 Mon")
+                  (search-forward "Next day"))))))
       (supertag-view-stream-test--kill-buffers))))
 
 (ert-deftest supertag-view-stream-refresh-restores-node-id-and-falls-back ()

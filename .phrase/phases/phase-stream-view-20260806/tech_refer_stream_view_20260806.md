@@ -13,7 +13,7 @@
 
 Stream 注册为普通、不可在 Developer View picker 中选择的 Runtime Adapter；公开命令只负责读 tag 并打开该 tag 的独立主 buffer。
 
-主 buffer 通过现有 Widget Renderer 完整重绘。每个 node 只有一个稳定 key（node ID）和一个 text widget；widget 从既有 node plist 拼出日期、带 title face 的标题与尾随 `#tag` token，tag 视觉继续沿用全局 inline-tag style。Stream mode 派生自 `org-mode`，保持 buffer read-only，并只提供 `n`/`p`/`e`/`v`/`g`/`q`。
+主 buffer 通过现有 Widget Renderer 完整重绘。renderer 先把已按时间排序的 nodes 按本地创建日折叠成连续分组；每组一个无 key 的日期 text widget，随后是带稳定 node ID key 的 `标题  #tag` text widgets。tag 视觉继续沿用全局 inline-tag style，组间空一行。Stream mode 派生自 `org-mode`，保持 buffer read-only，并只提供 `n`/`p`/`e`/`v`/`g`/`q`。
 
 完整正文继续由源 Org buffer 拥有。`e` 直接复用既有 indirect/narrow 编辑入口，因此单列标题流不需要 index、button、layout 状态、第二个 buffer 或新的详情展开状态。
 
@@ -22,6 +22,7 @@ Stream 注册为普通、不可在 Developer View picker 中选择的 Runtime Ad
 | State | Owner |
 | --- | --- |
 | tag、nodes | Runtime input/state |
+| creation-day grouping | Stream Widget Renderer |
 | title projection | Stream Widget Renderer |
 | source edits/undo/save | base Org buffer |
 | current node identity | node-ID text property + point |
@@ -58,4 +59,4 @@ Node View 当前只有无参交互 toggle，内部已有 node-ID opening path。
 
 ## Decision
 
-Stream 是一个单 buffer Runtime Adapter。Framework 不改；Widget Renderer 只绘制带 node key 的标题；Org 源 buffer 继续拥有完整正文和编辑。这是当前最少的状态和失效路径。
+Stream 是一个单 buffer Runtime Adapter。Framework 不改；Widget Renderer 绘制无 key 的日期分组标题和带 node key 的标题/标签行；Org 源 buffer 继续拥有完整正文和编辑。这是当前最少的状态和失效路径。

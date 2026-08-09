@@ -14,7 +14,7 @@ Predecessors: `DONE-phase-view-runtime-20260804`、`DONE-phase-widget-renderer-2
 
 当前 Search、Table 与 Kanban 擅长查找、比较和操作结构化数据，但缺少一个按时间快速扫过主题节点的入口。源文件把相关内容分散在不同位置；`:extends` 已经表达标签层级，却还没有一个清晰界面把整棵标签子树聚合成标题流。
 
-Stream View 把标签当作浏览入口。一个单列主 buffer 在同一行显示节点创建日期、可识别标题与尾随的对应 `#tag`，不显示文件路径、Org 星号、正文或带下划线的 button。当前行仅使用轻微背景高亮表示选择。
+Stream View 把标签当作浏览入口。一个单列主 buffer 按创建日分组节点，日期只在每组开头显示一次；组内每行显示可识别标题与尾随的对应 `#tag`，不显示文件路径、Org 星号、正文或带下划线的 button。当前行仅使用轻微背景高亮表示选择。
 
 “我们已经统一了 View Runtime 和 Widget Renderer，现在最重要的是减少重复界面。”Org-Supertag 项目负责人表示，“标题流本身就是索引；完整内容交给源 Org 节点，字段管理留给 Node View。”
 
@@ -42,7 +42,7 @@ Search 用于从关键词找到节点，并以摘要帮助筛选；Stream View �
 
 #### 4. 标题流显示什么？
 
-每行显示节点创建日期、可读标题、尾随的全部对应 `#tag` 和轻微选中态，不显示源文件路径、Org 星号、正文或 button 下划线。
+每个创建日显示一个日期标题；组内每行显示可读标题、尾随的全部对应 `#tag` 和轻微选中态，不重复日期，也不显示源文件路径、Org 星号、正文或 button 下划线。
 
 #### 5. 如何查看完整正文？
 
@@ -89,7 +89,7 @@ Stream buffer 是派生阅读投影，直接修改会产生正文副本、同步
 #### 15. MVP 的完成标准是什么？
 
 - 真实标签及后代标签查询正确，不误匹配相似前缀。
-- 单列日期/标题/标签、导航和稳定位置恢复可用；不存在 companion index、`s` 或 button 下划线。
+- 单列日期分组、标题/标签行、导航和稳定位置恢复可用；不存在 companion index、`s` 或 button 下划线。
 - Stream 不渲染正文；`e` 能打开完整源 Org 节点并返回。
 - `e` 进入当前源节点的 narrow 编辑并能返回；字段入口打开 `view-node`。
 - 重复打开、刷新、编辑和退出不泄漏 buffer、subscription 或 hook。
@@ -100,5 +100,5 @@ Stream buffer 是派生阅读投影，直接修改会产生正文副本、同步
 1. Stream 只有单列标题流；不保留 companion index、split/plain 或 `s`。
 2. 标签查询包含精确标签及全部传递 `:extends` 后代，结果按创建时间排序。
 3. Stream 只读；`e` 打开完整源节点的 indirect/narrow buffer，字段编辑进入 `view-node`。
-4. 标题流显示日期、标题、尾随的全部对应标签和轻微选中态；不显示路径、正文、Org 星号或 button 下划线。
+4. 标题流按创建日分组；日期每组只显示一次，node 行显示标题、尾随标签和轻微选中态；不显示路径、正文、Org 星号或 button 下划线。
 5. 标题列表完整重绘；不引入详情状态、虚拟滚动、新依赖或 Framework 扩张。

@@ -26,7 +26,7 @@
 ## Current Contract（task014，2026-08-09）
 
 1. `supertag-view-stream` 只建立一个 Runtime main buffer，不创建 `*Supertag Stream Index: TAG*`。
-2. main buffer 每行显示 `[YYYY-MM-DD Day HH:MM]  标题  #tag…`；不显示正文、文件路径、Org 星号或带下划线的 button。
+2. main buffer 按创建日显示 `YYYY-MM-DD Day` 分组标题，同一天只显示一次日期；组内每行显示 `标题  #tag…`，不显示正文、文件路径、Org 星号或带下划线的 button。
 3. header-line 只显示 `#tag` 与 node count；Runtime input/state 不含 `:layout`。
 4. `n`/`p` 按稳定 node ID 在标题间导航；已可见标题保持自然窗口位置，不再被强制置顶；`s` 未绑定。
 5. `e` 打开并展开完整源 Org 节点的标题与正文，child heading 不进入当前 restriction，且不自动保存。
@@ -51,6 +51,7 @@
 - task013 regression-first: 先复现 window start 1→7、正文 invisible 与 `C-c C-k` 错误绑定；修复后 Stream 9/9、相关 View 49/49、full ERT 401/401，strict compile/checkdoc/check-parens/diff-check 与 repo-local `.elc` zero 通过。
 - task014 regression-first: 旧 renderer 缺日期/标签，Stream 8/9；扩展同一个 keyed text widget 后 Stream 9/9、相关 View 49/49、full ERT 401/401，且正文、路径、button 排除断言继续通过；strict compile/checkdoc/check-parens/diff-check 与 repo-local `.elc` zero。
 - task015 regression-first: 旧顺序为 `日期 → 标签 → 标题`，Stream 8/9；交换现有拼接位置后 Stream 9/9、相关 View 49/49、full ERT 401/401，strict compile/checkdoc/check-parens/diff-check 与 repo-local `.elc` zero。
+- task016 regression-first: 逐行日期实现对日期分组断言为 Stream 8/9；首版分组因日期 header 无 node key 暴露导航/编辑回归 7/9；向后解析组内首个 node 后 Stream 9/9、相关 View 49/49、full ERT 401/401，strict compile/checkdoc/check-parens/diff-check 与 repo-local `.elc` zero。
 - task012 regression-first: 旧实现 Stream 4/8 pass、4/8 按预期失败（layout、body/tag、companion）；删除后 Stream 8/8 pass。
 - task012 isolated full ERT: 临时 detached worktree 只应用 Stream code/test diff，400/400 pass。
 - 当前脏工作区 full ERT: 398/400；两项失败来自用户未提交的 Dashboard 实验要求缺失的 `textui`，Stream 与其余 398 项通过，本次未修改该用户工作。
@@ -71,6 +72,6 @@
 
 在用户日常 Emacs 中执行 `M-x supertag-view-stream`，选择一个含 `:extends` 后代且至少三个节点的真实 tag，确认只有单列标题、无下划线/正文/index，`n`/`p` 可导航，`e` 显示完整源节点，`v` 与 `q` 正常。用户明确回复通过前，task006、issue032 与 phase 均保持未完成。
 
-task013 追加检查：在窗口中部标题按 `n`/`p` 时行位置自然移动；折叠源节点后按 `e` 仍看到标题与正文；分别用 `C-c C-k` 验证取消、`C-c C-c` 验证确认。task014/task015 追加检查：每一行的日期、标题和尾随标签可读，且不重新出现正文/index/button。issue037 在用户明确通过前保持打开。
+task013 追加检查：在窗口中部标题按 `n`/`p` 时行位置自然移动；折叠源节点后按 `e` 仍看到标题与正文；分别用 `C-c C-k` 验证取消、`C-c C-c` 验证确认。task016 追加检查：同一天多个 node 只出现一个日期标题，node 行只有标题和尾随标签；光标在日期标题时 `n`/`e` 仍可用，且不重新出现正文/index/button。issue037 在用户明确通过前保持打开。
 
 issue034 与 issue035 已由用户批准的 task012 设计取代：companion index 及其 window/selection lifecycle 已删除，不再需要旧双列实机检查。

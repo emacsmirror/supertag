@@ -130,10 +130,10 @@
       "Untitled")))
 
 (defun supertag-view-stream--node-date (node)
-  "Return NODE's creation time as one display string, or nil."
+  "Return NODE's creation day as one display string, or nil."
   (when-let* ((time (supertag-view-stream--created-time node)))
     (ignore-errors
-      (format-time-string "[%Y-%m-%d %a %H:%M]" time))))
+      (format-time-string "%Y-%m-%d %a" time))))
 
 (defun supertag-view-stream--node-tags (node)
   "Return NODE tags as one display string."
@@ -143,24 +143,45 @@
 
 (defun supertag-view-stream--node-widget (node)
   "Return the Widget tree for NODE."
-  (let ((date (supertag-view-stream--node-date node))
-        (tags (supertag-view-stream--node-tags node)))
+  (let ((tags (supertag-view-stream--node-tags node)))
     (list :type :text
           :key (plist-get node :id)
           :content
-          (concat (if date (concat date "  ") "")
-                  (propertize (supertag-view-stream--node-title node)
+          (concat (propertize (supertag-view-stream--node-title node)
                               'font-lock-face
                               'supertag-view-stream-title-face)
                   (if (string-empty-p tags) "" (concat "  " tags))))))
+
+(defun supertag-view-stream--group-nodes-by-date (nodes)
+  "Return chronological date groups for sorted NODES."
+  (let (groups)
+    (dolist (node nodes)
+      (let ((date (or (supertag-view-stream--node-date node) "No date")))
+        (if (and groups (equal date (caar groups)))
+            (setcdr (car groups) (cons node (cdar groups)))
+          (push (list date node) groups))))
+    (mapcar (lambda (group)
+              (cons (car group) (nreverse (cdr group))))
+            (nreverse groups))))
+
+(defun supertag-view-stream--date-group-widget (group)
+  "Return the Widget tree for date GROUP."
+  (list :type :stack
+        :spacing 0
+        :children
+        (cons (list :type :text
+                    :content (propertize (car group)
+                                         'font-lock-face 'org-level-3))
+              (mapcar #'supertag-view-stream--node-widget (cdr group)))))
 
 (defun supertag-view-stream--widgets (state)
   "Return the Stream Widget tree for STATE."
   (let ((nodes (plist-get state :nodes)))
     (if nodes
-        (list (list :type :stack :spacing 0
-                    :children (mapcar #'supertag-view-stream--node-widget
-                                      nodes)))
+        (list (list :type :stack :spacing 1
+                    :children
+                    (mapcar #'supertag-view-stream--date-group-widget
+                            (supertag-view-stream--group-nodes-by-date nodes))))
       (list (list :type :text
                   :content (format "No nodes for #%s."
                                    (plist-get state :tag)))))))
@@ -215,7 +236,11 @@
         (get-text-property position 'supertag-widget-key)
         (when (> position (point-min))
           (or (get-text-property (1- position) 'supertag-entity-id)
-              (get-text-property (1- position) 'supertag-widget-key))))))
+              (get-text-property (1- position) 'supertag-widget-key)))
+        (let ((next (next-single-property-change
+                     position 'supertag-entity-id nil (point-max))))
+          (when (< next (point-max))
+            (get-text-property next 'supertag-entity-id))))))
 
 (defun supertag-view-stream--find-entity (id)
   "Return the first position carrying entity ID."

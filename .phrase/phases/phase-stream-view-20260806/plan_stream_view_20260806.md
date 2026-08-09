@@ -12,6 +12,7 @@
 8. task013：恢复列表自然滚动，并补齐可确认/取消的展开编辑会话。
 9. task014：在单列标题行读取既有 `:created-at` 与 `:tags`，显示日期、标签和标题。
 10. task015：将标签从标题前移到标题后，只调整现有 text widget 的拼接顺序。
+11. task016：把逐行日期改为按本地创建日分组，组内保留标题与尾随标签。
 
 ## Implementation Order
 
@@ -48,6 +49,12 @@
 2. 只交换现有 title/tags 的拼接顺序，不新增状态、配置或 widget。
 3. 更新当前产品文档，运行 focused、full 与 static gates。
 
+## task016 Date Group Plan
+
+1. 先用同日两个 node 锁定“日期只出现一次、node 行不含日期”的 Runtime 回归。
+2. 在 renderer 内对既有排序结果做连续日期分组；日期 header 无 node key，node row 契约不变。
+3. 保持日期 header 上的 `n`/`e` 兼容，更新文档并运行 focused、related、full 与 static gates。
+
 ## Quality Gates
 
 ```sh
@@ -68,6 +75,7 @@ git diff --check
 - abort 覆盖编辑前内容：快照只覆盖当前 narrow 节点，并恢复进入编辑前的 modified 状态；不写 Store、不自动保存。
 - 代码膨胀：不新增 Framework API、Widget type、详情状态或替代索引；实现只保留主 Adapter 和 edit boundary。
 - 元数据过重：renderer 只发出既有 `#tag` token，视觉沿用全局 inline-tag style；不增加 Stream 专用 SVG、button、companion index 或显示配置。
+- 日期分组破坏命令入口：无 key 的日期 header 向后解析该组第一条 node ID；不把 header 伪装成 node，也不扩大 selection overlay。
 
 ## Rollback
 
