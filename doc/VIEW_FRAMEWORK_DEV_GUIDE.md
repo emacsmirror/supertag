@@ -166,7 +166,7 @@ field update demo-only memory and never read or write user data.
 - `supertag-view-table.el` — editable table state and selection
 - `supertag-view-kanban.el` — grouped cards and Store subscription
 - `supertag-view-node.el` — side-window display and follow lifecycle
-- `supertag-view-stream.el` — single-buffer Widget date/tag/title stream with source-backed node editing
+- `supertag-view-stream.el` — single-buffer Widget date/title/tag stream with source-backed node editing
 - `supertag-view-progress-dashboard.el` — minimal read-only adapter
 
 **Document Version**: 2026-08-06

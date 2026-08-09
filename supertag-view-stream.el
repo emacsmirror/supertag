@@ -149,10 +149,10 @@
           :key (plist-get node :id)
           :content
           (concat (if date (concat date "  ") "")
-                  (if (string-empty-p tags) "" (concat tags "  "))
                   (propertize (supertag-view-stream--node-title node)
                               'font-lock-face
-                              'supertag-view-stream-title-face)))))
+                              'supertag-view-stream-title-face)
+                  (if (string-empty-p tags) "" (concat "  " tags))))))
 
 (defun supertag-view-stream--widgets (state)
   "Return the Stream Widget tree for STATE."

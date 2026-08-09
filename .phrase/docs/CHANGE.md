@@ -74,3 +74,4 @@
 - 2026-08-08: .phrase/docs/issue_board_ui_build_20260808.md  # issue036/task001 clean-clone Board UI build restored
 - 2026-08-08: phase-stream-view-20260806/change_stream_view_20260806.md  # task013 natural navigation + confirm/abort expanded edit
 - 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task014 date/tag/title Stream rows
+- 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task015 trailing Stream tags

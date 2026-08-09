@@ -11,6 +11,7 @@
 7. task012：删除 companion/layout/full-body 投影，收敛为单列标题流。
 8. task013：恢复列表自然滚动，并补齐可确认/取消的展开编辑会话。
 9. task014：在单列标题行读取既有 `:created-at` 与 `:tags`，显示日期、标签和标题。
+10. task015：将标签从标题前移到标题后，只调整现有 text widget 的拼接顺序。
 
 ## Implementation Order
 
@@ -40,6 +41,12 @@
 1. 先把真实 Runtime ERT 锁定为日期、全部标签、标题同一行，同时继续排除正文、路径和 button。
 2. 复用排序已读取的 `:created-at` 与旧版纯文本 `#tag` 格式，只扩展现有 keyed text widget。
 3. 更新当前产品文档，运行 focused、related、full 与 static gates。
+
+## task015 Tag Order Plan
+
+1. 先把 Runtime ERT 锁定为 `日期 → 标题 → 标签`，证明旧顺序失败。
+2. 只交换现有 title/tags 的拼接顺序，不新增状态、配置或 widget。
+3. 更新当前产品文档，运行 focused、full 与 static gates。
 
 ## Quality Gates
 

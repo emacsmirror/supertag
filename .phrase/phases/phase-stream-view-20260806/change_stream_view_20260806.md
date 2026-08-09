@@ -1,5 +1,12 @@
 # change_stream_view_20260806
 
+## 2026-08-09 — task015 — Modify
+
+- Files: `supertag-view-stream.el`、`test/test-view-stream.el` 与 Stream phase 当前产品文档。
+- Behavior: Stream row 顺序从 `日期 → 标签 → 标题` 调整为 `日期 → 标题 → 标签`；标签继续使用既有 inline-tag style。
+- Simplification: 只交换同一个 keyed text widget 内 title/tags 的拼接位置，没有新增 helper、状态、配置或视觉组件。
+- Verification: Runtime regression 在旧顺序上 8/9 失败；实现后 focused Stream 9/9、相关 View 49/49、full ERT 401/401；strict byte compile、checkdoc、check-parens、diff-check 与 repo-local `.elc` zero 通过。
+
 ## 2026-08-09 — task014 — Modify
 
 - Files: `supertag-view-stream.el`、`test/test-view-stream.el`、README/CHANGELOG/View guide 与 Stream phase 文档。

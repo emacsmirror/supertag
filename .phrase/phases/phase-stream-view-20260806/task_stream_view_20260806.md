@@ -83,3 +83,9 @@
   - 产出：每行显示 `[YYYY-MM-DD Day HH:MM]  #tag…  标题`；缺失日期或标签时省略对应段
   - 验证方式：失败优先 Runtime ERT 断言日期、全部标签、标题、稳定 node key，并继续排除正文/路径/button
   - 影响范围：Stream text widget、focused test 与当前产品文档；不改 Store、Runtime、排序或编辑流程
+
+- task015 [x] 将标签移到标题后方
+  - 依据：2026-08-09 用户可读性反馈
+  - 产出：每行顺序改为 `[YYYY-MM-DD Day HH:MM]  标题  #tag…`
+  - 验证方式：失败优先 Runtime ERT 锁定标题先于标签，并继续断言稳定 node key/title face
+  - 影响范围：现有 Stream text widget 的字符串拼接与当前产品文档；不改数据、视觉组件或交互

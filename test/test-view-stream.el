@@ -99,7 +99,7 @@
                   (should (string-match-p "\\[2025-11-02 Sun 07:14\\]"
                                           (buffer-string)))
                   (should (string-match-p
-                           "#emacs #elpa  Package archives"
+                           "Package archives  #emacs #elpa"
                            (buffer-string)))
                   (should (string-match-p "Package archives" (buffer-string)))
                   (should-not (string-match-p "A paragraph" (buffer-string)))
@@ -109,10 +109,6 @@
                   (should-not (string-match-p "/tmp/private-note.org"
                                               (buffer-string)))
                   (goto-char (point-min))
-                  (search-forward "#emacs")
-                  (should (equal (get-text-property
-                                  (1- (point)) 'supertag-entity-id)
-                                 "node-1"))
                   (search-forward "Package archives")
                   (let ((position (1- (point))))
                     (should (equal (get-text-property
@@ -121,7 +117,11 @@
                     (should-not (button-at position))
                     (should-not (get-text-property position 'mouse-face))
                     (should (eq (get-text-property position 'font-lock-face)
-                                'supertag-view-stream-title-face))))))))
+                                'supertag-view-stream-title-face)))
+                  (search-forward "#emacs")
+                  (should (equal (get-text-property
+                                  (1- (point)) 'supertag-entity-id)
+                                 "node-1")))))))
       (supertag-view-stream-test--kill-buffers))))
 
 (ert-deftest supertag-view-stream-refresh-restores-node-id-and-falls-back ()

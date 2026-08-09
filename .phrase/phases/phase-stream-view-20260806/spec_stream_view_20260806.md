@@ -2,13 +2,13 @@
 
 ## Summary
 
-Stream View 是按标签浏览节点摘要的独立 View。它通过现有 View Runtime 管理单个主 buffer，通过现有 Widget Renderer 生成带稳定 node key 的日期/标签/标题流；完整正文只在用户按 `e` 时通过源 Org 节点的 indirect/narrow buffer 显示和编辑。
+Stream View 是按标签浏览节点摘要的独立 View。它通过现有 View Runtime 管理单个主 buffer，通过现有 Widget Renderer 生成带稳定 node key 的日期/标题/标签流；完整正文只在用户按 `e` 时通过源 Org 节点的 indirect/narrow buffer 显示和编辑。
 
 ## Goals
 
 - `M-x supertag-view-stream` 读取一个 tag，并包含通过 `:extends` 递归继承它的所有后代。
 - 节点按 `:created-at` 升序排列；缺失时间时使用稳定 node ID 排序。
-- 主 Stream 每行显示创建日期、全部 `#tag` 与无 Org 星号的节点标题，不显示正文、文件路径或下划线 button。
+- 主 Stream 每行显示创建日期、无 Org 星号的节点标题与全部 `#tag`，标签位于标题之后；不显示正文、文件路径或下划线 button。
 - Stream 只有单列主 buffer，不创建 companion index，不提供 split/plain 与 `s` 切换。
 - `n`/`p` 在标题间导航，并同步 point 和轻微高亮；可见标题沿用窗口的自然滚动位置，不强制置顶。
 - refresh 使用稳定 node ID 恢复位置；节点消失时回退到第一个节点。
@@ -49,7 +49,7 @@ Stream state 是数据 plist：
 
 1. 用户执行 `M-x supertag-view-stream` 并选择 tag。
 2. Adapter 使用 `supertag-view-api-nodes-by-tag TAG t` 获取精确 tag 与传递 `:extends` 后代。
-3. Runtime 创建单列主 buffer；Widget Renderer 生成按创建时间排序的 `[YYYY-MM-DD Day HH:MM]  #tag…  标题` 摘要流。
+3. Runtime 创建单列主 buffer；Widget Renderer 生成按创建时间排序的 `[YYYY-MM-DD Day HH:MM]  标题  #tag…` 摘要流。
 4. header-line 只显示 `#tag` 与 node count。
 5. tag 是 Stream buffer identity：不同 tag 使用不同 main buffer；重复打开同一 tag 复用并刷新原 buffer。
 6. 切换到另一个 tag 时保留前一个 main buffer，并显示所选 tag 对应的独立 main buffer。
@@ -103,7 +103,7 @@ Stream state 是数据 plist：
 - 不同 tag 的公共命令返回不同且内容隔离的 main buffer；重复打开同一 tag 返回原 buffer。
 - tag 切换后显示当前 tag 的单列 main buffer；前一个 main buffer 仍可切回。
 - tag descendant query 使用传递 `:extends` 语义，并有 `diaryx` 与平面斜杠 ID 反例。
-- renderer 每行显示创建日期、全部 tag 和标题，不显示正文、file path、前导 Org 星号、button 或下划线。
+- renderer 每行显示创建日期、标题和尾随的全部 tag，不显示正文、file path、前导 Org 星号、button 或下划线。
 - `s` 未绑定；`n`/`p`、refresh selection 与 missing-node fallback 通过工作流 ERT。
 - 导航到已可见标题时 window start 不变；跨出可见区时目标仍可见。
 - narrow 编辑测试证明标题与正文已展开、child heading 不在 restriction 内，确认修改落到 base buffer 且不自动保存。
