@@ -75,44 +75,53 @@
                       (plist-get state :nodes))
               '("early" "late" "untimed-a" "untimed-b"))))))
 
-(ert-deftest supertag-view-stream-runtime-renders-title-only-node-list ()
-  "The real Runtime path must render keyed titles without body projections."
+(ert-deftest supertag-view-stream-runtime-renders-metadata-title-list ()
+  "The Runtime must render keyed date/tag/title rows without body projections."
   (supertag-view-stream-test--with-store
     (unwind-protect
         (progn
           (supertag-view-stream-test--put-node
            "node-1" "Package archives"
-           '("emacs/package" "emacs/package/elpa")
+           '("emacs" "elpa")
            "A paragraph.\n\n| Name | URL |\n| GNU | elpa.gnu.org |\n\n#+begin_quote\nKeep it small.\n#+end_quote"
-           '(0 10 0 0) "/tmp/private-note.org")
-          (cl-letf (((symbol-function 'display-buffer) #'ignore))
-            (let ((buffer
-                   (supertag-view-open
-                    'stream '(:tag "emacs/package"))))
-              (with-current-buffer buffer
-                (font-lock-ensure)
-                (should (derived-mode-p 'supertag-view-stream-mode))
-                (should (equal (plist-get supertag-view--instance :view-id)
-                               'stream))
-                (should (string-match-p "Package archives" (buffer-string)))
-                (should-not (string-match-p "#emacs/package"
-                                            (buffer-string)))
-                (should-not (string-match-p "A paragraph" (buffer-string)))
-                (should-not (string-match-p "| GNU | elpa.gnu.org |"
-                                            (buffer-string)))
-                (should-not (string-match-p "Keep it small" (buffer-string)))
-                (should-not (string-match-p "/tmp/private-note.org"
-                                            (buffer-string)))
-                (goto-char (point-min))
-                (search-forward "Package archives")
-                (let ((position (1- (point))))
+           (encode-time 0 14 7 2 11 2025)
+           "/tmp/private-note.org")
+          (let ((system-time-locale "C"))
+            (cl-letf (((symbol-function 'display-buffer) #'ignore))
+              (let ((buffer
+                     (supertag-view-open
+                      'stream '(:tag "emacs"))))
+                (with-current-buffer buffer
+                  (font-lock-ensure)
+                  (should (derived-mode-p 'supertag-view-stream-mode))
+                  (should (equal (plist-get supertag-view--instance :view-id)
+                                 'stream))
+                  (should (string-match-p "\\[2025-11-02 Sun 07:14\\]"
+                                          (buffer-string)))
+                  (should (string-match-p
+                           "#emacs #elpa  Package archives"
+                           (buffer-string)))
+                  (should (string-match-p "Package archives" (buffer-string)))
+                  (should-not (string-match-p "A paragraph" (buffer-string)))
+                  (should-not (string-match-p "| GNU | elpa.gnu.org |"
+                                              (buffer-string)))
+                  (should-not (string-match-p "Keep it small" (buffer-string)))
+                  (should-not (string-match-p "/tmp/private-note.org"
+                                              (buffer-string)))
+                  (goto-char (point-min))
+                  (search-forward "#emacs")
                   (should (equal (get-text-property
-                                  position 'supertag-entity-id)
+                                  (1- (point)) 'supertag-entity-id)
                                  "node-1"))
-                  (should-not (button-at position))
-                  (should-not (get-text-property position 'mouse-face))
-                  (should (eq (get-text-property position 'font-lock-face)
-                              'supertag-view-stream-title-face)))))))
+                  (search-forward "Package archives")
+                  (let ((position (1- (point))))
+                    (should (equal (get-text-property
+                                    position 'supertag-entity-id)
+                                   "node-1"))
+                    (should-not (button-at position))
+                    (should-not (get-text-property position 'mouse-face))
+                    (should (eq (get-text-property position 'font-lock-face)
+                                'supertag-view-stream-title-face))))))))
       (supertag-view-stream-test--kill-buffers))))
 
 (ert-deftest supertag-view-stream-refresh-restores-node-id-and-falls-back ()
@@ -146,8 +155,8 @@
                                "node-0"))))))
       (supertag-view-stream-test--kill-buffers))))
 
-(ert-deftest supertag-view-stream-public-command-opens-one-title-only-buffer ()
-  "The public command must open one title-only Runtime buffer."
+(ert-deftest supertag-view-stream-public-command-opens-one-summary-buffer ()
+  "The public command must open one metadata/title Runtime buffer."
   (supertag-view-stream-test--with-store
     (unwind-protect
         (save-window-excursion

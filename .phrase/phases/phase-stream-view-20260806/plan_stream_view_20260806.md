@@ -10,6 +10,7 @@
 6. Documentation、performance、full/static/graphical verification。
 7. task012：删除 companion/layout/full-body 投影，收敛为单列标题流。
 8. task013：恢复列表自然滚动，并补齐可确认/取消的展开编辑会话。
+9. task014：在单列标题行读取既有 `:created-at` 与 `:tags`，显示日期、标签和标题。
 
 ## Implementation Order
 
@@ -34,6 +35,12 @@
 3. `C-c C-c` 沿用既有同步确认；`C-c C-k` 恢复快照并复用同一关闭/窗口恢复路径。
 4. 更新当前交互文档，运行 focused、full、compile/checkdoc/check-parens/diff gates。
 
+## task014 Metadata Row Plan
+
+1. 先把真实 Runtime ERT 锁定为日期、全部标签、标题同一行，同时继续排除正文、路径和 button。
+2. 复用排序已读取的 `:created-at` 与旧版纯文本 `#tag` 格式，只扩展现有 keyed text widget。
+3. 更新当前产品文档，运行 focused、related、full 与 static gates。
+
 ## Quality Gates
 
 ```sh
@@ -53,6 +60,7 @@ git diff --check
 - 窗口恢复破坏用户布局：打开前保存 window configuration；只有显式 `q` 恢复。
 - abort 覆盖编辑前内容：快照只覆盖当前 narrow 节点，并恢复进入编辑前的 modified 状态；不写 Store、不自动保存。
 - 代码膨胀：不新增 Framework API、Widget type、详情状态或替代索引；实现只保留主 Adapter 和 edit boundary。
+- 元数据过重：renderer 只发出既有 `#tag` token，视觉沿用全局 inline-tag style；不增加 Stream 专用 SVG、button、companion index 或显示配置。
 
 ## Rollback
 

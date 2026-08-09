@@ -129,13 +129,30 @@
         title
       "Untitled")))
 
+(defun supertag-view-stream--node-date (node)
+  "Return NODE's creation time as one display string, or nil."
+  (when-let* ((time (supertag-view-stream--created-time node)))
+    (ignore-errors
+      (format-time-string "[%Y-%m-%d %a %H:%M]" time))))
+
+(defun supertag-view-stream--node-tags (node)
+  "Return NODE tags as one display string."
+  (mapconcat (lambda (tag) (concat "#" tag))
+             (cl-remove-if-not #'stringp (plist-get node :tags))
+             " "))
+
 (defun supertag-view-stream--node-widget (node)
   "Return the Widget tree for NODE."
-  (list :type :text
-        :key (plist-get node :id)
-        :content (propertize (supertag-view-stream--node-title node)
-                             'font-lock-face
-                             'supertag-view-stream-title-face)))
+  (let ((date (supertag-view-stream--node-date node))
+        (tags (supertag-view-stream--node-tags node)))
+    (list :type :text
+          :key (plist-get node :id)
+          :content
+          (concat (if date (concat date "  ") "")
+                  (if (string-empty-p tags) "" (concat tags "  "))
+                  (propertize (supertag-view-stream--node-title node)
+                              'font-lock-face
+                              'supertag-view-stream-title-face)))))
 
 (defun supertag-view-stream--widgets (state)
   "Return the Stream Widget tree for STATE."

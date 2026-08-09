@@ -1,5 +1,12 @@
 # change_stream_view_20260806
 
+## 2026-08-09 — task014 — Modify
+
+- Files: `supertag-view-stream.el`、`test/test-view-stream.el`、README/CHANGELOG/View guide 与 Stream phase 文档。
+- Behavior: Stream 每个 keyed row 现在显示 `[YYYY-MM-DD Day HH:MM]  #tag…  标题`；无时间/标签时省略对应段，正文、路径、index 与 button 仍不渲染。
+- Simplification: 直接读取 state 中已有的 `:created-at`/`:tags`，复用旧版纯文本 `#tag` 格式并扩展现有 text widget；不改 Store、Runtime、排序或新增配置/face。
+- Verification: Runtime regression 在旧 renderer 上 8/9 失败；实现后 focused Stream 9/9、相关 View 49/49、full ERT 401/401；strict byte compile、checkdoc、check-parens、diff-check 与 repo-local `.elc` zero 通过。
+
 ## 2026-08-08 — task013 / issue037 — Modify
 
 - Files: `supertag-view-stream.el`、`test/test-view-stream.el`、README/CHANGELOG 与 Stream phase 文档。

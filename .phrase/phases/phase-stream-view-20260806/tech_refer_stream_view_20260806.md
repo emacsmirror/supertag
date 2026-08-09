@@ -13,7 +13,7 @@
 
 Stream 注册为普通、不可在 Developer View picker 中选择的 Runtime Adapter；公开命令只负责读 tag 并打开该 tag 的独立主 buffer。
 
-主 buffer 通过现有 Widget Renderer 完整重绘。每个 node 只有一个稳定 key（node ID）和一个 title text widget。Stream mode 派生自 `org-mode`，保持 buffer read-only，并只提供 `n`/`p`/`e`/`v`/`g`/`q`。
+主 buffer 通过现有 Widget Renderer 完整重绘。每个 node 只有一个稳定 key（node ID）和一个 text widget；widget 从既有 node plist 拼出日期、`#tag` token 与带 title face 的标题，tag 视觉继续沿用全局 inline-tag style。Stream mode 派生自 `org-mode`，保持 buffer read-only，并只提供 `n`/`p`/`e`/`v`/`g`/`q`。
 
 完整正文继续由源 Org buffer 拥有。`e` 直接复用既有 indirect/narrow 编辑入口，因此单列标题流不需要 index、button、layout 状态、第二个 buffer 或新的详情展开状态。
 

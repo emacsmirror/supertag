@@ -77,3 +77,9 @@
   - 产出：选择节点不再强制 window start；`e` 展开标题/正文；`C-c C-c` 确认，`C-c C-k` 恢复编辑前文本并取消
   - 验证方式：失败优先 public Stream ERT 覆盖 window start、折叠正文、确认/取消与 modified 状态；focused/full/static gates
   - 影响范围：Stream selection/edit boundary 与当前交互文档；不改 Runtime、Store 或持久化格式
+
+- task014 [x] 在标题行补回节点日期与标签
+  - 依据：2026-08-09 用户要求；spec Flow A
+  - 产出：每行显示 `[YYYY-MM-DD Day HH:MM]  #tag…  标题`；缺失日期或标签时省略对应段
+  - 验证方式：失败优先 Runtime ERT 断言日期、全部标签、标题、稳定 node key，并继续排除正文/路径/button
+  - 影响范围：Stream text widget、focused test 与当前产品文档；不改 Store、Runtime、排序或编辑流程

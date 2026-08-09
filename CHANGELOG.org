@@ -27,6 +27,9 @@
   user-facing upgrade/downgrade notes.
 
 ** View framework
+- Stream rows now show the node creation date and all corresponding =#tags=
+  beside the title, while remaining a single-column summary with no body,
+  file path, companion index, or underlined buttons.
 - Stream title navigation now preserves natural window scrolling instead of
   pinning every selected row to the top.  The =e= edit buffer explicitly
   expands the source title and body; =C-c C-c= confirms the edit and
