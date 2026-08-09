@@ -121,3 +121,9 @@
   - 产出：CAPF 在识别前导 `#` 后显式绕过通用 prefix threshold；不修改用户的 Corfu 全局配置
   - 验证方式：现场 Corfu 2.11 红/绿探测覆盖 `#`、`#d`；focused ERT 锁定触发契约与已有候选枚举
   - 影响范围：仅 `supertag-completion-at-point` 的触发提示；候选、排序、写入、Store 与其他 CAPF 不变
+
+- task024 [x] 左对齐显示完整 Tag 父链路径
+  - 依据：2026-08-10 用户确认候选应显示 `diary`、`diary/happy`、`Apple/Shortcut` 并共享同一左边界
+  - 产出：affixation 的候选文本直接使用完整 display path，prefix 固定为空；真实 Tag ID 与 `[New]` 后缀不变
+  - 验证方式：旧实现 focused Tag Path ERT 25/26；修复后 26/26；全量 ERT、Corfu formatter、byte compile 与静态检查
+  - 影响范围：仅补全候选展示；不改变 completion 匹配、插入、Store、`:extends` 或斜杠路径兼容语义

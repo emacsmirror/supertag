@@ -54,6 +54,9 @@
   =supertag-view-open=; refresh has one Runtime-only path.
 
 ** Bug fixes
+- Tag completion now shows full parent paths such as =diary/happy= in the
+  candidate column, so every row shares the same left edge.  Selecting the
+  display path still inserts and stores the real Tag ID.
 - Fixed inline =#tag= completion waiting for Corfu's generic two-character
   prefix threshold in normal Org buffers.  Once the leading =#= identifies
   the Tag CAPF context, existing candidates can now appear immediately

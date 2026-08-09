@@ -18,7 +18,7 @@
 - Emacs Lisp `#'function` 引用不进入渲染、同步提取或 tag completion。
 - SVG tag 字体低于正文行高，保持 badge 尺寸与标签可读性。
 - 兼容已有 `a/b/c` 完整路径 Tag ID；新式父子关系以现有 `:extends` 为单一来源。
-- completion 按真实 Tag ID 搜索，但把 `:extends` 父链显示为前缀；Schema 用同一棵父子树表达层级与字段继承。
+- completion 按真实 Tag ID 搜索，但把 `:extends` 完整父链路径直接显示为左对齐的候选文本；Schema 用同一棵父子树表达层级与字段继承。
 - `#` 一旦被 CAPF 识别为 Tag 上下文，自动补全不再等待 completion UI 的通用两/三字符阈值。
 
 ### Non-goals
@@ -49,6 +49,7 @@
 14. 用户写入 `#ai_suggestions` 后同步，Store 保留完整 ID；重扫后可通过 `M-x supertag-cleanup-orphaned-tags` 逐项选择旧孤立 Tag，确认前不修改数据。
 15. 用户输入 `#dia` 时，`diary` 排第一、`dia [New]` 排第二，之后才是其余匹配项；只有明确选中 `[New]` 才注册 `dia`。
 16. 用户在普通 Org buffer 输入 `#` 或 `#d` 时即可看到 Tag 候选，不需要把全局 Corfu prefix threshold 改成 1。
+17. completion 中 `diary`、`diary/happy`、`Apple/Shortcut` 等候选从同一左边界开始；选择子标签后仍写入真实 ID。
 
 ## Edge Cases
 
@@ -69,6 +70,7 @@
 - 分支不得移动进自己的子 namespace；普通字符串字段即使等于旧 Tag ID 也不得被重命名。
 - org-supertag 可以晚于 Org buffer 加载；自动样式启用必须同时覆盖现存 buffer 和以后进入 `org-mode` 的 buffer。
 - 父链展示不得改变候选值：选择 `diary/happy` 的视觉候选后，只能插入和持久化 `happy`。
+- 父链路径必须位于 affixation 的 candidate 列，prefix 列保持空字符串，不能因最长父链宽度缩进其他候选。
 - affixation 的 candidate/prefix/suffix 三列必须始终是字符串；没有 suffix 时返回空字符串，不能把 `nil` 交给 Corfu。
 - Schema 优先采用显式 `:extends` 父级；旧完整路径 ID 无显式父级时才按 `/` 派生兼容层级，冲突时不得形成循环。
 - display path 与真实完整路径 ID 同名时，真实 ID 优先，展示别名不得遮蔽它。
@@ -93,7 +95,7 @@
 - 单节点同步后 Tag entity、node `:tags` 与 node-tag relation 一致；移除 token 后只回收当前节点的失效关系。
 - descendant scope 在 View/Table 刷新后保持；聚合 Table 不提供 tag-specific 字段写入。
 - 延迟加载完成后，现存 Org buffer 的 `supertag-view-style-mode` 自动开启；非 Org buffer 不受影响。
-- completion 的 basic 与 `action=t` 枚举都能用 `happy` 命中真实 ID，并把 `diary/` 作为 affixation 前缀；只有新 ID 显示 `[New]`。
+- completion 的 basic 与 `action=t` 枚举都能用 `happy` 命中真实 ID，并把 `diary/happy` 作为左对齐候选文本、空字符串作为 affixation prefix；只有新 ID 显示 `[New]`。
 - completion 输入 `diary` 与 `diary/` 时必须枚举父链匹配的子标签；选中展示别名后，Org 与 Store 只能收到真实 ID `happy`。
 - completion 输入 `dia` 时，try-completion 必须推进到 `diary`；`dia [New]` 固定为第二项，且只有该候选可传入 `:create-if-needed t`。
 - Corfu 必须能直接格式化普通候选与 `[New]` 候选，不得触发 `wrong-type-argument arrayp nil`。

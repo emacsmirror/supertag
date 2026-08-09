@@ -1,5 +1,15 @@
 # change_smart_key_20260721
 
+- 2026-08-10 Fix
+  - Files: `supertag-ops-tag.el`, `test/tag-path-test.el`, task024 phase/docs
+  - Function: `supertag-tag-affixate-candidates`
+  - Root cause: 父链被放进 Corfu affixation prefix 列；Corfu 按最长 prefix 统一预留宽度，导致没有父链的候选也被整体缩进。
+  - Changes: 完整 display path 直接作为 candidate 文本，prefix 固定为空字符串；选择和持久化继续使用候选携带的真实 Tag ID。
+  - Simplification: 删除 candidate/prefix 拆分逻辑；不增加 Corfu advice、显示配置、缓存或第二套身份。
+  - Verification: 旧实现 focused Tag Path ERT 25/26；修复后 26/26，completion self-check 与 full ERT 402/402 通过。真实 Emacs 31 + Corfu 2.11 formatter 接收 `diary`、`diary/happy`、`Apple/Shortcut`、`adobe` 四个候选且所有 prefix 为空；normal whole-file byte compile、check-parens、diff-check 与 repo-local `.elc` zero 通过。编译仅保留本文件既有 obsolete macro/doc 告警。
+  - Risk: 仅改变候选视觉列；`[New]` suffix、排序、插入与 Store 语义不变。
+  - Related: `task024`
+
 - 2026-08-09 Fix
   - Files: `supertag-ui-completion.el`, `test/tag-path-test.el`, issue038/task023 phase/docs
   - Function: `supertag-completion-at-point`

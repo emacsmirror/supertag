@@ -77,3 +77,4 @@
 - 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task015 trailing Stream tags
 - 2026-08-09: phase-stream-view-20260806/change_stream_view_20260806.md  # task016 creation-day Stream groups
 - 2026-08-09: phase-smart-key-20260721/change_smart_key_20260721.md  # issue038/task023 #tag completion bypasses generic prefix thresholds
+- 2026-08-10: phase-smart-key-20260721/change_smart_key_20260721.md  # task024 left-aligned full Tag completion paths

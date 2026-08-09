@@ -25,6 +25,7 @@
 21. 将 `[New]` 设为行内 completion 唯一的新 Tag 注册入口；普通前缀、取消与分隔符不创建实体。
 22. 绕开 Corfu 的 exact-candidate 置顶，把已有补全项固定为第一行、`[New]` 固定为第二行。
 23. `#` 已识别为 Tag 上下文后绕过通用 completion prefix threshold，使普通 Org buffer 从首字符开始弹出候选。
+24. 将完整父链路径放在候选文本列并统一左对齐；选择后仍还原真实 Tag ID。
 
 ## Scope
 
@@ -54,6 +55,7 @@
 - P1: 嵌套 Tag 查询只在调用方显式请求时包含路径后代；精确查询保持兼容。
 - P1: Schema View 以 `:extends` 为主父子树，旧完整路径 ID 在没有显式父级时才派生虚拟 namespace。
 - P1: 所有 Tag 输入按真实 ID 搜索，父链只参与显示，不得改写插入值或 Store identity。
+- P1: completion 的父链路径必须直接显示在候选文本列，不能用 affixation prefix 制造全局缩进。
 - P1: 从 namespace/branch 打开的 View 与 Table 保留 `include-descendants` scope；聚合 Table 不读写父 Tag 的自定义字段。
 - P1: 单节点同步与全文件同步建立相同的 Tag entity/node-tag relation，并回收当前节点已失效的关系。
 - P1: 分支 Tag 重命名同时迁移所有路径后代并预检冲突；精确删除不得破坏后代 token。

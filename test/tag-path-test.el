@@ -290,8 +290,9 @@
         (should (equal "happy"
                        (get-text-property 0 'supertag-tag-id happy)))
         (should (cl-every #'stringp display))
-        (should (equal "diary/" (nth 1 display)))
-        (should (equal "happy" (substring-no-properties (car display))))))))
+        (should (equal "" (nth 1 display)))
+        (should (equal "diary/happy"
+                       (substring-no-properties (car display))))))))
 
 (ert-deftest tag-path-completion-triggers-from-leading-hash ()
   "A recognized #tag context must bypass generic UI prefix thresholds."
@@ -450,7 +451,8 @@
       (should
        (equal "happy" (supertag-ui-read-tag "Tag: ")))
       (should (equal '("diary" "happy") seen))
-      (should (equal "diary/" (nth 1 display)))))))
+      (should (equal "diary/happy" (car display)))
+      (should (equal "" (nth 1 display)))))))
 
 (ert-deftest nested-tag-shared-reader-rejects-virtual-namespace ()
   (let (seen)

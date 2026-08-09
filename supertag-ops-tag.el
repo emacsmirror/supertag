@@ -160,18 +160,14 @@ Returns tag data, or nil if it does not exist."
   (mapcar
    (lambda (candidate)
      (let* ((new-name (get-text-property 0 'new-tag-name candidate))
-            (id (or new-name (substring-no-properties candidate)))
-            (display (if new-name
-                         (substring candidate 0 (length new-name))
-                       candidate))
+            (id (or new-name
+                    (get-text-property 0 'supertag-tag-id candidate)
+                    (substring-no-properties candidate)))
             (path (supertag-tag-display-path id))
-            (prefix (if (string-suffix-p id path)
-                        (substring path 0 (- (length path) (length id)))
-                      ""))
             (suffix (if (get-text-property 0 'is-new-tag candidate)
                         (propertize "  [New]" 'face 'warning)
                       "")))
-       (list display prefix suffix)))
+       (list path "" suffix)))
    candidates))
 
 (defun supertag-tag-update (id updater)
