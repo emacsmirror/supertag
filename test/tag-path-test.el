@@ -293,6 +293,21 @@
         (should (equal "diary/" (nth 1 display)))
         (should (equal "happy" (substring-no-properties (car display))))))))
 
+(ert-deftest tag-path-completion-triggers-from-leading-hash ()
+  "A recognized #tag context must bypass generic UI prefix thresholds."
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (with-temp-buffer
+      (org-mode)
+      (insert "#")
+      (let* ((capf (supertag-completion-at-point))
+             (properties (nthcdr 3 capf)))
+        (should capf)
+        (should (eq (plist-get properties :company-prefix-length) t))
+        (should (member "diary"
+                        (mapcar #'substring-no-properties
+                                (all-completions "" (nth 2 capf)))))))))
+
 (ert-deftest tag-path-completion-progresses-from-parent-display-path ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")

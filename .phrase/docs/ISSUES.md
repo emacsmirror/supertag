@@ -37,3 +37,4 @@
 - issue035 [x] 切换 Stream tag 时旧 companion index window 残留并不断增加列数（task012 已删除 companion index；phase-stream-view-20260806/issue_stream_stale_index_window_20260807.md）
 - issue036 [x] 根级 agent ignore 规则误伤 Board UI hooks，导致 clean clone 无法构建（.phrase/docs/issue_board_ui_build_20260808.md）
 - issue037 [ ] Stream 标题导航强制置顶，编辑页缺少展开与取消语义（实现与回归完成，待用户实机确认；phase-stream-view-20260806/issue_stream_navigation_edit_20260808.md）
+- issue038 [ ] 普通 Org buffer 的 `#tag` 自动补全被通用前缀阈值延迟（实现与回归完成，待用户实机确认；phase-smart-key-20260721/issue_tag_completion_prefix_threshold_20260809.md）

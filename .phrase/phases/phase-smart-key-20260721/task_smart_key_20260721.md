@@ -115,3 +115,9 @@
   - 产出：避免 Corfu exact-candidate 强制置顶；共享 display sorter 将 `[New]` 放第二行，选中后移除内部显示标记
   - 验证方式：真实 `corfu--compute` 候选顺序与 formatter、focused/full ERT、completion self-check、静态检查
   - 影响范围：仅改变行内 completion 的候选排序；Tag ID、创建权限与 Store 数据不变
+
+- task023 [x] 恢复普通 Org buffer 的首字符 `#tag` 自动补全
+  - 依据：issue038；2026-08-09 用户报告普通 Org buffer 无法补全
+  - 产出：CAPF 在识别前导 `#` 后显式绕过通用 prefix threshold；不修改用户的 Corfu 全局配置
+  - 验证方式：现场 Corfu 2.11 红/绿探测覆盖 `#`、`#d`；focused ERT 锁定触发契约与已有候选枚举
+  - 影响范围：仅 `supertag-completion-at-point` 的触发提示；候选、排序、写入、Store 与其他 CAPF 不变

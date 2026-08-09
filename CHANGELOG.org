@@ -54,6 +54,10 @@
   =supertag-view-open=; refresh has one Runtime-only path.
 
 ** Bug fixes
+- Fixed inline =#tag= completion waiting for Corfu's generic two-character
+  prefix threshold in normal Org buffers.  Once the leading =#= identifies
+  the Tag CAPF context, existing candidates can now appear immediately
+  without changing the user's global completion threshold.
 - Fixed background sync storing custom Org TODO keywords such as =DOING= in
   node titles. The shared current-buffer parser now initializes Org before
   parsing, and =supertag-sync-full-rescan= reparses unchanged files so existing

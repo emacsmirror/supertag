@@ -1,5 +1,15 @@
 # change_smart_key_20260721
 
+- 2026-08-09 Fix
+  - Files: `supertag-ui-completion.el`, `test/tag-path-test.el`, issue038/task023 phase/docs
+  - Function: `supertag-completion-at-point`
+  - Root cause: CAPF 把当前已输入字符数回传为 `:company-prefix-length`，没有绕过 Corfu 2.11 的通用两字符自动触发门槛；因此 `#`/`#d` 不弹出，`#di` 才开始补全。
+  - Changes: 前导 `#` 已确定 Tag context 后将触发提示设为 `t`，让 completion UI 立即查询现有候选。
+  - Simplification: 修改一个既有 CAPF 属性；不增加 hook/advice、配置、依赖或 Corfu 分支，也不触碰候选和 Store。
+  - Verification: 旧实现 focused ERT 25/26；修复后 26/26，completion self-check 与 full ERT 402/402 通过。真实 Emacs 31 + Corfu 2.11 探测从 `#`/`#d` 均 inactive 变为 active，并分别返回 112/17 个候选；normal whole-file byte compile、changed-function strict compile、check-parens、diff-check 与 repo-local `.elc` zero 通过。Emacs 31 strict whole-file compile/checkdoc 仍报告本文件既有 obsolete macro/doc 告警，均位于本次改动之外。
+  - Risk: 完整输入唯一 Tag 时，Corfu 仍可按自身 exact-match 策略不显示多余弹窗，这是已完成输入而非触发失败。
+  - Related: `issue038`, `task023`
+
 - 2026-08-04 Fix
   - Files: `supertag-ui-completion.el`, `supertag-ops-tag.el`, completion regressions, task022 phase/docs
   - Functions: new-candidate encoding, completion display sorting and Tag affixation

@@ -325,10 +325,10 @@ Display aliases are replaced with their real Tag ID before any write."
                  (t
                   (complete-with-action action candidates str pred)))))
 
-            ;; 2. Company-specific: explicit prefix length hint.
-            ;;    Company uses this to know how much of the prefix to keep
-            ;;    when the user types more characters. Corfu ignores this safely.
-            :company-prefix-length (- end start)
+            ;; 2. The leading # already identifies this completion context.
+            ;;    Bypass generic UI prefix thresholds so completion can start
+            ;;    before the user has typed two or three tag characters.
+            :company-prefix-length t
 
             ;; 3. EXCLUSIVE: tell completion-at-point that once we are
             ;;    inside a #tag context, no other CAPF should run.

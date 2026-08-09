@@ -19,6 +19,7 @@
 - SVG tag 字体低于正文行高，保持 badge 尺寸与标签可读性。
 - 兼容已有 `a/b/c` 完整路径 Tag ID；新式父子关系以现有 `:extends` 为单一来源。
 - completion 按真实 Tag ID 搜索，但把 `:extends` 父链显示为前缀；Schema 用同一棵父子树表达层级与字段继承。
+- `#` 一旦被 CAPF 识别为 Tag 上下文，自动补全不再等待 completion UI 的通用两/三字符阈值。
 
 ### Non-goals
 
@@ -47,6 +48,7 @@
 13. 行内 CAPF 与 Add/Change/Capture/Tag Field 等入口都可按叶子 ID 直接搜索，并使用同一父链展示。
 14. 用户写入 `#ai_suggestions` 后同步，Store 保留完整 ID；重扫后可通过 `M-x supertag-cleanup-orphaned-tags` 逐项选择旧孤立 Tag，确认前不修改数据。
 15. 用户输入 `#dia` 时，`diary` 排第一、`dia [New]` 排第二，之后才是其余匹配项；只有明确选中 `[New]` 才注册 `dia`。
+16. 用户在普通 Org buffer 输入 `#` 或 `#d` 时即可看到 Tag 候选，不需要把全局 Corfu prefix threshold 改成 1。
 
 ## Edge Cases
 
@@ -71,6 +73,7 @@
 - Schema 优先采用显式 `:extends` 父级；旧完整路径 ID 无显式父级时才按 `/` 派生兼容层级，冲突时不得形成循环。
 - display path 与真实完整路径 ID 同名时，真实 ID 优先，展示别名不得遮蔽它。
 - 行内 completion 的取消、失焦、普通空格/回车只结束输入，不得把当前前缀注册为新 Tag。
+- 通用 completion UI 可以保留自己的 prefix threshold；只有已进入 `#tag` CAPF context 时由该 CAPF 显式绕过。
 - Org 将 `_suffix` 解析为 subscript 时，若它属于同一个 `#token`，同步仍读取原始完整 token；独立 subscript/link/code 内的 `#` 仍不是 Tag。
 
 ## Acceptance Criteria
@@ -94,6 +97,7 @@
 - completion 输入 `diary` 与 `diary/` 时必须枚举父链匹配的子标签；选中展示别名后，Org 与 Store 只能收到真实 ID `happy`。
 - completion 输入 `dia` 时，try-completion 必须推进到 `diary`；`dia [New]` 固定为第二项，且只有该候选可传入 `:create-if-needed t`。
 - Corfu 必须能直接格式化普通候选与 `[New]` 候选，不得触发 `wrong-type-argument arrayp nil`。
+- 普通 Org buffer 中仅输入 `#` 时，CAPF 必须声明该上下文可立即触发，并枚举已有 Tag。
 - 原始 Tag token 必须在已解析的非透明 Org object 起点截断；sub/superscript 只保留 `_`/`^` 原文，不能隐藏其内部或紧邻的 link/code 边界。
 - 同步、face/SVG 与 Smart Key point lookup 必须调用同一个 range-aware matcher；`#outer[[...]]` 在三条路径中都只能产生 `outer`。
 - 孤立 Tag 候选不得包含被 node、relation、field/schema（含 `:tag` default/options）、inheritance、automation、saved query 或已加载 view config 引用的 ID。

@@ -69,6 +69,9 @@ M-x global-supertag-ui-completion-mode (再次执行以切换)
 (setq supertag-completion-auto-enable t)
 ```
 
+识别到前导 `#` 后，Org-Supertag 会直接启用 Tag CAPF，不需要为了它把
+`corfu-auto-prefix` 全局改成 1；其他补全场景继续使用用户原有阈值。
+
 ## 故障排除
 
 ### 命令消失或无法找到
