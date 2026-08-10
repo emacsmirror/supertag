@@ -1287,8 +1287,7 @@ sentinel, after the process has fully exited."
 episode, not once per retry."
   (unless supertag-git-sync--offline-warned
     (setq supertag-git-sync--offline-warned t)
-    (message "supertag-git-sync: %s failed (offline, or remote unreachable?) -- staying local; will retry automatically. Pending local commits: %d."
-             op supertag-git-sync--pending-push-count)))
+    (message "supertag-git-sync: %s failed; will retry." op)))
 
 (defun supertag-git-sync--clear-offline-warning ()
   "Report recovery exactly once, the first time an operation succeeds

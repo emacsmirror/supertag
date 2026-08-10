@@ -1,5 +1,21 @@
 # Git 原生同步变更记录
 
+## 2026-08-10 — task008
+
+- Modify `supertag-git.el`：将 fetch/push 首次失败提示缩短为
+  `supertag-git-sync: <op> failed; will retry.`；保留每次离线 episode 只提示一次及
+  恢复后 `back online` 的既有状态机。
+- Modify `test/git-sync-mode-test.el`：新增精确消息回归，锁定失败操作与自动重试
+  信息，防止原因猜测和 pending 计数重新混入提示。
+- Modify `PLAN.md`, `TASK.md`：记录睡眠唤醒场景下的提示收敛决策与验证结果。
+
+行为：短暂断网仍保留本地数据并自动重试，但提示不再猜测网络原因，也不再显示
+经常为 0 的 pending 计数。风险仅限用户可见字符串变化；同步、merge、push 与恢复
+路径未改。
+
+验证：精确回归先红后绿；Git 子套件 38/38；提交后的干净 worktree 默认全量
+403/403；`supertag-git.el` 临时目录 byte-compile 与 `git diff --check` 通过。
+
 ## 2026-07-29 — task007 / issue028
 
 - Modify `supertag-git-sync--pending-p`：退出判定只保留 Store dirty、受管 working

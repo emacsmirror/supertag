@@ -1308,6 +1308,16 @@ After the user unstages it, the next cycle commits only the Org edit."
 ;;; above `supertag-git-sync--rev-count' in supertag-git.el.
 ;;; ----------------------------------------------------------------
 
+(supertag-git-sync-test--deftest supertag-git-sync-test-offline-message-is-brief
+    "The first failed operation reports only the operation and retry policy."
+  (let ((supertag-git-sync--offline-warned nil)
+        shown)
+    (cl-letf (((symbol-function 'message)
+               (lambda (format-string &rest args)
+                 (setq shown (apply #'format format-string args)))))
+      (supertag-git-sync--note-offline "fetch"))
+    (should (equal shown "supertag-git-sync: fetch failed; will retry."))))
+
 (supertag-git-sync-test--deftest supertag-git-sync-test-pull-catches-up-after-offline-episode
     "A's remote becomes temporarily unreachable (origin URL pointed at a
 nonexistent path) while a local commit is made; a pull cycle attempted

@@ -31,3 +31,7 @@
   behind-only clean exit、异步完成自动退出、失败/新改动不退出与 timer 清理，
   Git 37/37、默认全量 330/330、临时 byte-compile。关联：issue028；提交：
   `8388d55`。
+
+- task008 [x] 缩短 fetch/push 首次失败提示，只保留失败操作与自动重试信息；验证：
+  精确消息回归先红后绿、Git 38/38、干净 worktree 默认全量 403/403、临时
+  byte-compile 与 `git diff --check`。关联：PLAN.md「离线提示收敛」。
