@@ -1,5 +1,16 @@
 # change_smart_key_20260721
 
+- 2026-08-11 Add
+  - Files: `supertag-ui-completion.el`, `supertag-ops-tag.el`, `supertag-services-sync.el`, `test/tag-path-test.el`, task025 phase/docs
+  - Functions: inline CAPF candidate/exit path, shared display-path resolver, transactional node-tag operation
+  - Changes: `#diary/happy` can explicitly create `happy :extends diary`; success normalizes the Org token to `#happy`. Existing same-parent children are reused, while missing parents, malformed paths and flat/other-parent leaf conflicts are non-writing.
+  - Atomicity: Tag creation, heading-based node synchronization, node-tag relation and buffer normalization share one transaction; Store or buffer failures restore the typed display path and remove an Org ID created by the failed action.
+  - Review fixes: reject missing nodes in shared Tag Ops, sync completion invoked from body text at its owning heading, validate new leaf names with the existing inline-Tag predicate, and honor an explicitly empty display-path candidate set.
+  - Simplification: `/` remains an input operator only; no new Store field, hierarchy model, parent-chain creation, Corfu advice or dependency.
+  - Verification: public CAPF/Store red-green matrix; Tag Path 39/39; Smart Key 12/12; clean-worktree full ERT 416/416; completion self-check; temporary whole-file byte compile, `check-parens`, `git diff --check`, repository `.elc` zero; independent standards/spec re-reviews both APPROVE.
+  - Risk: conflict is reported as a non-writing `[Conflict]` row; reparenting remains available only through Schema management.
+  - Related: Beads `vie-4oc`, `issue009`, `task025`
+
 - 2026-08-10 Fix
   - Files: `supertag-ops-tag.el`, `test/tag-path-test.el`, task024 phase/docs
   - Function: `supertag-tag-affixate-candidates`

@@ -155,6 +155,22 @@ Returns tag data, or nil if it does not exist."
           (setq current parent))))
     (if cycle tag-id (string-join parts "/"))))
 
+(cl-defun supertag-tag-resolve-display-path
+    (path &optional (tag-ids nil tag-ids-supplied-p))
+  "Return the real Tag ID displayed as PATH.
+Limit the search to TAG-IDS when supplied."
+  (if tag-ids-supplied-p
+      (cl-find-if (lambda (tag-id)
+                    (equal path (supertag-tag-display-path tag-id)))
+                  tag-ids)
+    (catch 'found
+      (maphash
+       (lambda (tag-id _tag)
+         (when (equal path (supertag-tag-display-path tag-id))
+           (throw 'found tag-id)))
+       (supertag-store-get-collection :tags))
+      nil)))
+
 (defun supertag-tag-affixate-candidates (candidates)
   "Display CANDIDATES with parent paths without changing their Tag IDs."
   (mapcar
@@ -163,10 +179,15 @@ Returns tag data, or nil if it does not exist."
             (id (or new-name
                     (get-text-property 0 'supertag-tag-id candidate)
                     (substring-no-properties candidate)))
-            (path (supertag-tag-display-path id))
-            (suffix (if (get-text-property 0 'is-new-tag candidate)
-                        (propertize "  [New]" 'face 'warning)
-                      "")))
+            (path (or (get-text-property 0 'new-tag-display-path candidate)
+                      (supertag-tag-display-path id)))
+            (suffix
+             (cond
+              ((get-text-property 0 'supertag-tag-conflict candidate)
+               (propertize "  [Conflict]" 'face 'error))
+              ((get-text-property 0 'is-new-tag candidate)
+               (propertize "  [New]" 'face 'warning))
+              (t ""))))
        (list path "" suffix)))
    candidates))
 
@@ -341,31 +362,46 @@ Returns the number of instances removed from files."
                  tag-name (or total-deleted 0))
         total-deleted))))
 
-(defun supertag-ops-add-tag-to-node (node-id tag-id &key create-if-needed)
+(cl-defun supertag-ops-add-tag-to-node (node-id tag-id &key create-if-needed extends)
   "High-level operation to add a tag to a node.
 This non-interactive function ensures the tag exists (creating it
 if CREATE-IF-NEEDED is non-nil) and then creates the node-tag
 relationship. It also updates the node's :tags property to ensure
-index consistency.
+index consistency.  When creating, EXTENDS sets the existing parent
+Tag ID; an existing Tag is never silently reparented.
 
 It does NOT modify the buffer.
 Returns t if the relationship was created or already exists, nil otherwise."
   (when (and node-id (not (string-empty-p tag-id)))
-    ;; 1. Ensure tag definition exists.
-    (when (and create-if-needed (not (supertag-tag-get tag-id)))
-      (supertag-tag-create `(:name ,tag-id :id ,tag-id)))
+    (supertag-with-transaction
+      (unless (supertag-node-get node-id)
+        (user-error "Node '%s' does not exist" node-id))
+      (let ((existing (supertag-tag-get tag-id)))
+        (when extends
+          (unless (supertag-tag-get extends)
+            (user-error "Parent Tag '%s' does not exist" extends))
+          (when (and existing
+                     (not (equal extends
+                                 (plist-get (supertag--ensure-plist existing)
+                                            :extends))))
+            (user-error "Tag '%s' already exists under a different parent"
+                        tag-id)))
 
-    ;; 2. If tag exists, create the relationship and update node.
-    (if-let ((raw-tag (supertag-tag-get tag-id)))
-        (let ((tag (supertag--ensure-plist raw-tag))) ; Ensure we have a plist
-          ;; Update the node's :tags property through the node CRUD API.
-          (supertag-node-add-tag node-id tag-id)
+        ;; 1. Ensure tag definition exists.
+        (when (and create-if-needed (not existing))
+          (supertag-tag-create
+           `(:name ,tag-id :id ,tag-id :extends ,extends)))
 
-          ;; Avoid creating duplicate relations
-          (unless (supertag-relation-find-between node-id (plist-get tag :id) :node-tag)
-            (supertag-relation-create `(:type :node-tag :from ,node-id :to ,(plist-get tag :id))))
-          t)
-      nil)))
+        ;; 2. If tag exists, create the relationship and update node.
+        (if-let* ((raw-tag (supertag-tag-get tag-id)))
+            (let ((tag (supertag--ensure-plist raw-tag)))
+              (supertag-node-add-tag node-id tag-id)
+              (unless (supertag-relation-find-between
+                       node-id (plist-get tag :id) :node-tag)
+                (supertag-relation-create
+                 `(:type :node-tag :from ,node-id :to ,(plist-get tag :id))))
+              t)
+          nil)))))
 
 ;; 3.2 Field Operations
 

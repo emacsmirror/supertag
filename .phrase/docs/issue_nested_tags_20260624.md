@@ -33,6 +33,7 @@
 - 2026-08-03 实机反馈证明逐层下钻仍不自然；改为输入真实 ID `happy`，候选
   显示父链 `diary/happy`，确认后仍只写入 `#happy`。
 - Schema View 将 `happy :extends diary` 直接缩进到 `diary` 下，不再显示斜杠分支或派生虚拟父级。
+- 2026-08-11 完成 task025 自动化实现：普通 Org `#tag` 补全可把 `/` 用作显式创建操作；真实 ID 仍禁止斜杠，等待用户实机确认。
 
 ## Scope (if implemented)
 
@@ -46,6 +47,7 @@
 
 ## Status
 
+- task025 [x] 已实现 `#diary/happy [New]` → `happy :extends diary`；公开 CAPF/Store 回归覆盖正文位置、非法叶子、冲突与跨 Store/buffer 回滚，Tag Path 39/39、Smart Key 12/12 与 clean-worktree full ERT 416/416 通过，两路复审 APPROVE；仍等待用户实机确认再关闭 issue009。
 - 2026-07-29 用户确认实施完整路径方案。
 - task012 仅完成查询基础；2026-07-29 用户指出这还不构成真正的嵌套标签支持。
 - task013 已完成数据后端、Schema、View/Table 与初版 completion 自动验收。

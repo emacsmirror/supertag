@@ -1560,13 +1560,7 @@ Return a list of tag strings, or an empty list if none."
     (let ((sanitized (supertag-sanitize-tag-name name)))
       (if (not (string-match-p "/" sanitized))
           sanitized
-        (or (catch 'found
-              (maphash
-               (lambda (tag-id _tag)
-                 (when (equal sanitized (supertag-tag-display-path tag-id))
-                   (throw 'found tag-id)))
-               (supertag-store-get-collection :tags))
-              nil)
+        (or (supertag-tag-resolve-display-path sanitized)
             (user-error
              "Unknown nested Tag path '%s'; create its :extends hierarchy first"
              sanitized)))))

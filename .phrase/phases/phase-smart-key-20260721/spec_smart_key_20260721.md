@@ -20,6 +20,7 @@
 - 兼容已有 `a/b/c` 完整路径 Tag ID；新式父子关系以现有 `:extends` 为单一来源。
 - completion 按真实 Tag ID 搜索，但把 `:extends` 完整父链路径直接显示为左对齐的候选文本；Schema 用同一棵父子树表达层级与字段继承。
 - `#` 一旦被 CAPF 识别为 Tag 上下文，自动补全不再等待 completion UI 的通用两/三字符阈值。
+- inline completion 中的 `/` 可以显式创建已有父级下的一个新叶子；持久化仍只写真实叶子 ID 与 `:extends`。
 
 ### Non-goals
 
@@ -50,6 +51,7 @@
 15. 用户输入 `#dia` 时，`diary` 排第一、`dia [New]` 排第二，之后才是其余匹配项；只有明确选中 `[New]` 才注册 `dia`。
 16. 用户在普通 Org buffer 输入 `#` 或 `#d` 时即可看到 Tag 候选，不需要把全局 Corfu prefix threshold 改成 1。
 17. completion 中 `diary`、`diary/happy`、`Apple/Shortcut` 等候选从同一左边界开始；选择子标签后仍写入真实 ID。
+18. 用户输入 `#diary/happy` 并确认 `diary/happy [New]`，系统创建 `happy :extends diary`、关联当前节点，并把正文改为 `#happy`。
 
 ## Edge Cases
 
@@ -77,6 +79,8 @@
 - 行内 completion 的取消、失焦、普通空格/回车只结束输入，不得把当前前缀注册为新 Tag。
 - 通用 completion UI 可以保留自己的 prefix threshold；只有已进入 `#tag` CAPF context 时由该 CAPF 显式绕过。
 - Org 将 `_suffix` 解析为 subscript 时，若它属于同一个 `#token`，同步仍读取原始完整 token；独立 subscript/link/code 内的 `#` 仍不是 Tag。
+- 斜杠新建只按最后一段创建叶子；父 display path 必须完整解析到已有 Tag，缺失父链、空段、连续/尾随斜杠均零写入。
+- 叶子已存在且父级相同则选择现有 Tag；叶子为平面 Tag 或属于其他父级时明确报冲突，不修改 `:extends`。
 
 ## Acceptance Criteria
 
@@ -100,6 +104,8 @@
 - completion 输入 `dia` 时，try-completion 必须推进到 `diary`；`dia [New]` 固定为第二项，且只有该候选可传入 `:create-if-needed t`。
 - Corfu 必须能直接格式化普通候选与 `[New]` 候选，不得触发 `wrong-type-argument arrayp nil`。
 - 普通 Org buffer 中仅输入 `#` 时，CAPF 必须声明该上下文可立即触发，并枚举已有 Tag。
+- `#diary/happy` 的显式 `[New]` 确认必须只产生 `happy :extends diary` 和 `node -> happy` 关系，正文归一化为 `#happy`，Store 不得出现 `diary/happy` ID。
+- 取消、无效路径、缺失父级及同名叶子冲突时，Org 正文、Tag entity 与 node-tag relation 均保持不变。
 - 原始 Tag token 必须在已解析的非透明 Org object 起点截断；sub/superscript 只保留 `_`/`^` 原文，不能隐藏其内部或紧邻的 link/code 边界。
 - 同步、face/SVG 与 Smart Key point lookup 必须调用同一个 range-aware matcher；`#outer[[...]]` 在三条路径中都只能产生 `outer`。
 - 孤立 Tag 候选不得包含被 node、relation、field/schema（含 `:tag` default/options）、inheritance、automation、saved query 或已加载 view config 引用的 ID。

@@ -79,3 +79,5 @@
 - 2026-08-09: phase-smart-key-20260721/change_smart_key_20260721.md  # issue038/task023 #tag completion bypasses generic prefix thresholds
 - 2026-08-10: phase-smart-key-20260721/change_smart_key_20260721.md  # task024 left-aligned full Tag completion paths
 - 2026-08-10: phase-git-sync-20260713/CHANGE.md  # task008 concise Git Sync retry message
+- 2026-08-11: phase-smart-key-20260721/change_smart_key_20260721.md  # task025 inline slash child creation
+- 2026-08-11: .phrase/docs/change_nested_tags_20260624.md  # task025 / as an inline creation operator

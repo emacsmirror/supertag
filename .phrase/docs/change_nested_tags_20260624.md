@@ -1,5 +1,15 @@
 # change_nested_tags_20260624
 
+## 2026-08-11 (task025)
+
+- **Action**: Treat `/` as an explicit inline completion operator for creating one child under an existing parent display path.
+- **Behavior**: `#diary/happy [New]` creates only `happy :extends diary`, relates the current node to `happy`, then writes `#happy`; same-parent children are reused and conflicts are shown without reparenting.
+- **Atomicity**: One transaction covers Tag/node/relation writes plus buffer normalization; body completion synchronizes from the owning heading, and failures restore the input token and any newly generated Org ID.
+- **Validation**: Shared Tag Ops rejects missing nodes; new leaves use the existing inline-Tag predicate; an empty allowed-parent set cannot fall back to the full Store.
+- **Simplification**: Reused CAPF properties, display-path resolution, Tag Ops and `:extends`; no slash ID, intermediate-parent creation, schema field, cache or dependency.
+- **Verification**: public CAPF/Store matrix; Tag Path 39/39; Smart Key 12/12; clean-worktree full ERT 416/416; completion self-check; byte compile, paren/diff checks and zero repo `.elc`; independent standards/spec re-reviews both APPROVE.
+- **Remaining**: issue009 remains open for user-visible confirmation.
+
 ## 2026-08-07 (task023)
 
 - **Action**: Make `:extends` the only hierarchy and descendant-query source; migrate the live Store's two slash IDs.

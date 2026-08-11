@@ -26,6 +26,7 @@
 22. 绕开 Corfu 的 exact-candidate 置顶，把已有补全项固定为第一行、`[New]` 固定为第二行。
 23. `#` 已识别为 Tag 上下文后绕过通用 completion prefix threshold，使普通 Org buffer 从首字符开始弹出候选。
 24. 将完整父链路径放在候选文本列并统一左对齐；选择后仍还原真实 Tag ID。
+25. 将 `/` 收紧为 inline completion 的受控创建操作：只允许在可解析的已有父级下显式创建一个叶子 Tag。
 
 ## Scope
 
@@ -51,6 +52,7 @@
 - P0: `_` 在 Tag token 中必须保持字面值；Org object 边界仍不得泄漏内部 `#token`。
 - P0: cleanup 引用模型覆盖 Tag schema fields；整批 `after-operation-hook` 后按显式候选 ID 复检，事务回滚执行全部 invariant handler 后重抛首错。
 - P0: 行内 completion 只有显式选中 `[New]` 才能创建 Tag；未确认前缀不得写入 Store。
+- P0: 斜杠创建必须原子写入叶子 Tag、`:extends` 与 node-tag 关系；失败或取消不得改写正文或 Store。
 - P1: SVG tag 默认字体小于正文行高，缓存键包含字号比例。
 - P1: 嵌套 Tag 查询只在调用方显式请求时包含路径后代；精确查询保持兼容。
 - P1: Schema View 以 `:extends` 为主父子树，旧完整路径 ID 在没有显式父级时才派生虚拟 namespace。
@@ -73,6 +75,7 @@
 - 路径后代查询沿用现有 O(N) node scan；10k-node 基准不满足交互延迟时再考虑前缀索引。
 - 现有 Table 的字段列假设查询只有一个精确 Tag；后代聚合必须降级为通用只读列，避免把子路径字段写到父 namespace。
 - 历史异常路径（前导/尾随 `/` 或空路径段）不可自动修复；新建入口拒绝异常路径，旧数据按普通未结构化 Tag 保留。
+- inline 斜杠输入可能与已有平面或其他父级下的同名叶子冲突；必须拒绝并提示，不能静默 reparent。
 - 自动 Tag entity 与用户手工创建的空 schema 无法可靠区分；孤立清理必须保守扫描、显式选择、删除前复检，禁止随重扫自动执行。
 - Sync 复用调用方已有的完整 parse tree；前端只解析当前行的 secondary Org text，二者共用同一个 range matcher，禁止回退到逐字符 `org-element-context`。
 - 当前分支领先远端且包含既有提交；提交时只 stage 本 phase 文件，推送前按仓库协议 rebase。

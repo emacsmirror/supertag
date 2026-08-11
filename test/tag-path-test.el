@@ -148,6 +148,11 @@
             (should-not (supertag-relation-find-by-from "node-1" :node-tag)))
         (delete-file file)))))
 
+(ert-deftest tag-path-resolver-honors-an-empty-candidate-set ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (should-not (supertag-tag-resolve-display-path "diary" '()))))
+
 (ert-deftest nested-tag-bulk-import-stores-real-id ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
@@ -336,6 +341,307 @@
         (should (equal "happy" recorded))
         (should (equal "#happy " (buffer-string)))))))
 
+(ert-deftest tag-path-completion-creates-child-through-slash-operator ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (table (nth 2 capf))
+             (metadata (funcall table "diary/happy" nil 'metadata))
+             (affix (cdr (assq 'affixation-function (cdr metadata))))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "diary/happy" table)))
+             (exit (plist-get (nthcdr 3 capf) :exit-function)))
+        (should candidate)
+        (should (equal "diary/happy"
+                       (substring-no-properties
+                        (car (car (funcall affix (list candidate)))))))
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (funcall exit candidate 'finished)
+        (should (string-match-p "#happy " (buffer-string)))
+        (should (equal "diary"
+                       (plist-get (supertag-tag-get "happy") :extends)))
+        (should (member "happy"
+                        (plist-get (supertag-node-get "node-1") :tags)))
+        (should (= 1 (length (supertag-relation-find-between
+                              "node-1" "happy" :node-tag))))
+        (should-not (supertag-tag-get "diary/happy"))))))
+
+(ert-deftest tag-path-completion-creates-child-while-syncing-a-new-node ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (let ((file (make-temp-file "supertag-inline-child" nil ".org")))
+      (unwind-protect
+          (with-temp-buffer
+            (org-mode)
+            (setq buffer-file-name file)
+            (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+            (goto-char (point-min))
+            (search-forward "#diary/happy")
+            (let* ((completion-styles '(basic))
+                   (capf (supertag-completion-at-point))
+                   (candidate
+                    (cl-find-if
+                     (lambda (item)
+                       (get-text-property 0 'is-new-tag item))
+                     (all-completions "diary/happy" (nth 2 capf)))))
+              (should candidate)
+              (delete-region (nth 0 capf) (nth 1 capf))
+              (insert candidate)
+              (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                       candidate 'finished)
+              (should (equal "diary"
+                             (plist-get (supertag-tag-get "happy") :extends)))
+              (should (member "happy"
+                              (plist-get (supertag-node-get "node-1") :tags)))
+              (should (= 1 (length (supertag-relation-find-between
+                                    "node-1" "happy" :node-tag))))))
+        (delete-file file)))))
+
+(ert-deftest tag-path-completion-creates-child-from-heading-body ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (let ((file (make-temp-file "supertag-inline-child-body" nil ".org")))
+      (unwind-protect
+          (with-temp-buffer
+            (org-mode)
+            (setq buffer-file-name file)
+            (insert "* Node\n:PROPERTIES:\n:ID: node-1\n:END:\n\nBody #diary/happy")
+            (let* ((completion-styles '(basic))
+                   (capf (supertag-completion-at-point))
+                   (candidate
+                    (cl-find-if
+                     (lambda (item)
+                       (get-text-property 0 'is-new-tag item))
+                     (all-completions "diary/happy" (nth 2 capf)))))
+              (should candidate)
+              (delete-region (nth 0 capf) (nth 1 capf))
+              (insert candidate)
+              (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                       candidate 'finished)
+              (should (member "happy"
+                              (plist-get (supertag-node-get "node-1") :tags)))
+              (should (= 1 (length (supertag-relation-find-between
+                                    "node-1" "happy" :node-tag))))))
+        (delete-file file)))))
+
+(ert-deftest tag-path-completion-selects-existing-child-without-new-action ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (tag-path-test--put-tag "happy" "diary")
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidates (all-completions "diary/happy" (nth 2 capf)))
+             (candidate
+              (cl-find "diary/happy" candidates
+                       :key #'substring-no-properties :test #'string-prefix-p)))
+        (should candidate)
+        (should (equal "happy"
+                       (get-text-property 0 'supertag-tag-id candidate)))
+        (should-not (cl-find-if
+                     (lambda (item)
+                       (get-text-property 0 'is-new-tag item))
+                     candidates))
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                 candidate 'finished)
+        (should (string-match-p "#happy " (buffer-string)))
+        (should (member "happy"
+                        (plist-get (supertag-node-get "node-1") :tags)))
+        (should (= 1 (length (supertag-relation-find-between
+                              "node-1" "happy" :node-tag))))))))
+
+(ert-deftest tag-path-completion-creates-child-under-deep-display-path ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "work")
+    (tag-path-test--put-tag "project" "work")
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #work/project/active\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#work/project/active")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "work/project/active" (nth 2 capf)))))
+        (should candidate)
+        (should (equal "project"
+                       (get-text-property 0 'new-tag-parent candidate)))
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                 candidate 'finished)
+        (should (string-match-p "#active " (buffer-string)))
+        (should (equal "project"
+                       (plist-get (supertag-tag-get "active") :extends)))
+        (should-not (supertag-tag-get "work/project/active"))))))
+
+(ert-deftest tag-path-completion-reports-existing-leaf-parent-conflicts ()
+  (dolist (existing-parent '(nil "other"))
+    (tag-path-test--with-clean-store
+      (tag-path-test--put-tag "diary")
+      (when existing-parent
+        (tag-path-test--put-tag existing-parent))
+      (tag-path-test--put-tag "happy" existing-parent)
+      (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+      (with-temp-buffer
+        (org-mode)
+        (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+        (goto-char (point-min))
+        (search-forward "#diary/happy")
+        (let* ((completion-styles '(basic))
+               (capf (supertag-completion-at-point))
+               (table (nth 2 capf))
+               (metadata (funcall table "diary/happy" nil 'metadata))
+               (annotation
+                (cdr (assq 'annotation-function (cdr metadata))))
+               (candidate
+                (cl-find-if
+                 (lambda (item)
+                   (get-text-property 0 'supertag-tag-conflict item))
+                 (all-completions "diary/happy" table))))
+          (should candidate)
+          (should (string-match-p "Conflict" (funcall annotation candidate)))
+          (delete-region (nth 0 capf) (nth 1 capf))
+          (insert candidate)
+          (should-error
+           (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                    candidate 'finished)
+           :type 'user-error)
+          (should (string-match-p "#diary/happy$"
+                                  (string-trim-right
+                                   (car (split-string (buffer-string) "\n")))))
+          (should (equal existing-parent
+                         (plist-get (supertag-tag-get "happy") :extends)))
+          (should-not (plist-get (supertag-node-get "node-1") :tags))
+          (should-not (supertag-relation-find-by-from "node-1" :node-tag))
+          (should-not (supertag-tag-get "diary/happy")))))))
+
+(ert-deftest tag-path-completion-rolls-back-child-creation-on-relation-failure ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "diary/happy" (nth 2 capf))))
+             (supertag-before-operation-hook
+              (list
+               (lambda (event)
+                 (when (eq :relations (plist-get event :collection))
+                   (error "simulated relation failure"))))))
+        (should candidate)
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (should-error
+         (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                  candidate 'finished))
+        (should (equal "* Node #diary/happy"
+                       (car (split-string (buffer-string) "\n"))))
+        (should-not (supertag-tag-get "happy"))
+        (should-not (plist-get (supertag-node-get "node-1") :tags))
+        (should-not (supertag-relation-find-by-from "node-1" :node-tag))))))
+
+(ert-deftest tag-path-completion-removes-new-org-id-after-store-failure ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (let ((file (make-temp-file "supertag-inline-child-failure" nil ".org")))
+      (unwind-protect
+          (with-temp-buffer
+            (org-mode)
+            (setq buffer-file-name file)
+            (insert "* Node #diary/happy\n")
+            (goto-char (point-min))
+            (search-forward "#diary/happy")
+            (let* ((completion-styles '(basic))
+                   (capf (supertag-completion-at-point))
+                   (candidate
+                    (cl-find-if
+                     (lambda (item)
+                       (get-text-property 0 'is-new-tag item))
+                     (all-completions "diary/happy" (nth 2 capf))))
+                   (supertag-before-operation-hook
+                    (list
+                     (lambda (event)
+                       (when (eq :relations (plist-get event :collection))
+                         (error "simulated relation failure"))))))
+              (should candidate)
+              (delete-region (nth 0 capf) (nth 1 capf))
+              (insert candidate)
+              (should-error
+               (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                        candidate 'finished))
+              (should (equal "* Node #diary/happy\n" (buffer-string)))
+              (should-not (org-id-get))
+              (should-not (supertag-tag-get "happy"))
+              (should (= 0 (hash-table-count
+                            (supertag-store-get-collection :nodes))))))
+        (delete-file file)))))
+
+(ert-deftest tag-path-completion-rolls-back-store-after-buffer-write-failure ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "diary/happy" (nth 2 capf))))
+             (fail-once t))
+        (should candidate)
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (add-hook 'before-change-functions
+                  (lambda (&rest _)
+                    (when fail-once
+                      (setq fail-once nil)
+                      (error "simulated buffer write failure")))
+                  nil t)
+        (should-error
+         (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                  candidate 'finished))
+        (should (equal "* Node #diary/happy"
+                       (car (split-string (buffer-string) "\n"))))
+        (should-not (supertag-tag-get "happy"))
+        (should-not (plist-get (supertag-node-get "node-1") :tags))
+        (should-not (supertag-relation-find-by-from "node-1" :node-tag))))))
+
 (ert-deftest tag-path-completion-does-not-shadow-a-real-full-path ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
@@ -361,6 +667,84 @@
       (let* ((completion-styles '(basic))
              (table (nth 2 (supertag-completion-at-point))))
         (should-not (all-completions "unknown/child" table))))))
+
+(ert-deftest tag-path-completion-rejects-unresolved-and-malformed-actions ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (tag-path-test--put-tag "work")
+    (dolist (path '("unknown/child" "work/project/active"
+                    "diary/" "diary//child" "/diary" "diary/'quoted"))
+      (with-temp-buffer
+        (org-mode)
+        (insert "* Node #" path)
+        (let* ((original (buffer-string))
+               (completion-styles '(basic))
+               (capf (supertag-completion-at-point))
+               (candidates (all-completions path (nth 2 capf))))
+          (should-not
+           (cl-find-if
+            (lambda (item)
+              (or (get-text-property 0 'is-new-tag item)
+                  (get-text-property 0 'supertag-tag-conflict item)))
+            candidates))
+          (funcall (plist-get (nthcdr 3 capf) :exit-function) path 'finished)
+          (should (equal original (buffer-string)))
+          (should-not (org-id-get))
+          (should-not (supertag-tag-get path)))))
+    (should-not (supertag-tag-get "project"))
+    (should-not (supertag-tag-get "active"))
+    (should (= 0 (hash-table-count
+                  (supertag-store-get-collection :relations))))
+    (should (= 0 (hash-table-count
+                  (supertag-store-get-collection :nodes))))))
+
+(ert-deftest tag-path-completion-preserves-flat-new-tag-flow ()
+  (tag-path-test--with-clean-store
+    (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "happy" (nth 2 capf)))))
+        (should candidate)
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                 candidate 'finished)
+        (should (string-match-p "#happy " (buffer-string)))
+        (should (supertag-tag-get "happy"))
+        (should (member "happy"
+                        (plist-get (supertag-node-get "node-1") :tags)))
+        (should (= 1 (length (supertag-relation-find-between
+                              "node-1" "happy" :node-tag))))))))
+
+(ert-deftest tag-path-completion-cancel-does-not-create-child-or-node-id ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Node #diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item)
+                 (get-text-property 0 'is-new-tag item))
+               (all-completions "diary/happy" (nth 2 capf)))))
+        (should candidate)
+        (funcall (plist-get (nthcdr 3 capf) :exit-function) candidate nil)
+        (should (equal "* Node #diary/happy" (buffer-string)))
+        (should-not (org-id-get))
+        (should-not (supertag-tag-get "happy"))
+        (should (= 0 (hash-table-count
+                      (supertag-store-get-collection :nodes))))))))
 
 (ert-deftest tag-path-completion-does-not-commit-a-partial-prefix ()
   (tag-path-test--with-clean-store

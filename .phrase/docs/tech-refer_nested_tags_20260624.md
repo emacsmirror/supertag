@@ -1,5 +1,14 @@
 # tech-refer: 嵌套标签 `#a/b/c` 的自动解析与层级展示
 
+## Decision Update (2026-08-11, inline slash creation)
+
+- `/` 在普通 Org inline completion 中是受控创建操作符，不是持久化 Tag ID 字符。
+- 输入按最后一个 `/` 拆成已有父 display path 与新叶子；只创建叶子并写入 `:extends`，不自动创建父级或中间链。
+- 叶子已存在且父级相同则使用现有候选；平面/异父同名叶子视为冲突，禁止静默 reparent。
+- 只有显式确认 `[New]` 才在一个事务内创建 Tag、从所属 heading 同步 node、关联 relation 并归一化正文；Store 或 buffer 任一写入失败都整体回滚，取消零写入。
+- 新叶子复用现有 inline-Tag 名称校验；共享 Ops 拒绝不存在的 node，禁止产生悬空 relation。
+- Schema View 保留检查与管理职责，不再是普通子标签创建的必经入口。
+
 ## Decision Update (2026-08-07, supersedes persistent slash namespaces)
 
 - `:extends` 是唯一的持久化父子关系和后代查询依据。

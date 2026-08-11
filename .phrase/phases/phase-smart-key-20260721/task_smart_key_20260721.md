@@ -127,3 +127,9 @@
   - 产出：affixation 的候选文本直接使用完整 display path，prefix 固定为空；真实 Tag ID 与 `[New]` 后缀不变
   - 验证方式：旧实现 focused Tag Path ERT 25/26；修复后 26/26；全量 ERT、Corfu formatter、byte compile 与静态检查
   - 影响范围：仅补全候选展示；不改变 completion 匹配、插入、Store、`:extends` 或斜杠路径兼容语义
+
+- task025 [x] 在行内 `#tag` 补全中用 `/` 创建已有父级的子标签
+  - 依据：Beads `vie-4oc`；`/` 只表示创建操作，`:extends` 仍是唯一层级来源
+  - 产出：`#diary/happy` 显示显式 `[New]` 候选；确认后创建 `happy :extends diary`、关联当前节点并将正文归一化为 `#happy`
+  - 验证方式：公开 CAPF + 真实 Store 红/绿 ERT，覆盖标题正文、平面兼容、非法叶子、节点缺失与 buffer 写失败回滚；Tag Path 39/39、Smart Key 12/12、clean-worktree full ERT 416/416、byte compile、`check-parens`、`git diff --check`
+  - 影响范围：仅普通 Org inline completion；不自动创建父链、不静默 reparent、不产生斜杠 Tag ID

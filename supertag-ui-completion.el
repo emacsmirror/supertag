@@ -134,6 +134,13 @@ Handles edge cases: cursor right after # (empty prefix), mid-word, etc."
   "Attach Tag identity to CANDIDATE."
   (propertize candidate 'supertag-tag-id candidate))
 
+(defun supertag-completion--restore-display-path (path)
+  "Replace the current completion token with PATH."
+  (when-let* ((bounds (and path (supertag-completion--get-prefix-bounds))))
+    (delete-region (car bounds) (cdr bounds))
+    (goto-char (car bounds))
+    (insert path)))
+
 (defun supertag-completion--display-sort (candidates)
   "Place `[New]' after the first existing item in CANDIDATES."
   (let ((new (cl-find-if
@@ -153,8 +160,10 @@ The list contains every real Tag so users can search directly by leaf.
 Parent chains affect display only; selecting a candidate keeps its real
 Tag ID.  A valid PREFIX that is not stored is included as a new-Tag
 candidate carrying `is-new-tag' and `new-tag-name' properties.  The
-new candidate has a hidden final marker so completion UIs cannot treat
-unfinished input as an exact match; `[New]' comes from CAPF metadata."
+last `/` may create one leaf under an existing parent display path; it
+never becomes part of the stored Tag ID.  Parent conflicts are shown as
+non-writing action candidates.  Action candidates have a hidden final
+marker so completion UIs cannot treat unfinished input as an exact match."
   (let* ((safe-prefix (or prefix ""))
          (node-id (org-id-get))
          (current-tags (when node-id (supertag-completion--get-node-tags node-id)))
@@ -181,56 +190,116 @@ unfinished input as an exact match; `[New]' comes from CAPF metadata."
                                   (member tag-id current-tags)))
                               all-candidates)
                            all-candidates))
-         (should-add-new (and (not (string-empty-p safe-prefix))
-                             (supertag-tag-path-valid-p safe-prefix)
-                             (not (string-match-p "/" safe-prefix))
-                             (not (member safe-prefix all-tags))
-                             (not (member safe-prefix current-tags)))))
-    (if should-add-new
-        (let ((new-cand (concat safe-prefix "\u200b")))
+         (parent-path (supertag-tag-path-parent safe-prefix))
+         (parent-id (and parent-path
+                         (supertag-tag-resolve-display-path
+                          parent-path all-tags)))
+         (new-name (if parent-id
+                       (supertag-tag-path-leaf safe-prefix)
+                     safe-prefix))
+         (new-name-valid-p (supertag-transform-inline-tag-name-p new-name))
+         (existing-new-tag (and parent-id (supertag-tag-get new-name)))
+         (should-add-new
+          (and (not (string-empty-p safe-prefix))
+               (supertag-tag-path-valid-p safe-prefix)
+               new-name-valid-p
+               (or (not (string-match-p "/" safe-prefix)) parent-id)
+               (not (member safe-prefix all-tags))
+               (not (member new-name all-tags))
+               (not (member new-name current-tags))))
+         (parent-conflict
+          (and new-name-valid-p parent-id existing-new-tag
+               (not (member safe-prefix all-tags))
+               (not (equal parent-id
+                           (plist-get (supertag--ensure-plist existing-new-tag)
+                                      :extends))))))
+    (cond
+     (should-add-new
+      (let ((new-cand (concat safe-prefix "\u200b")))
           (add-text-properties
            0 (length new-cand)
-           (list 'is-new-tag t 'new-tag-name safe-prefix)
+           (list 'is-new-tag t
+                 'new-tag-name new-name
+                 'new-tag-parent parent-id
+                 'new-tag-display-path safe-prefix)
            new-cand)
           (put-text-property (1- (length new-cand)) (length new-cand)
                              'display "" new-cand)
           ;; Creation is an explicit fallback, never the default match.
-          (append available-tags (list new-cand)))
-      available-tags)))
+          (append available-tags (list new-cand))))
+     (parent-conflict
+      (let ((conflict (concat safe-prefix "\u200b")))
+        (add-text-properties
+         0 (length conflict)
+         (list 'supertag-tag-conflict t
+               'new-tag-name new-name
+               'new-tag-display-path safe-prefix)
+         conflict)
+        (put-text-property (1- (length conflict)) (length conflict)
+                           'display "" conflict)
+        (append available-tags (list conflict))))
+     (t available-tags))))
 
 (defun supertag-completion--post-completion-action (selected-string)
   "Post-completion action invoked after the UI inserts SELECTED-STRING.
-Display aliases are replaced with their real Tag ID before any write."
+Display aliases are replaced with their real Tag ID after a successful write."
   (let* ((is-new (get-text-property 0 'is-new-tag selected-string))
+         (conflict (get-text-property 0 'supertag-tag-conflict selected-string))
+         (parent-id (get-text-property 0 'new-tag-parent selected-string))
+         (display-path (get-text-property 0 'new-tag-display-path selected-string))
          (selected-name (substring-no-properties selected-string))
          (tag-name (or (get-text-property 0 'supertag-tag-id selected-string)
                        (get-text-property 0 'new-tag-name selected-string)
                        selected-name))
-         (node-id (org-id-get-create)))
-    (when (and (supertag-tag-path-valid-p tag-name) node-id)
-      (unless (equal selected-name tag-name)
-        (when-let* ((bounds (supertag-completion--get-prefix-bounds)))
-          (delete-region (car bounds) (cdr bounds))
-          (goto-char (car bounds))
-          (insert tag-name)))
-
-      ;; Ensure the node exists in the database
-      (unless (supertag-node-get node-id)
-        (when (fboundp 'supertag-node-sync-at-point)
-          (supertag-node-sync-at-point)))
-
-      ;; Only the explicit [New] candidate may create a Tag entity.
-      (when (fboundp 'supertag-ops-add-tag-to-node)
-        (let ((result (supertag-ops-add-tag-to-node
-                       node-id tag-name :create-if-needed (and is-new t))))
-          (when result
-            (if is-new
-                (message "New tag '%s' created and added to node %s"
-                         tag-name node-id)
-              (message "Tag '%s' added to node %s" tag-name node-id)))))
-
-      ;; Finally, add the trailing space to delimit the tag.
-      (insert " "))))
+         (original-node-id (org-id-get))
+         (heading-position
+          (save-excursion
+            (when (ignore-errors (org-back-to-heading t) t)
+              (copy-marker (point))))))
+    (when conflict
+      (supertag-completion--restore-display-path display-path)
+      (user-error "Tag '%s' already exists under a different parent" tag-name))
+    (condition-case err
+        (when-let* ((node-id (and (supertag-tag-path-valid-p tag-name)
+                                  (or original-node-id (org-id-get-create)))))
+          (let ((result
+                 (supertag-with-transaction
+                   ;; Sync can only resolve a display path after its leaf exists.
+                   (when (and is-new parent-id (not (supertag-tag-get tag-name)))
+                     (supertag-tag-create
+                      `(:name ,tag-name :id ,tag-name :extends ,parent-id)))
+                   (unless (supertag-node-get node-id)
+                     (when (fboundp 'supertag-node-sync-at-point)
+                       (save-excursion
+                         (org-back-to-heading t)
+                         (supertag-node-sync-at-point))))
+                   (let ((added
+                          (when (fboundp 'supertag-ops-add-tag-to-node)
+                            (supertag-ops-add-tag-to-node
+                             node-id tag-name
+                             :create-if-needed (and is-new t)
+                             :extends parent-id))))
+                     (when added
+                       (unless (equal selected-name tag-name)
+                         (when-let* ((bounds
+                                      (supertag-completion--get-prefix-bounds)))
+                           (delete-region (car bounds) (cdr bounds))
+                           (goto-char (car bounds))
+                           (insert tag-name)))
+                       (insert " "))
+                     added))))
+            (when result
+              (if is-new
+                  (message "New tag '%s' created and added to node %s"
+                           tag-name node-id)
+                (message "Tag '%s' added to node %s" tag-name node-id)))))
+      (error
+       (supertag-completion--restore-display-path display-path)
+       (when (and (not original-node-id) heading-position)
+         (save-excursion
+           (goto-char heading-position)
+           (org-entry-delete (point) "ID")))
+       (signal (car err) (cdr err))))))
 
 ;;;----------------------------------------------------------------------
 ;;; Main CAPF Entry Point
@@ -261,7 +330,9 @@ Display aliases are replaced with their real Tag ID before any write."
                      (existing-candidates
                       (seq-remove
                        (lambda (candidate)
-                         (get-text-property 0 'is-new-tag candidate))
+                         (or (get-text-property 0 'is-new-tag candidate)
+                             (get-text-property 0 'supertag-tag-conflict
+                                                candidate)))
                        candidates)))
                 (cond
                  ;; Handle boundaries (corfu/company compatibility)
@@ -273,14 +344,20 @@ Display aliases are replaced with their real Tag ID before any write."
                     (display-sort-function . supertag-completion--display-sort)
                     (cycle-sort-function . identity)
                     (affixation-function . supertag-tag-affixate-candidates)
-                    (company-kind . (lambda (cand)
-                                      (if (get-text-property 0 'is-new-tag cand)
-                                          'snippet
-                                        'keyword)))
+                    (company-kind
+                     . (lambda (cand)
+                         (cond
+                          ((get-text-property 0 'is-new-tag cand) 'snippet)
+                          ((get-text-property 0 'supertag-tag-conflict cand)
+                           'text)
+                          (t 'keyword))))
                     (annotation-function
                      . (lambda (cand)
-                         (when (get-text-property 0 'is-new-tag cand)
-                           (propertize "  [New]" 'face 'warning))))))
+                         (cond
+                          ((get-text-property 0 'supertag-tag-conflict cand)
+                           (propertize "  [Conflict]" 'face 'error))
+                          ((get-text-property 0 'is-new-tag cand)
+                           (propertize "  [New]" 'face 'warning)))))))
                ;; Return all candidates (for display).
                ;; Two gotchas to handle here:
                ;;
@@ -345,7 +422,12 @@ Display aliases are replaced with their real Tag ID before any write."
             (lambda (selected-string status)
               ;; Only an explicit completion commits. A nil status is a
               ;; cancelled/incremental exit, never permission to create.
-              (when (memq status '(finished exact sole))
+              (when (and (memq status '(finished exact sole))
+                         (or (get-text-property 0 'supertag-tag-id
+                                                selected-string)
+                             (get-text-property 0 'is-new-tag selected-string)
+                             (get-text-property 0 'supertag-tag-conflict
+                                                selected-string)))
                 (supertag-completion--post-completion-action selected-string)))))))
 
 ;;;----------------------------------------------------------------------
