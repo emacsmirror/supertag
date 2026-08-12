@@ -523,6 +523,285 @@
       (should (equal before
                      (supertag--persistence--canonicalize-value supertag--store))))))
 
+(ert-deftest supertag-stable-tag-migration-applies-with-backup-and-no-org-rewrite ()
+  "The task017 cutover rekeys semantic facts while Org keeps its tokens."
+  (supertag-ownership-test-with-vault
+    (let* ((project-id
+            (supertag-migration--proposed-stable-tag-id "project"))
+           (reference-id
+            (supertag-migration--proposed-stable-tag-id "reference"))
+           (views (make-hash-table :test 'eq))
+           before-files result)
+      (dolist (entry `((,supertag-ownership-test-node-a . "project")
+                       (,supertag-ownership-test-node-b . "reference")))
+        (let ((node (copy-tree (supertag-node-get (car entry)))))
+          (setq node (plist-put node :tag-occurrences (list (cdr entry))))
+          (setq node (plist-put node :unresolved-tags nil))
+          (supertag-store-put-entity :nodes (car entry) node)))
+      (let ((reference (copy-tree (supertag-tag-get "reference")))
+            (project (copy-tree (supertag-tag-get "project"))))
+        (supertag-store-put-entity
+         :tags "reference" (plist-put reference :extends "project"))
+        (supertag-store-put-entity
+         :tags "project"
+         (plist-put
+          project :fields
+          '((:name "Legacy related" :type :tag :default "reference")))))
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "project" "Legacy related" "reference")
+      (supertag-store-put-field-definition
+       "related-tag" '(:id "related-tag" :name "Related" :type :tag
+                       :default "reference"))
+      (supertag-store-put-field-value
+       supertag-ownership-test-node-a "related-tag" "project")
+      (supertag-store-put-entity
+       :relations "semantic-tag-owner"
+       '(:id "semantic-tag-owner" :type :categorizes
+         :from "project" :to "ownership-node-a"
+         :kind :semantic-edge :origin :semantic))
+      (supertag-store-put-entity
+       :boards "ownership-board"
+       (plist-put (copy-tree (supertag-store-get-entity
+                              :boards "ownership-board"))
+                  :filter '(:type :tag :value "project")))
+      (puthash 'ownership-view
+               '(:id ownership-view :query (:type :tag :value "reference"))
+               views)
+      (setq before-files
+            (mapcar (lambda (file)
+                      (with-temp-buffer
+                        (insert-file-contents-literally file)
+                        (buffer-string)))
+                    files))
+      (let ((supertag--view-configs views))
+        (setq result (supertag-migration-run-stable-tags t)))
+      (should (eq :migrated (plist-get result :status)))
+      (should (file-exists-p (plist-get (plist-get result :backup) :store)))
+      (should (file-exists-p (plist-get (plist-get result :backup) :configs)))
+      (should-not (supertag-tag-get "project"))
+      (should-not (supertag-tag-get "reference"))
+      (should (equal project-id (supertag-tag-resolve-occurrence "project")))
+      (should (equal reference-id
+                     (supertag-tag-resolve-occurrence "Project/Reference")))
+      (should (member "project"
+                      (plist-get (supertag-tag-get project-id) :aliases)))
+      (should (equal project-id
+                     (plist-get (supertag-tag-get reference-id) :extends)))
+      (should (equal '("project")
+                     (plist-get
+                      (supertag-node-get supertag-ownership-test-node-a)
+                      :tag-occurrences)))
+      (should (equal (list project-id)
+                     (plist-get
+                      (supertag-node-get supertag-ownership-test-node-a) :tags)))
+      (should-not (plist-get
+                   (supertag-node-get supertag-ownership-test-node-a)
+                   :unresolved-tags))
+      (should (supertag-store-get-tag-field-associations project-id))
+      (should-not (supertag-store-get-tag-field-associations "project"))
+      (should (equal "reference"
+                     (supertag-get
+                      (list :fields supertag-ownership-test-node-a
+                            project-id "Legacy related"))))
+      (should (equal reference-id
+                     (plist-get
+                      (supertag-store-get-field-definition "related-tag")
+                      :default)))
+      (should (equal project-id
+                     (supertag-store-get-field-value
+                      supertag-ownership-test-node-a "related-tag")))
+      (should
+       (cl-some
+        (lambda (relation)
+          (and (equal project-id (plist-get relation :from))
+               (equal supertag-ownership-test-node-a
+                      (plist-get relation :to))))
+        (supertag-relation-find-by-from project-id :categorizes)))
+      (should (equal project-id
+                     (plist-get
+                      (plist-get (supertag-store-get-entity
+                                  :boards "ownership-board") :filter)
+                      :value)))
+      (should (equal project-id
+                     (plist-get
+                      (plist-get (supertag-store-get-entity
+                                  :automations "ownership-automation")
+                                 :condition)
+                      :tag)))
+      (should (string-match-p (regexp-quote project-id)
+                              (cdr (assoc "active-projects"
+                                          supertag-query-saved))))
+      (should (equal reference-id
+                     (plist-get (plist-get (gethash 'ownership-view views) :query)
+                                :value)))
+      (should (equal before-files
+                     (mapcar (lambda (file)
+                               (with-temp-buffer
+                                 (insert-file-contents-literally file)
+                                 (buffer-string)))
+                             files)))
+      (let ((backup-store
+             (supertag--persistence--try-read-store
+              (plist-get (plist-get result :backup) :store))))
+        (should (gethash "project" (gethash :tags backup-store)))))))
+
+(ert-deftest supertag-semantic-tag-rename-keeps-identity-references-and-org ()
+  "Canonical rename changes only Tag name/aliases, never owned references."
+  (supertag-ownership-test-with-vault
+    (dolist (entry `((,supertag-ownership-test-node-a . "project")
+                     (,supertag-ownership-test-node-b . "reference")))
+      (supertag-store-put-entity
+       :nodes (car entry)
+       (plist-put (copy-tree (supertag-node-get (car entry)))
+                  :tag-occurrences (list (cdr entry)))))
+    (let* ((result (supertag-migration-run-stable-tags t))
+           (tag-id (cdr (assoc "project" (plist-get result :mapping))))
+           (collections '(:nodes :relations :fields :field-definitions
+                          :tag-field-associations :field-values :boards
+                          :automations))
+           (before-store
+            (mapcar
+             (lambda (collection)
+               (cons collection
+                     (supertag--persistence--canonicalize-value
+                      (supertag-store-get-collection collection))))
+             collections))
+           (before-query (copy-tree supertag-query-saved))
+           (before-files
+            (mapcar (lambda (file)
+                      (with-temp-buffer
+                        (insert-file-contents-literally file)
+                        (buffer-string)))
+                    files)))
+      (should (equal tag-id (supertag-tag-rename tag-id "initiative")))
+      (should (equal "initiative" (plist-get (supertag-tag-get tag-id) :name)))
+      (should (equal tag-id (supertag-tag-resolve-occurrence "initiative")))
+      (should (equal tag-id (supertag-tag-resolve-occurrence "project")))
+      (should (equal (list supertag-ownership-test-node-a)
+                     (supertag-query-sexp '(tag "project"))))
+      (should
+       (supertag-automation--eval-single-condition
+        '(has-tag "project")
+        (supertag-node-get supertag-ownership-test-node-a)))
+      (should (equal before-store
+                     (mapcar
+                      (lambda (collection)
+                        (cons collection
+                              (supertag--persistence--canonicalize-value
+                               (supertag-store-get-collection collection))))
+                      collections)))
+      (should (equal before-query supertag-query-saved))
+      (should (equal before-files
+                     (mapcar (lambda (file)
+                               (with-temp-buffer
+                                 (insert-file-contents-literally file)
+                                 (buffer-string)))
+                             files))))))
+
+(ert-deftest supertag-org-tag-token-rewrite-is-explicit-and-recoverable ()
+  "An explicit migration rewrites Org tokens after a semantic rename."
+  (supertag-ownership-test-with-vault
+    (dolist (entry `((,supertag-ownership-test-node-a . "project")
+                     (,supertag-ownership-test-node-b . "reference")))
+      (supertag-store-put-entity
+       :nodes (car entry)
+       (plist-put (copy-tree (supertag-node-get (car entry)))
+                  :tag-occurrences (list (cdr entry)))))
+    (let* ((project-file (car files))
+           (supertag-sync--state
+            (list :sync-state (make-hash-table :test 'equal)))
+           (supertag-sync--state-source
+            (expand-file-name "sync-state.el" supertag-data-directory))
+           (supertag-sync--deferred-files (make-hash-table :test 'equal))
+           (supertag-sync--internal-modifications (make-hash-table :test 'equal))
+           (result (supertag-migration-run-stable-tags t))
+           (tag-id (cdr (assoc "project" (plist-get result :mapping)))))
+      (with-temp-buffer
+        (insert-file-contents project-file)
+        (goto-char (point-min))
+        (insert "#+FILETAGS: :project:other:\n")
+        (write-region nil nil project-file nil 'silent))
+      (supertag-tag-rename tag-id "initiative")
+      (let* ((before-semantic (supertag-ownership-test-semantic-fingerprint))
+             (audit
+              (supertag-migration-audit-tag-token-rewrite
+               "project" "initiative"))
+             applied)
+        (should (plist-get audit :safe-to-apply))
+        (should (= 2 (plist-get audit :occurrences)))
+        (should (= 1 (length (plist-get audit :files))))
+        (setq applied
+              (cl-letf (((symbol-function 'supertag-sync-save-state) #'ignore))
+                (supertag-migration-rewrite-tag-token
+                 "project" "initiative" t)))
+        (should (eq :rewritten (plist-get applied :status)))
+        (should (= 2 (plist-get applied :occurrences)))
+        (with-temp-buffer
+          (insert-file-contents project-file)
+          (should-not (search-forward "#project" nil t))
+          (goto-char (point-min))
+          (should-not (search-forward ":project:" nil t))
+          (goto-char (point-min))
+          (should (search-forward "#+FILETAGS: :initiative:other:" nil t))
+          (should (search-forward "#initiative" nil t)))
+        (should (equal tag-id
+                       (supertag-tag-resolve-occurrence "project")))
+        (should (equal tag-id
+                       (supertag-tag-resolve-occurrence "initiative")))
+        (should (equal '("initiative")
+                       (plist-get
+                        (supertag-node-get supertag-ownership-test-node-a)
+                        :tag-occurrences)))
+        (should (equal (list tag-id)
+                       (plist-get
+                        (supertag-node-get supertag-ownership-test-node-a)
+                        :tags)))
+        (should (equal before-semantic
+                       (supertag-ownership-test-semantic-fingerprint)))))))
+
+(ert-deftest supertag-stable-tag-apply-reruns-audit-and-fails-closed ()
+  "An alias conflict prevents both mutation and backup creation."
+  (supertag-ownership-test-with-vault
+    (dolist (id '("project" "reference"))
+      (let ((tag (copy-tree (supertag-tag-get id))))
+        (supertag-store-put-entity
+         :tags id (plist-put tag :aliases '("shared")))))
+    (let ((before (supertag--persistence--canonicalize-value supertag--store)))
+      (should-error (supertag-migration-run-stable-tags t) :type 'user-error)
+      (should (equal before
+                     (supertag--persistence--canonicalize-value supertag--store)))
+      (should-not (file-directory-p supertag-db-backup-directory)))))
+
+(ert-deftest supertag-stable-tag-apply-rolls-back-after-backup ()
+  "A post-write failure restores Store and loaded configuration."
+  (supertag-ownership-test-with-vault
+    (dolist (entry `((,supertag-ownership-test-node-a . "project")
+                     (,supertag-ownership-test-node-b . "reference")))
+      (supertag-store-put-entity
+       :nodes (car entry)
+       (plist-put (copy-tree (supertag-node-get (car entry)))
+                  :tag-occurrences (list (cdr entry)))))
+    (let* ((views (make-hash-table :test 'eq))
+           (supertag--view-configs views)
+           before-store before-query before-views)
+      (puthash 'ownership-view
+               '(:id ownership-view :query (:type :tag :value "project"))
+               views)
+      (setq before-store (supertag--persistence--canonicalize-value supertag--store)
+            before-query (copy-tree supertag-query-saved)
+            before-views (supertag--persistence--canonicalize-value views))
+      (cl-letf (((symbol-function 'supertag-tag-merge--rebuild-derived-state)
+                 (lambda () (error "Injected rebuild failure"))))
+        (should-error (supertag-migration-run-stable-tags t)))
+      (should (equal before-store
+                     (supertag--persistence--canonicalize-value supertag--store)))
+      (should (equal before-query supertag-query-saved))
+      (should (equal before-views
+                     (supertag--persistence--canonicalize-value
+                      supertag--view-configs)))
+      (should (directory-files supertag-db-backup-directory nil
+                               "supertag-prestable-tags-")))))
+
 (ert-deftest supertag-global-field-audit-conflicts-fail-closed ()
   "Definition/value mismatches block the existing force-write entry point."
   (supertag-ownership-test-with-vault

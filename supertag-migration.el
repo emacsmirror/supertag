@@ -38,6 +38,12 @@
                   "supertag-ops-tag-merge" (form mapping))
 (declare-function supertag-tag-path-rename--rewrite-values
                   "supertag-ops-tag-merge" (value mapping))
+(declare-function supertag-tag-merge--snapshot-files
+                  "supertag-ops-tag-merge" (files))
+(declare-function supertag-tag-merge--restore-files
+                  "supertag-ops-tag-merge" (snapshot))
+(declare-function supertag-tag-merge--delete-snapshot
+                  "supertag-ops-tag-merge" (snapshot))
 
 ;;; --- Helper Functions ---
 
@@ -1484,6 +1490,21 @@ Return a deterministic report plist.  Conflicts and orphans set
                     'utf-8 t))
       0 32))))
 
+(defun supertag-migration--legacy-tag-display-path (tag-id)
+  "Return TAG-ID's pre-task017 ID-based display path."
+  (let ((current tag-id)
+        (seen (make-hash-table :test 'equal))
+        parts cycle)
+    (while (and current (not cycle))
+      (if (gethash current seen)
+          (setq cycle t)
+        (puthash current t seen)
+        (let* ((tag (supertag--ensure-plist (supertag-tag-get current)))
+               (parent (plist-get tag :extends)))
+          (push (if parent (supertag-tag-path-leaf current) current) parts)
+          (setq current parent))))
+    (if cycle tag-id (string-join parts "/"))))
+
 (defun supertag-migration--mapping-value (value mapping)
   "Return VALUE rewritten by old-to-stable MAPPING when present."
   (or (cdr (assoc value mapping)) value))
@@ -1591,7 +1612,9 @@ This includes the existing tag slots and query objects shaped as
                 conflicts))
         (when (and tag (stringp old-id) (stringp name) stable-id)
           (dolist (candidate
-                   (append (list old-id name (supertag-tag-display-path old-id))
+                   (append (list old-id name
+                                 (supertag-migration--legacy-tag-display-path old-id)
+                                 (supertag-tag-display-path old-id))
                            (and (proper-list-p raw-aliases) raw-aliases)))
             (when (stringp candidate)
               (condition-case err
@@ -2021,6 +2044,405 @@ ALIAS-CLAIMS maps occurrence tokens to their current Semantic Tag owners."
     (when (called-interactively-p 'interactive)
       (display-buffer supertag-migration-log-buffer))
     report))
+
+(defun supertag-migration--stable-tag-mapping (audit)
+  "Return AUDIT's old-to-stable alist."
+  (mapcar (lambda (item)
+            (cons (plist-get item :old-id) (plist-get item :stable-id)))
+          (plist-get audit :tag-mappings)))
+
+(defun supertag-migration--unique-backup-path (stem suffix)
+  "Return an unused backup path using STEM and SUFFIX."
+  (let ((path (expand-file-name (concat stem suffix)
+                                supertag-db-backup-directory)))
+    (if (file-exists-p path)
+        (make-temp-file
+         (expand-file-name (concat stem "-") supertag-db-backup-directory)
+         nil suffix)
+      path)))
+
+(defun supertag-migration--write-config-backup (file queries views)
+  "Atomically write QUERIES and VIEWS to FILE."
+  (let ((temp (make-temp-file (concat file ".tmp")))
+        success)
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (let ((print-circle t)
+                  (print-length nil)
+                  (print-level nil)
+                  (print-escape-nonascii t))
+              (prin1 (list :saved-queries queries :loaded-views views)
+                     (current-buffer)))
+            (insert "\n")
+            (let ((write-region-inhibit-fsync nil))
+              (write-region (point-min) (point-max) temp nil 'silent)))
+          (rename-file temp file t)
+          (setq success t))
+      (unless success (ignore-errors (delete-file temp))))))
+
+(defun supertag-migration--backup-stable-tag-cutover ()
+  "Create full Store, on-disk database, and loaded-config backups."
+  (make-directory supertag-db-backup-directory t)
+  (let* ((stamp (format-time-string "%Y%m%d-%H%M%S"))
+         (stem (format "supertag-prestable-tags-%s" stamp))
+         (store (supertag-migration--unique-backup-path stem ".el"))
+         (database
+          (and (stringp supertag-db-file) (file-exists-p supertag-db-file)
+               (supertag-migration--unique-backup-path
+                (concat stem "-database") ".el")))
+         (configs
+          (supertag-migration--unique-backup-path
+           (concat stem "-configs") ".el"))
+         (views (and (hash-table-p supertag--view-configs)
+                     (supertag-tag-merge--copy-view-configs))))
+    (supertag--persistence-write-store-atomically store)
+    (when database (copy-file supertag-db-file database t t))
+    (supertag-migration--write-config-backup
+     configs (copy-tree supertag-query-saved) views)
+    (list :store store :database database :configs configs)))
+
+(defun supertag-migration--stable-tag-definitions (audit mapping)
+  "Return rekeyed Tag definitions described by AUDIT and MAPPING."
+  (let ((result (make-hash-table :test 'equal)))
+    (dolist (item (plist-get audit :tag-mappings) result)
+      (let* ((old-id (plist-get item :old-id))
+             (stable-id (plist-get item :stable-id))
+             (tag (copy-tree (supertag--ensure-plist
+                              (supertag-tag-get old-id))))
+             (extends (plist-get tag :extends))
+             (fields (plist-get tag :fields)))
+        (setq tag (plist-put tag :id stable-id))
+        (setq tag (plist-put tag :aliases (plist-get item :aliases)))
+        (when extends
+          (setq tag (plist-put tag :extends
+                               (supertag-migration--mapping-value
+                                extends mapping))))
+        (when (proper-list-p fields)
+          (setq tag
+                (plist-put
+                 tag :fields
+                 (mapcar
+                  (lambda (definition)
+                    (let ((copy (copy-tree definition)))
+                      (if (and (listp copy)
+                               (eq (plist-get copy :type) :tag)
+                               (plist-member copy :default))
+                          (plist-put
+                           copy :default
+                           (supertag-tag-path-rename--rewrite-values
+                            (plist-get copy :default) mapping))
+                        copy)))
+                  fields))))
+        (when (gethash stable-id result)
+          (error "Stable Tag migration produced duplicate ID '%s'" stable-id))
+        (puthash stable-id tag result)))))
+
+(defun supertag-migration--rekey-table (table mapping)
+  "Return TABLE copied with keys rewritten by MAPPING."
+  (let ((result (make-hash-table :test (hash-table-test table))))
+    (maphash
+     (lambda (key value)
+       (let ((new-key (supertag-migration--mapping-value key mapping)))
+         (when (gethash new-key result)
+           (error "Stable Tag migration produced duplicate owner '%s'" new-key))
+         (puthash new-key (copy-tree value) result)))
+     table)
+    result))
+
+(defun supertag-migration--rewrite-stable-tag-nodes (mapping)
+  "Rewrite derived node membership using MAPPING; keep occurrence tokens."
+  (let ((result (make-hash-table :test 'equal)))
+    (maphash
+     (lambda (node-id raw-node)
+       (let* ((node (copy-tree (supertag--ensure-plist raw-node)))
+              (occurrences (plist-get node :tag-occurrences))
+              (resolved
+               (if (proper-list-p occurrences)
+                   (delq nil (mapcar #'supertag-tag-resolve-occurrence occurrences))
+                 (mapcar (lambda (id)
+                           (supertag-migration--mapping-value id mapping))
+                         (or (plist-get node :tags) '()))))
+              (unresolved
+               (and (proper-list-p occurrences)
+                    (cl-remove-if #'supertag-tag-resolve-occurrence occurrences))))
+         (setq node (plist-put node :tags (delete-dups resolved)))
+         (setq node (plist-put node :unresolved-tags unresolved))
+         (puthash node-id node result)))
+     (supertag-store-get-collection :nodes))
+    (supertag-update '(:nodes) result)))
+
+(defun supertag-migration--rewrite-stable-tag-relations (mapping)
+  "Rewrite relation endpoints and deterministic IDs using MAPPING."
+  (let ((result (make-hash-table :test 'equal)))
+    (maphash
+     (lambda (_id raw-relation)
+       (let* ((relation
+               (supertag-migration--rewrite-tag-structured
+                (copy-tree raw-relation) mapping))
+              (from (supertag-migration--mapping-value
+                     (plist-get relation :from) mapping))
+              (to (supertag-migration--mapping-value
+                   (plist-get relation :to) mapping))
+              (id (supertag-generate-relation-id
+                   from to (plist-get relation :type)
+                   (plist-get relation :kind) (plist-get relation :field-id))))
+         (setq relation (plist-put relation :id id))
+         (setq relation (plist-put relation :from from))
+         (setq relation (plist-put relation :to to))
+         (when (gethash id result)
+           (error "Stable Tag migration produced duplicate relation '%s'" id))
+         (puthash id relation result)))
+     (supertag-store-get-collection :relations))
+    (supertag-update '(:relations) result)))
+
+(defun supertag-migration--rewrite-stable-tag-legacy-fields (mapping)
+  "Rekey migration-only legacy field buckets using MAPPING."
+  (let ((result (make-hash-table :test 'equal)))
+    (maphash
+     (lambda (node-id tag-table)
+       (puthash node-id
+                (if (hash-table-p tag-table)
+                    (supertag-migration--rekey-table tag-table mapping)
+                  tag-table)
+                result))
+     (supertag-store-get-collection :fields))
+    (supertag-update '(:fields) result)))
+
+(defun supertag-migration--rewrite-stable-tag-definitions (mapping)
+  "Rewrite Tag-typed global field defaults using MAPPING."
+  (let ((result (make-hash-table :test 'equal)))
+    (maphash
+     (lambda (id raw-definition)
+       (let ((definition (copy-tree raw-definition)))
+         (when (and (eq (plist-get definition :type) :tag)
+                    (plist-member definition :default))
+           (setq definition
+                 (plist-put
+                  definition :default
+                  (supertag-tag-path-rename--rewrite-values
+                   (plist-get definition :default) mapping))))
+         (puthash id definition result)))
+     (supertag-store-get-collection :field-definitions))
+    (supertag-update '(:field-definitions) result)))
+
+(defun supertag-migration--rewrite-stable-tag-values (mapping)
+  "Rewrite Tag-typed global field values using MAPPING."
+  (let ((result (copy-hash-table
+                 (supertag-store-get-collection :field-values))))
+    (maphash
+     (lambda (node-id field-table)
+       (when (hash-table-p field-table)
+         (let ((copy (copy-hash-table field-table)))
+           (maphash
+            (lambda (field-id value)
+              (when (eq (plist-get
+                         (supertag-store-get-field-definition field-id) :type)
+                        :tag)
+                (puthash field-id
+                         (supertag-tag-path-rename--rewrite-values value mapping)
+                         copy)))
+            field-table)
+           (puthash node-id copy result))))
+     (supertag-store-get-collection :field-values))
+    (supertag-update '(:field-values) result)))
+
+(defun supertag-migration--rewrite-stable-tag-configs (mapping)
+  "Rewrite Store, saved-query, and loaded-view Tag references using MAPPING."
+  (dolist (collection '(:boards :automations))
+    (let ((result (make-hash-table :test 'equal)))
+      (maphash
+       (lambda (id value)
+         (puthash id
+                  (supertag-migration--rewrite-tag-structured
+                   (copy-tree value) mapping)
+                  result))
+       (supertag-store-get-collection collection))
+      (supertag-update (list collection) result)))
+  (setq supertag-query-saved
+        (mapcar
+         (lambda (entry)
+           (pcase-let* ((`(,form . ,end) (read-from-string (cdr entry)))
+                        (tail (substring (cdr entry) end)))
+             (unless (string-match-p "\\`[[:space:]]*\\'" tail)
+               (error "Saved query '%s' changed after audit" (car entry)))
+             (cons (car entry)
+                   (prin1-to-string
+                    (supertag-migration--rewrite-tag-structured form mapping)))))
+         supertag-query-saved))
+  (when (hash-table-p supertag--view-configs)
+    (maphash
+     (lambda (id config)
+       (puthash id
+                (supertag-migration--rewrite-tag-structured
+                 (copy-tree config) mapping)
+                supertag--view-configs))
+     supertag--view-configs)))
+
+;;;###autoload
+(defun supertag-migration-run-stable-tags (&optional force-write)
+  "Audit or apply the Stable Semantic Tag migration.
+With FORCE-WRITE non-nil (or a prefix argument), create backups and apply."
+  (interactive "P")
+  (let* ((audit (supertag-migration-audit-stable-tags))
+         (mapping (supertag-migration--stable-tag-mapping audit)))
+    (if (not force-write)
+        audit
+      (unless (plist-get audit :safe-to-apply)
+        (user-error "Stable Tag migration blocked: %d conflict(s), %d unresolved occurrence(s)"
+                    (length (plist-get audit :conflicts))
+                    (length (plist-get audit :unresolved-occurrences))))
+      (let ((backup (supertag-migration--backup-stable-tag-cutover))
+            (query-before (copy-tree supertag-query-saved))
+            (views-before (supertag-tag-merge--copy-view-configs)))
+        (condition-case err
+            (progn
+              (supertag-with-transaction
+                (supertag-update
+                 '(:tags)
+                 (supertag-migration--stable-tag-definitions audit mapping))
+                (supertag-tag--assert-all-tokens-unique)
+                (supertag-migration--rewrite-stable-tag-nodes mapping)
+                (supertag-migration--rewrite-stable-tag-relations mapping)
+                (supertag-migration--rewrite-stable-tag-legacy-fields mapping)
+                (supertag-update
+                 '(:tag-field-associations)
+                 (supertag-migration--rekey-table
+                  (supertag-store-get-collection :tag-field-associations)
+                  mapping))
+                (supertag-migration--rewrite-stable-tag-definitions mapping)
+                (supertag-migration--rewrite-stable-tag-values mapping)
+                (supertag-migration--rewrite-stable-tag-configs mapping)
+                (supertag-tag-merge--rebuild-derived-state))
+              (list :status :migrated :mapping mapping :backup backup))
+          (error
+           (setq supertag-query-saved query-before)
+           (when views-before (setq supertag--view-configs views-before))
+           (ignore-errors (supertag-tag-merge--rebuild-derived-state))
+           (signal (car err) (cdr err))))))))
+
+(defun supertag-migration--tag-token-file-count (file old-token new-token)
+  "Return OLD-TOKEN occurrences in FILE without writing it.
+NEW-TOKEN is used only to exercise the exact production rewrite path."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (let ((org-mode-hook nil)
+          (org-inhibit-startup t))
+      (org-mode)
+      (supertag-view-helper-rename-tag-text-in-buffer
+       old-token new-token))))
+
+(defun supertag-migration-audit-tag-token-rewrite (old-token new-token)
+  "Return a read-only plan for rewriting OLD-TOKEN to NEW-TOKEN in Org.
+Both tokens must resolve uniquely to the same Stable Semantic Tag."
+  (let* ((old (supertag-sanitize-tag-name old-token))
+         (new (supertag-sanitize-tag-name new-token))
+         (old-id (ignore-errors (supertag-tag-resolve-occurrence old)))
+         (new-id (ignore-errors (supertag-tag-resolve-occurrence new)))
+         (snapshot (supertag-sync--snapshot-build))
+         (status (plist-get snapshot :status))
+         files counts conflicts)
+    (unless (eq status 'complete)
+      (push (list :reason :incomplete-vault-snapshot
+                  :status status :errors (plist-get snapshot :errors))
+            conflicts))
+    (unless old-id
+      (push (list :reason :unresolved-old-token :token old) conflicts))
+    (unless new-id
+      (push (list :reason :unresolved-new-token :token new) conflicts))
+    (when (and old-id new-id (not (equal old-id new-id)))
+      (push (list :reason :different-tag-owners
+                  :old-token old :old-id old-id
+                  :new-token new :new-id new-id)
+            conflicts))
+    (when (equal old new)
+      (push (list :reason :same-token :token old) conflicts))
+    (when (eq status 'complete)
+      (dolist (file (sort (copy-sequence (plist-get snapshot :files)) #'string<))
+        (cond
+         ((not (file-readable-p file))
+          (push (list :reason :unreadable-file :file file) conflicts))
+         ((and (get-file-buffer file)
+               (buffer-modified-p (get-file-buffer file)))
+          (push (list :reason :modified-buffer :file file) conflicts))
+         (t
+          (condition-case err
+              (let ((count
+                     (supertag-migration--tag-token-file-count file old new)))
+                (when (> count 0)
+                  (push file files)
+                  (push (cons file count) counts)))
+            (error
+             (push (list :reason :scan-failed :file file
+                         :error (error-message-string err))
+                   conflicts)))))))
+    (setq files (nreverse files)
+          counts (nreverse counts)
+          conflicts (nreverse conflicts))
+    (list :safe-to-apply (null conflicts)
+          :old-token old :new-token new :tag-id old-id
+          :files files
+          :file-occurrences counts
+          :occurrences (apply #'+ (mapcar #'cdr counts))
+          :conflicts conflicts)))
+
+;;;###autoload
+(defun supertag-migration-rewrite-tag-token
+    (old-token new-token &optional force-write)
+  "Audit or explicitly rewrite OLD-TOKEN to NEW-TOKEN in Org files.
+This never changes Semantic Tag identity.  With FORCE-WRITE non-nil (or a
+prefix argument), snapshot affected files, apply the text rewrite, and reindex
+the Document Projection."
+  (interactive
+   (list (read-string "Old Org tag token: ")
+         (read-string "New Org tag token: ")
+         current-prefix-arg))
+  (let ((audit (supertag-migration-audit-tag-token-rewrite
+                old-token new-token)))
+    (if (not force-write)
+        audit
+      (unless (plist-get audit :safe-to-apply)
+        (user-error "Tag token rewrite blocked: %d conflict(s)"
+                    (length (plist-get audit :conflicts))))
+      (require 'supertag-ops-tag-merge)
+      (let ((snapshot
+             (supertag-tag-merge--snapshot-files
+              (plist-get audit :files)))
+            keep-snapshot)
+        (unwind-protect
+            (condition-case err
+                (let* ((changes
+                        (supertag-view-helper-rename-tag-text-in-files
+                         (plist-get audit :old-token)
+                         (plist-get audit :new-token)
+                         (plist-get audit :files)))
+                       (reindex (supertag-reindex-org)))
+                  (unless (eq (plist-get reindex :status) 'complete)
+                    (error "Document Projection reindex returned %S"
+                           (plist-get reindex :status)))
+                  (list :status :rewritten
+                        :tag-id (plist-get audit :tag-id)
+                        :old-token (plist-get audit :old-token)
+                        :new-token (plist-get audit :new-token)
+                        :file-count (length (plist-get audit :files))
+                        :occurrences changes))
+              (error
+               (condition-case restore-error
+                   (progn
+                     (supertag-tag-merge--restore-files snapshot)
+                     (let ((recovery (supertag-reindex-org)))
+                       (unless (eq (plist-get recovery :status) 'complete)
+                         (error "Recovery reindex returned %S"
+                                (plist-get recovery :status)))))
+                 (error
+                  (setq keep-snapshot t)
+                  (error "Tag token rewrite failed (%s); recovery failed (%s); backup kept at %s"
+                         (error-message-string err)
+                         (error-message-string restore-error)
+                         (plist-get snapshot :dir))))
+               (signal (car err) (cdr err))))
+          (unless keep-snapshot
+            (supertag-tag-merge--delete-snapshot snapshot)))))))
 
 (defun supertag-migration--migrate-field-definitions (dry-run)
   "Create global field definitions from tag field specs. Respects DRY-RUN.

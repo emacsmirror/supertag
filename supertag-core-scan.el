@@ -11,6 +11,7 @@
 (require 'cl-lib)
 (require 'supertag-core-store)
 (require 'supertag-ops-node)
+(require 'supertag-ops-tag)
 
 
 ;;; --- Scan-based Query Functions ---
@@ -44,7 +45,10 @@
 
 (defun supertag-find-tag-descendants (tag-name)
   "Return stored tag IDs that transitively extend TAG-NAME."
-  (let ((tags-ht (supertag-store-get-collection :tags))
+  (let ((tag-name (or (and (supertag-tag-get tag-name) tag-name)
+                      (supertag-tag-resolve-occurrence tag-name)
+                      tag-name))
+        (tags-ht (supertag-store-get-collection :tags))
         results)
     (when (hash-table-p tags-ht)
       (maphash
@@ -59,9 +63,12 @@
   "Find all nodes with TAG-NAME by scanning the store.
 This is an O(N) operation.  When INCLUDE-DESCENDANTS is non-nil,
 also match tags that transitively extend TAG-NAME."
-  (let ((matching-tags (cons tag-name
+  (let* ((resolved (or (and (supertag-tag-get tag-name) tag-name)
+                       (supertag-tag-resolve-occurrence tag-name)
+                       tag-name))
+         (matching-tags (cons resolved
                              (and include-descendants
-                                  (supertag-find-tag-descendants tag-name))))
+                                  (supertag-find-tag-descendants resolved))))
         (nodes-ht (supertag-store-get-collection :nodes))
         (results '()))
     (when (hash-table-p nodes-ht)
@@ -114,9 +121,12 @@ TAG-NAME is the name of the tag to search for.
 When INCLUDE-DESCENDANTS is non-nil, tags that transitively extend
 TAG-NAME also match.
 Returns a list of (node-id . node-data) pairs."
-  (let ((matching-tags (cons tag-name
+  (let* ((resolved (or (and (supertag-tag-get tag-name) tag-name)
+                       (supertag-tag-resolve-occurrence tag-name)
+                       tag-name))
+         (matching-tags (cons resolved
                              (and include-descendants
-                                  (supertag-find-tag-descendants tag-name))))
+                                  (supertag-find-tag-descendants resolved))))
         (nodes-ht (supertag-store-get-collection :nodes))
         (results '()))
     (when (hash-table-p nodes-ht)

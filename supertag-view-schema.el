@@ -864,7 +864,7 @@ Submitting an empty selection retains every available source field."
     (princ (format "Source tags: %s\n"
                    (mapconcat #'identity (plist-get plan :source-ids) ", ")))
     (princ (format "Destination: %s%s\n"
-                   (plist-get plan :target-id)
+                   (plist-get plan :target-name)
                    (if (plist-get plan :target-exists-p) " (existing)" " (new)")))
     (princ (format "Fields imported: %s\n"
                    (if (plist-get plan :selected-fields)

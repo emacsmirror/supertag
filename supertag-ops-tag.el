@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'org-id)
 (require 'subr-x)
 (require 'supertag-core-store)
 (require 'supertag-core-schema)
@@ -35,12 +36,19 @@ Implements immediate error reporting as preferred by the user."
     (error "Tag missing required :id field: %S" data))
   (unless (plist-get data :name)
     (error "Tag missing required :name field: %S" data))
+  (when-let* ((aliases (plist-get data :aliases)))
+    (unless (and (proper-list-p aliases) (cl-every #'stringp aliases))
+      (error "Tag :aliases must be a list of strings, got: %S" aliases)))
   ;; Validate time format compliance (Emacs native format)
   (when-let ((created-at (plist-get data :created-at)))
-    (unless (and (listp created-at) (= (length created-at) 4))
+    (unless (condition-case nil
+                (progn (format-time-string "%s" created-at) t)
+              (error nil))
       (error "Tag :created-at must use Emacs time format, got: %S" created-at)))
   (when-let ((modified-at (plist-get data :modified-at)))
-    (unless (and (listp modified-at) (= (length modified-at) 4))
+    (unless (condition-case nil
+                (progn (format-time-string "%s" modified-at) t)
+              (error nil))
       (error "Tag :modified-at must use Emacs time format, got: %S" modified-at))))
 
 (defun supertag--ensure-plist (data)
@@ -91,6 +99,85 @@ This ensures that modifications to the copy do not affect the original."
 
 ;; ID generation is now handled by supertag-id-utils.el
 
+(defun supertag-tag-stable-id-p (value)
+  "Return non-nil when VALUE has the Stable Semantic Tag ID shape."
+  (and (stringp value)
+       (string-match-p "\\`tag-[0-9a-f]\\{32\\}\\'" value)))
+
+(defun supertag-tag--new-stable-id ()
+  "Return a fresh Stable Semantic Tag ID."
+  (let (id)
+    (while (or (null id) (supertag-tag-get id))
+      (setq id
+            (concat "tag-"
+                    (replace-regexp-in-string
+                     "-" "" (downcase (org-id-uuid))))))
+    id))
+
+(defun supertag-tag--normalize-aliases (aliases)
+  "Return sorted unique occurrence tokens from ALIASES."
+  (sort
+   (delete-dups
+    (mapcar #'supertag-sanitize-tag-name
+            (cl-remove-if-not #'stringp aliases)))
+   #'string<))
+
+(defun supertag-tag--path-for-name (name parent-id)
+  "Return NAME's occurrence path below PARENT-ID."
+  (let ((leaf (supertag-sanitize-tag-name name)))
+    (if parent-id
+        (concat (supertag-tag-display-path parent-id) "/" leaf)
+      leaf)))
+
+(defun supertag-tag--tokens (tag-id tag)
+  "Return every token that identifies TAG-ID and TAG."
+  (supertag-tag--normalize-aliases
+   (append (list tag-id
+                 (plist-get tag :name)
+                 (supertag-tag-display-path tag-id))
+           (plist-get tag :aliases))))
+
+(cl-defun supertag-tag--matching-ids
+    (token &optional (tag-ids nil tag-ids-supplied-p))
+  "Return Tag IDs that claim TOKEN, optionally limited to TAG-IDS."
+  (when (and (stringp token) (not (string-empty-p token)))
+    (let ((normalized (supertag-sanitize-tag-name token))
+          matches)
+      (dolist (tag-id
+               (if tag-ids-supplied-p
+                   tag-ids
+                 (hash-table-keys (supertag-store-get-collection :tags))))
+        (when-let* ((tag (supertag--ensure-plist (supertag-tag-get tag-id))))
+          (when (member normalized (supertag-tag--tokens tag-id tag))
+            (push tag-id matches))))
+      (sort (delete-dups matches) #'string<))))
+
+(defun supertag-tag--assert-tokens-unique (tag-id tokens)
+  "Signal when another Tag besides TAG-ID claims one of TOKENS."
+  (dolist (token (supertag-tag--normalize-aliases tokens))
+    (let ((owners (remove tag-id (supertag-tag--matching-ids token))))
+      (when owners
+        (user-error "Tag token '%s' is already owned by %s"
+                    token (string-join owners ", "))))))
+
+(defun supertag-tag--assert-all-tokens-unique ()
+  "Signal when any occurrence token belongs to multiple Semantic Tags."
+  (let ((claims (make-hash-table :test 'equal)))
+    (maphash
+     (lambda (tag-id raw-tag)
+       (dolist (token (supertag-tag--tokens
+                       tag-id (supertag--ensure-plist raw-tag)))
+         (puthash token (cons tag-id (gethash token claims)) claims)))
+     (supertag-store-get-collection :tags))
+    (maphash
+     (lambda (token owners)
+       (setq owners (sort (delete-dups owners) #'string<))
+       (when (cdr owners)
+         (user-error "Tag token '%s' is owned by %s"
+                     token (string-join owners ", "))))
+     claims)
+    t))
+
 ;;; --- Tag Operations ---
 
 ;; 3.1 Basic Operations
@@ -102,29 +189,44 @@ Returns the created tag data."
   (when (plist-get props :fields)
     (user-error
      "Tag :fields is legacy storage; create the tag, then use `supertag-tag-add-field'"))
-  (let* ((name (plist-get props :name))
-         (id (or (plist-get props :id)
-                 (when name (supertag-sanitize-tag-name name))))
-         (extends (let ((ext (plist-get props :extends)))
-                    (when (and (stringp ext) (not (string-empty-p ext)))
-                      (supertag-sanitize-tag-name ext))))
+  (let* ((raw-name (plist-get props :name))
+         (name (and (stringp raw-name)
+                    (supertag-sanitize-tag-name raw-name)))
+         (requested-id (plist-get props :id))
+         (existing-id (and (not requested-id) name
+                           (supertag-tag-resolve-occurrence name)))
+         (id (or requested-id existing-id (supertag-tag--new-stable-id)))
+         (raw-extends (plist-get props :extends))
+         (extends
+          (when (and (stringp raw-extends) (not (string-empty-p raw-extends)))
+            (or (and (supertag-tag-get raw-extends) raw-extends)
+                (supertag-tag-resolve-occurrence raw-extends)
+                (user-error "Parent Tag '%s' does not exist" raw-extends))))
          (existing-tag (supertag-tag-get id)))
     ;; Check if tag exists
     (if existing-tag
         (progn
           (message "Tag '%s' already exists, returning existing tag." id)
           existing-tag)
+      (unless (and (stringp name) (not (string-empty-p name)))
+        (user-error "Tag name cannot be empty"))
       (when (string-match-p "/" id)
         (user-error
          "Tag IDs cannot contain '/'; create the tag and set :extends instead"))
       ;; If tag does not exist, create it
-      (let* ((final-props `(:id ,id
+      (let* ((aliases
+              (supertag-tag--normalize-aliases
+               (append (list id name (supertag-tag--path-for-name name extends))
+                       (plist-get props :aliases))))
+             (final-props `(:id ,id
                              :name ,name
+                             :aliases ,aliases
                              :type :tag
                              :extends ,extends
                              :created-at ,(current-time)
                              :modified-at ,(current-time)))
              (normalized-props (supertag--normalize-tag-extends final-props)))
+        (supertag-tag--assert-tokens-unique id aliases)
         ;; Use unified commit system
         (supertag-ops-commit
          :operation :create
@@ -143,7 +245,7 @@ Returns tag data, or nil if it does not exist."
   (supertag-store-get-entity :tags id))
 
 (defun supertag-tag-display-path (tag-id)
-  "Return TAG-ID prefixed by its explicit parent chain for display."
+  "Return TAG-ID's canonical occurrence path through explicit parents."
   (let ((current tag-id)
         (seen (make-hash-table :test 'equal))
         parts cycle)
@@ -153,7 +255,11 @@ Returns tag data, or nil if it does not exist."
         (puthash current t seen)
         (let* ((tag (supertag--ensure-plist (supertag-tag-get current)))
                (parent (plist-get tag :extends)))
-          (push (if parent (supertag-tag-path-leaf current) current) parts)
+          (push (if tag
+                    (supertag-sanitize-tag-name
+                     (or (plist-get tag :name) current))
+                  current)
+                parts)
           (setq current parent))))
     (if cycle tag-id (string-join parts "/"))))
 
@@ -162,25 +268,24 @@ Returns tag data, or nil if it does not exist."
   "Return the real Tag ID displayed as PATH.
 Limit the search to TAG-IDS when supplied."
   (if tag-ids-supplied-p
-      (cl-find-if (lambda (tag-id)
-                    (equal path (supertag-tag-display-path tag-id)))
-                  tag-ids)
-    (catch 'found
-      (maphash
-       (lambda (tag-id _tag)
-         (when (equal path (supertag-tag-display-path tag-id))
-           (throw 'found tag-id)))
-       (supertag-store-get-collection :tags))
-      nil)))
+      (supertag-tag-resolve-occurrence path tag-ids)
+    (supertag-tag-resolve-occurrence path)))
 
-(defun supertag-tag-resolve-occurrence (token)
+(cl-defun supertag-tag-resolve-occurrence
+    (token &optional (tag-ids nil tag-ids-supplied-p))
   "Return the existing Semantic Tag ID resolved from occurrence TOKEN.
 Return nil when TOKEN has no Semantic Tag.  This function never creates or
 modifies Tag entities."
-  (when (and (stringp token) (not (string-empty-p token)))
-    (let ((normalized (supertag-sanitize-tag-name token)))
-      (or (and (supertag-tag-get normalized) normalized)
-          (supertag-tag-resolve-display-path normalized)))))
+  ;; ponytail: O(Tag) until task018 owns the single cold-rebuild cache contract.
+  (let ((matches
+         (if tag-ids-supplied-p
+             (supertag-tag--matching-ids token tag-ids)
+           (supertag-tag--matching-ids token))))
+    (cond
+     ((null matches) nil)
+     ((null (cdr matches)) (car matches))
+     (t (error "Ambiguous Tag token '%s' is owned by %s"
+               token (string-join matches ", "))))))
 
 (defun supertag-tag-affixate-candidates (candidates)
   "Display CANDIDATES with parent paths without changing their Tag IDs."
@@ -215,23 +320,36 @@ Returns the updated tag data."
       (let* ((original-plist (supertag--ensure-plist previous))
              ;; Deep copy to avoid mutation affecting original-plist comparison
              (copy-for-update (supertag--deep-copy-plist original-plist)))
-        (supertag-ops-commit
-         :operation :update
-         :collection :tags
-         :id id
-         :previous original-plist
-         :perform (lambda ()
-                    (let ((updated-tag (funcall updater copy-for-update)))
-                      (when updated-tag
+        (supertag-with-transaction
+          (supertag-ops-commit
+           :operation :update
+           :collection :tags
+           :id id
+           :previous original-plist
+           :perform (lambda ()
+                      (let ((updated-tag (funcall updater copy-for-update)))
+                        (when updated-tag
                         ;; Always save if updater returned non-nil, since the updater
                         ;; is expected to make changes. The equal check was unreliable
                         ;; due to plist-put mutation semantics.
                         (let* ((normalized-tag (supertag--normalize-tag-extends updated-tag))
+                               (aliases
+                                (supertag-tag--normalize-aliases
+                                 (append
+                                  (list id (plist-get normalized-tag :name)
+                                        (supertag-tag--path-for-name
+                                         (plist-get normalized-tag :name)
+                                         (plist-get normalized-tag :extends)))
+                                  (plist-get normalized-tag :aliases))))
+                               (normalized-tag
+                                (plist-put normalized-tag :aliases aliases))
                                (final-tag (plist-put normalized-tag :modified-at (current-time))))
+                          (supertag-tag--assert-tokens-unique id aliases)
                           (supertag--validate-tag-data final-tag)
-                          (supertag-store-put-entity :tags id final-tag)
-                          (supertag-ops-schema-rebuild-cache)
-                          final-tag)))))))))
+                            (supertag-store-put-entity :tags id final-tag)
+                            (supertag-tag--assert-all-tokens-unique)
+                            (supertag-ops-schema-rebuild-cache)
+                            final-tag))))))))))
 
 (defun supertag-tag-delete (id &optional before-delete)
   "Delete a tag using the unified commit system.
@@ -349,26 +467,50 @@ with TAG-NAME, cleans up all database relations, and then removes
 the tag text from the source files.
 Returns the number of instances removed from files."
   (when (and tag-name (not (string-empty-p tag-name)))
-    (let* ((nodes-with-tag (supertag-find-nodes-by-tag tag-name))
+    (let* ((tag-id (or (and (supertag-tag-get tag-name) tag-name)
+                       (supertag-tag-resolve-occurrence tag-name)
+                       (user-error "Tag '%s' not found" tag-name)))
+           (tag (supertag--ensure-plist (supertag-tag-get tag-id)))
+           (nodes-with-tag (supertag-find-nodes-by-tag tag-id))
            (files (delete-dups (mapcar (lambda (node-pair)
                                          (let ((node (cdr node-pair)))
                                            (plist-get node :file)))
-                                       nodes-with-tag))))
+                                       nodes-with-tag)))
+           (tokens
+            (delete-dups
+             (append
+              (list (supertag-sanitize-tag-name (plist-get tag :name)))
+              (apply
+               #'append
+               (mapcar
+                (lambda (node-pair)
+                  (cl-remove-if-not
+                   (lambda (token)
+                     (equal tag-id
+                            (ignore-errors
+                              (supertag-tag-resolve-occurrence token))))
+                   (plist-get (cdr node-pair) :tag-occurrences)))
+                nodes-with-tag))))))
 
       ;; Clean up relations and node properties in a single loop
       (dolist (node-pair nodes-with-tag)
         (let* ((node-id (car node-pair))
-               (relations (supertag-relation-find-between node-id tag-name :node-tag)))
+               (relations (supertag-relation-find-between node-id tag-id :node-tag)))
           (dolist (rel relations)
             (supertag-relation-delete (plist-get rel :id)))
-          (supertag-node-remove-tag node-id tag-name)))
+          (supertag-node-remove-tag node-id tag-id)))
 
       ;; Delete the tag definition itself
-      (supertag-tag-delete tag-name)
+      (supertag-tag-delete tag-id)
 
       ;; Remove tag text from all associated files
       (require 'supertag-view-helper)
-      (let ((total-deleted (supertag-view-helper-remove-tag-text-from-files tag-name files)))
+      (let ((total-deleted 0))
+        (dolist (token tokens)
+          (setq total-deleted
+                (+ total-deleted
+                   (supertag-view-helper-remove-tag-text-from-files
+                    token files))))
         (message "Tag '%s' completely deleted. Removed %d instances from files."
                  tag-name (or total-deleted 0))
         total-deleted))))
@@ -387,12 +529,19 @@ Returns t if the relationship was created or already exists, nil otherwise."
     (supertag-with-transaction
       (unless (supertag-node-get node-id)
         (user-error "Node '%s' does not exist" node-id))
-      (let ((existing (supertag-tag-get tag-id)))
+      (let* ((resolved-id
+              (or (and (supertag-tag-get tag-id) tag-id)
+                  (supertag-tag-resolve-occurrence tag-id)))
+             (parent-id
+              (and extends
+                   (or (and (supertag-tag-get extends) extends)
+                       (supertag-tag-resolve-occurrence extends))))
+             (existing (and resolved-id (supertag-tag-get resolved-id))))
         (when extends
-          (unless (supertag-tag-get extends)
+          (unless parent-id
             (user-error "Parent Tag '%s' does not exist" extends))
           (when (and existing
-                     (not (equal extends
+                     (not (equal parent-id
                                  (plist-get (supertag--ensure-plist existing)
                                             :extends))))
             (user-error "Tag '%s' already exists under a different parent"
@@ -400,13 +549,15 @@ Returns t if the relationship was created or already exists, nil otherwise."
 
         ;; 1. Ensure tag definition exists.
         (when (and create-if-needed (not existing))
-          (supertag-tag-create
-           `(:name ,tag-id :id ,tag-id :extends ,extends)))
+          (setq existing
+                (supertag-tag-create
+                 `(:name ,tag-id :extends ,parent-id)))
+          (setq resolved-id (plist-get existing :id)))
 
         ;; 2. If tag exists, create the relationship and update node.
-        (if-let* ((raw-tag (supertag-tag-get tag-id)))
+        (if-let* ((raw-tag (and resolved-id (supertag-tag-get resolved-id))))
             (let ((tag (supertag--ensure-plist raw-tag)))
-              (supertag-node-add-tag node-id tag-id)
+              (supertag-node-add-tag node-id resolved-id)
               (unless (supertag-relation-find-between
                        node-id (plist-get tag :id) :node-tag)
                 (supertag-relation-create
@@ -525,20 +676,33 @@ Returns the updated tag data."
     (supertag-ops-schema-rebuild-cache)
     (supertag-tag-get tag-id)))
 
-(defun supertag-tag-rename (old-id new-id)
-  "Rename OLD-ID and any legacy slash descendants below NEW-ID."
+(defun supertag-tag-rename (old-id new-name)
+  "Rename OLD-ID's canonical name to NEW-NAME without changing its identity."
   (interactive "sRename tag from: \nsRename tag to: ")
-  (when (string-match-p "/" (supertag-sanitize-tag-name new-id))
-    (user-error
-     "Tag IDs cannot contain '/'; rename the tag and set :extends instead"))
-  (require 'supertag-ops-tag-merge)
-  (let* ((plan (supertag-tag-path-rename-plan old-id new-id))
-         (result (supertag-tag-path-rename-execute plan)))
-    (message "Renamed %d tag path(s) from '%s' to '%s' (%d file edit(s))."
-             (length (plist-get result :mapping))
-             old-id (plist-get result :target-id)
-             (plist-get result :file-change-count))
-    (plist-get result :target-id)))
+  (let ((canonical (supertag-sanitize-tag-name new-name)))
+    (when (string-match-p "/" canonical)
+      (user-error
+       "Canonical Tag names cannot contain '/'; use :extends for nesting"))
+    (let* ((tag-id (or (and (supertag-tag-get old-id) old-id)
+                       (supertag-tag-resolve-occurrence old-id)
+                       (user-error "Tag '%s' not found" old-id)))
+           (tag (copy-tree (supertag--ensure-plist (supertag-tag-get tag-id))))
+           (old-name (plist-get tag :name))
+           (old-path (supertag-tag-display-path tag-id))
+           (new-path (supertag-tag--path-for-name
+                      canonical (plist-get tag :extends)))
+           (aliases (supertag-tag--normalize-aliases
+                     (append (list tag-id old-name old-path canonical new-path)
+                             (plist-get tag :aliases)))))
+      (supertag-tag--assert-tokens-unique tag-id aliases)
+      (supertag-tag-update
+       tag-id
+       (lambda (current)
+         (setq current (plist-put current :name canonical))
+         (plist-put current :aliases aliases)))
+      (message "Renamed Semantic Tag '%s' to '%s'; ID and Org tokens unchanged."
+               old-name canonical)
+      tag-id)))
 
 (defun supertag--set-tag-parent (child-id parent-id)
   "Set CHILD-ID to extend PARENT-ID, rebuilding schema cache."

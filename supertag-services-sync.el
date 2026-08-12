@@ -1613,14 +1613,13 @@ Return a list of tag strings, or an empty list if none."
                       (mapcar #'identity tags)))))
 
   (defun supertag--normalize-tag-id (name)
-    "Return NAME's real Tag ID, resolving read-only parent display paths."
+    "Return NAME's Semantic Tag ID, resolving occurrence tokens read-only."
     (let ((sanitized (supertag-sanitize-tag-name name)))
-      (if (not (string-match-p "/" sanitized))
-          sanitized
-        (or (supertag-tag-resolve-display-path sanitized)
-            (user-error
-             "Unknown nested Tag path '%s'; create its :extends hierarchy first"
-             sanitized)))))
+      (or (supertag-tag-resolve-occurrence sanitized)
+          (and (not (string-match-p "/" sanitized)) sanitized)
+          (user-error
+           "Unknown nested Tag path '%s'; create its :extends hierarchy first"
+           sanitized))))
 
   (defun supertag--merge-and-sanitize-tags (tags-1 tags-2)
     "Merge two tag lists and sanitize names.
@@ -1707,13 +1706,14 @@ Ensures tags are created only once and returns existing tag IDs.
 IMPORTANT: This function NEVER modifies existing tags - it only creates new ones."
   (let ((tag-ids '()))
     (dolist (tag-name tag-names)
-      (let* ((sanitized-name (supertag--normalize-tag-id tag-name))
-             (tag-id sanitized-name)
-             (existing-tag (supertag-tag-get tag-id)))
+      (let* ((sanitized-name (supertag-sanitize-tag-name tag-name))
+             (tag-id (supertag-tag-resolve-occurrence sanitized-name))
+             (existing-tag (and tag-id (supertag-tag-get tag-id))))
         ;; CRITICAL: Only create if tag doesn't exist
         ;; Never modify existing tags to preserve their field definitions
         (unless existing-tag
-          (supertag-tag-create (list :id tag-id :name sanitized-name)))
+          (setq tag-id
+                (plist-get (supertag-tag-create (list :name sanitized-name)) :id)))
         (push tag-id tag-ids)))
     (nreverse tag-ids)))
 

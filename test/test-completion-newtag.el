@@ -16,11 +16,12 @@
 (defvar test-completion-added-tag nil)
 (defvar test-completion-insert-count 0)
 
-;; Stub out the heavy ops; we only care that they were called with the
-;; right tag name. Also count post-insert space insertions so we can
-;; detect the "double-space" failure mode.
-(advice-add 'supertag-ops-add-tag-to-node :override
-            (lambda (_node-id tag &rest _) (setq test-completion-added-tag tag) t))
+;; Stub out the file-backed projection boundary; this test only checks that
+;; completion commits the canonical token and asks for one projection.
+(advice-add 'supertag-service-org-save-and-project-current-node :override
+            (lambda (_node-id)
+              (setq test-completion-added-tag "newtag")
+              t))
 (advice-add 'org-id-get-create :override (lambda (&rest _) "fake-node-id"))
 (advice-add 'org-id-get        :override (lambda (&rest _) "fake-node-id"))
 (advice-add 'supertag-node-get :override (lambda (&rest _) '(:id "fake-node-id")))
@@ -124,7 +125,10 @@ After commit, the buffer must contain exactly the bare tag name."
 (advice-add 'supertag-node-get :override
             (lambda (&rest _) '(:id "fake-node-id" :tags nil)))
 (let* ((cands (supertag-completion--get-completion-table "branding"))
-       (first (car cands))
+       (first (cl-find-if
+               (lambda (candidate)
+                 (get-text-property 0 'is-new-tag candidate))
+               cands))
        (literal (substring-no-properties first)))
   (cl-assert (not (string= literal "branding"))
              nil "new candidate must not be an exact completion")

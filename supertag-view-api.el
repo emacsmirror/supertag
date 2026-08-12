@@ -21,6 +21,7 @@
 (require 'supertag-core-notify)
 (require 'supertag-core-scan) ; scan-based queries like nodes-by-tag
 (require 'supertag-ops-node)
+(require 'supertag-ops-tag)
 (require 'supertag-ops-field)
 
 ;; --- Query & Entity Fetch ---
@@ -137,15 +138,8 @@ Entities that do not exist are skipped."
   "Return tag ID for TAG-NAME, or nil."
   (unless (and (stringp tag-name) (not (string-empty-p tag-name)))
     (error "TAG-NAME must be a non-empty string"))
-  (let ((tags (supertag-view-api-get-collection :tags)))
-    (when (hash-table-p tags)
-      (catch 'found
-        (maphash
-         (lambda (id tag-data)
-           (when (equal (plist-get tag-data :name) tag-name)
-             (throw 'found id)))
-         tags)
-        nil))))
+  (or (and (supertag-tag-get tag-name) tag-name)
+      (supertag-tag-resolve-occurrence tag-name)))
 
 (defun supertag-view-api-nodes-by-tag (tag-name &optional include-descendants)
   "Return node IDs that have TAG-NAME.

@@ -51,6 +51,16 @@
   (supertag-store-put-entity
    :nodes id (list :id id :title id :type :node :tags (list tag))))
 
+(defun tag-path-test--tag-id (token)
+  "Return TOKEN's direct or resolved Semantic Tag ID."
+  (or (and (supertag-tag-get token) token)
+      (supertag-tag-resolve-occurrence token)))
+
+(defun tag-path-test--tag (token)
+  "Return the Semantic Tag identified by TOKEN."
+  (when-let* ((id (tag-path-test--tag-id token)))
+    (supertag-tag-get id)))
+
 (defun tag-path-test--context-on-line (regexp)
   "Return Schema View context on the line matching REGEXP."
   (goto-char (point-min))
@@ -192,6 +202,45 @@
     (should-error
      (supertag-tag-rename "emacs" "emacs/package")
      :type 'user-error)))
+
+(ert-deftest stable-tag-create-and-resolver-hide-semantic-ids-from-completion ()
+  (tag-path-test--with-clean-store
+    (let* ((parent (supertag-tag-create '(:name "diary")))
+           (parent-id (plist-get parent :id))
+           (child (supertag-tag-create
+                   (list :name "happy" :extends parent-id)))
+           (child-id (plist-get child :id)))
+      (should (string-match-p "\\`tag-[0-9a-f]\\{32\\}\\'" parent-id))
+      (should (string-match-p "\\`tag-[0-9a-f]\\{32\\}\\'" child-id))
+      (should (equal "diary/happy" (supertag-tag-display-path child-id)))
+      (should (equal parent-id (supertag-tag-resolve-occurrence "diary")))
+      (should (equal child-id (supertag-tag-resolve-occurrence "happy")))
+      (should (equal child-id
+                     (supertag-tag-resolve-occurrence "diary/happy")))
+      (with-temp-buffer
+        (org-mode)
+        (insert "#hap")
+        (let* ((completion-styles '(basic))
+               (capf (supertag-completion-at-point))
+               (candidates (all-completions "hap" (nth 2 capf)))
+               (happy (cl-find-if
+                       (lambda (candidate)
+                         (equal child-id
+                                (get-text-property 0 'supertag-tag-id candidate)))
+                       candidates)))
+          (should happy)
+          (should (equal "happy" (substring-no-properties happy)))
+          (should-not (string-match-p "tag-[0-9a-f]" happy)))))))
+
+(ert-deftest stable-tag-resolver-fails-closed-on-ambiguous-alias ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "one")
+    (tag-path-test--put-tag "two")
+    (dolist (id '("one" "two"))
+      (supertag-store-put-entity
+       :tags id
+       (plist-put (copy-tree (supertag-tag-get id)) :aliases '("shared"))))
+    (should-error (supertag-tag-resolve-occurrence "shared"))))
 
 (ert-deftest tag-path-incremental-sync-respects-native-tag-policy ()
   (with-temp-buffer
@@ -425,11 +474,12 @@
         (funcall exit candidate 'finished)
         (should (string-match-p "#happy " (buffer-string)))
         (should (equal "diary"
-                       (plist-get (supertag-tag-get "happy") :extends)))
-        (should (member "happy"
+                       (plist-get (tag-path-test--tag "happy") :extends)))
+        (should (member (tag-path-test--tag-id "happy")
                         (plist-get (supertag-node-get "node-1") :tags)))
         (should (= 1 (length (supertag-relation-find-between
-                              "node-1" "happy" :node-tag))))
+                              "node-1" (tag-path-test--tag-id "happy")
+                              :node-tag))))
         (should-not (supertag-tag-get "diary/happy"))))))
 
 (ert-deftest tag-path-completion-creates-child-while-syncing-a-new-node ()
@@ -456,11 +506,12 @@
               (funcall (plist-get (nthcdr 3 capf) :exit-function)
                        candidate 'finished)
               (should (equal "diary"
-                             (plist-get (supertag-tag-get "happy") :extends)))
-              (should (member "happy"
+                             (plist-get (tag-path-test--tag "happy") :extends)))
+              (should (member (tag-path-test--tag-id "happy")
                               (plist-get (supertag-node-get "node-1") :tags)))
               (should (= 1 (length (supertag-relation-find-between
-                                    "node-1" "happy" :node-tag))))))
+                                    "node-1" (tag-path-test--tag-id "happy")
+                                    :node-tag))))))
         (delete-file file)))))
 
 (ert-deftest tag-path-completion-creates-child-from-heading-body ()
@@ -484,10 +535,11 @@
               (insert candidate)
               (funcall (plist-get (nthcdr 3 capf) :exit-function)
                        candidate 'finished)
-              (should (member "happy"
+              (should (member (tag-path-test--tag-id "happy")
                               (plist-get (supertag-node-get "node-1") :tags)))
               (should (= 1 (length (supertag-relation-find-between
-                                    "node-1" "happy" :node-tag))))))
+                                    "node-1" (tag-path-test--tag-id "happy")
+                                    :node-tag))))))
         (delete-file file)))))
 
 (ert-deftest tag-path-completion-selects-existing-child-without-new-action ()
@@ -549,7 +601,7 @@
                  candidate 'finished)
         (should (string-match-p "#active " (buffer-string)))
         (should (equal "project"
-                       (plist-get (supertag-tag-get "active") :extends)))
+                       (plist-get (tag-path-test--tag "active") :extends)))
         (should-not (supertag-tag-get "work/project/active"))))))
 
 (ert-deftest tag-path-completion-reports-existing-leaf-parent-conflicts ()
@@ -588,7 +640,7 @@
                                   (string-trim-right
                                    (car (split-string (buffer-string) "\n")))))
           (should (equal existing-parent
-                         (plist-get (supertag-tag-get "happy") :extends)))
+                         (plist-get (tag-path-test--tag "happy") :extends)))
           (should-not (plist-get (supertag-node-get "node-1") :tags))
           (should-not (supertag-relation-find-by-from "node-1" :node-tag))
           (should-not (supertag-tag-get "diary/happy")))))))
@@ -622,12 +674,13 @@
                   candidate 'finished))
         (should (equal "* Node #happy "
                        (car (split-string (buffer-string) "\n"))))
-        (should (supertag-tag-get "happy"))
+        (should (tag-path-test--tag "happy"))
         (should-not (plist-get (supertag-node-get "node-1") :tags))
         (should-not (supertag-relation-find-by-from "node-1" :node-tag)))
       (goto-char (point-min))
       (supertag-node-sync-at-point)
-      (should (member "happy" (plist-get (supertag-node-get "node-1") :tags))))))
+      (should (member (tag-path-test--tag-id "happy")
+                      (plist-get (supertag-node-get "node-1") :tags))))))
 
 (ert-deftest tag-path-completion-keeps-saved-org-id-after-projection-failure ()
   (tag-path-test--with-clean-store
@@ -660,7 +713,7 @@
                         candidate 'finished))
               (should (string-prefix-p "* Node #happy \n" (buffer-string)))
               (should (org-id-get))
-              (should (supertag-tag-get "happy"))
+              (should (tag-path-test--tag "happy"))
               (should (= 0 (hash-table-count
                             (supertag-store-get-collection :nodes)))))
             (goto-char (point-min))
@@ -693,7 +746,7 @@
         (should (string-prefix-p "* Node #happy \n" (buffer-string)))
         (goto-char (point-min))
         (should (org-id-get))
-        (should (supertag-tag-get "happy"))
+        (should (tag-path-test--tag "happy"))
         (should (= 0 (hash-table-count
                       (supertag-store-get-collection :nodes))))))))
 
@@ -728,7 +781,7 @@
                   candidate 'finished))
         (should (equal "* Node #diary/happy"
                        (car (split-string (buffer-string) "\n"))))
-        (should (supertag-tag-get "happy"))
+        (should (tag-path-test--tag "happy"))
         (should-not (plist-get (supertag-node-get "node-1") :tags))
         (should-not (supertag-relation-find-by-from "node-1" :node-tag))))))
 
@@ -809,11 +862,12 @@
         (funcall (plist-get (nthcdr 3 capf) :exit-function)
                  candidate 'finished)
         (should (string-match-p "#happy " (buffer-string)))
-        (should (supertag-tag-get "happy"))
-        (should (member "happy"
+        (should (tag-path-test--tag "happy"))
+        (should (member (tag-path-test--tag-id "happy")
                         (plist-get (supertag-node-get "node-1") :tags)))
         (should (= 1 (length (supertag-relation-find-between
-                              "node-1" "happy" :node-tag))))))))
+                              "node-1" (tag-path-test--tag-id "happy")
+                              :node-tag))))))))
 
 (ert-deftest tag-path-completion-cancel-does-not-create-child-or-node-id ()
   (tag-path-test--with-clean-store
@@ -832,7 +886,7 @@
         (funcall (plist-get (nthcdr 3 capf) :exit-function) candidate nil)
         (should (equal "* Node #diary/happy" (buffer-string)))
         (should-not (org-id-get))
-        (should-not (supertag-tag-get "happy"))
+        (should-not (tag-path-test--tag "happy"))
         (should (= 0 (hash-table-count
                       (supertag-store-get-collection :nodes))))))))
 
@@ -887,7 +941,7 @@
                     'supertag-service-org-save-and-project-current-node)
                    (lambda (node-id) (push node-id projected))))
           (supertag-completion--post-completion-action new)
-          (should (supertag-tag-get "dia"))
+          (should (tag-path-test--tag "dia"))
           (supertag-completion--post-completion-action (car sorted)))
         (should (equal '("node" "node") projected))))))
 
@@ -990,7 +1044,8 @@
                      '(:id packages :tag "emacs/package")
                      supertag--view-configs)
             (supertag--process-node-tags (supertag-node-get "node"))
-            (supertag-tag-rename "emacs/package" "package")
+            (supertag-tag-path-rename-execute
+             (supertag-tag-path-rename-plan "emacs/package" "package"))
             (should-not (supertag-tag-get "emacs/package"))
             (should (supertag-tag-get "package"))
             (should (equal '("package")

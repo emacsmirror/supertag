@@ -343,6 +343,34 @@
           (should (search-forward "#work" nil t))
           (should (search-forward "#tasking" nil t)))))))
 
+(ert-deftest tag-merge-stable-tags-keeps-ids-out-of-org ()
+  "Post-cutover merge creates one stable target and writes its canonical token."
+  (tag-merge-test--with-store
+    (let* ((file (tag-merge-test--write-org
+                  tmp "stable.org" "* Node #alpha #beta\n"))
+           (alpha (plist-get (supertag-tag-create '(:name "alpha")) :id))
+           (beta (plist-get (supertag-tag-create '(:name "beta")) :id)))
+      (tag-merge-test--create-node "n1" file (list alpha beta))
+      (let ((node (copy-tree (supertag-node-get "n1"))))
+        (supertag-store-put-entity
+         :nodes "n1" (plist-put node :tag-occurrences '("alpha" "beta"))))
+      (let* ((plan (supertag-tag-merge-plan
+                    (list alpha beta) "merged" :selected-fields nil))
+             (target (plist-get plan :target-id))
+             (result (supertag-tag-merge-execute plan)))
+        (should (supertag-tag-stable-id-p target))
+        (should (equal target (plist-get result :target-id)))
+        (should (equal (list target) (plist-get (supertag-node-get "n1") :tags)))
+        (should (equal '("merged")
+                       (plist-get (supertag-node-get "n1") :tag-occurrences)))
+        (should (equal "merged" (plist-get (supertag-tag-get target) :name)))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (should (search-forward "#merged" nil t))
+          (goto-char (point-min))
+          (should-not (search-forward alpha nil t))
+          (should-not (search-forward beta nil t)))))))
+
 (ert-deftest tag-merge-existing-target-preserves-global-fields-and-values ()
   (tag-merge-test--with-store
     (let* ((file (tag-merge-test--write-org tmp "node.org" "* Node #old-a #old-b #work\n"))

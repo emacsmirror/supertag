@@ -103,10 +103,11 @@
   - 影响范围：tag migration、fixtures、docs
   - 完成：2026-08-12；新增确定性 `supertag-migration-audit-stable-tags`，以 namespaced SHA-256 前 128 bit 生成 `tag-<32hex>` proposed ID；报告覆盖 reverse/alias、`:extends`、global schema、membership/occurrence、relation、Tag field default/value、Automation、Board、saved query 与 loaded view，并给出完整 Store/磁盘/config fingerprint 备份计划；alias 一对多、继承环、missing owner 与 unresolved occurrence 全部 fail closed；ownership ERT 16/16、Tag/Query 定向 ERT 85/85、只含 HEAD + task016 patch 的干净临时 worktree 全量 ERT 468/468 通过
 
-- task017 [ ] 执行 Stable Semantic Tag 与 resolver 迁移
+- task017 [x] 执行 Stable Semantic Tag 与 resolver 迁移
   - 产出：token → stable ID resolver、derived membership；rename 只改 canonical name/alias；Org token 改写为独立 migration
   - 验证方式：旧 token 通过 alias 继续解析；alias 一对多 fail closed；rename 不重写 node/relation/field/board/automation
   - 影响范围：tag/schema/relation/query/completion/migration
+  - 完成：2026-08-12；新 Tag 使用 UUID-derived `tag-<32hex>` 稳定身份，统一 resolver 解析 ID/canonical/path/alias 且歧义 fail closed；task016 audit 通过后可先完整备份再事务性切换所有 Tag 引用，失败恢复；semantic rename 不写 Org，显式 token migration 独立审计、snapshot、精确改写并 reindex；干净临时 worktree 全量 ERT 477/477、14 个修改生产文件 byte compile、`check-parens` 与 `git diff --check` 通过
 
 ## M3 — Query Model
 

@@ -873,7 +873,7 @@ Returns the total number of instances removed."
     total-removed))
 
 (defun supertag-view-helper-rename-tag-text-in-buffer (old-tag-name new-tag-name)
-  "Rename all occurrences of #OLD-TAG-NAME to #NEW-TAG-NAME in the current buffer.
+  "Rename OLD-TAG-NAME to NEW-TAG-NAME in inline tags and FILETAGS.
 Returns the total number of instances renamed."
   (save-excursion
     (goto-char (point-min))
@@ -889,6 +889,27 @@ Returns the total number of instances renamed."
                               (looking-at-p "^[ \t]*#\\+")))))
           (replace-match new-tag-name t t nil 2)
           (setq renamed-count (1+ renamed-count))))
+      (goto-char (point-min))
+      (let ((case-fold-search t)
+            (pattern
+             (concat "\\(^\\|[[:space:]:]\\)\\("
+                     (regexp-quote old-tag-name)
+                     "\\)\\([[:space:]:]\\|$\\)")))
+        (while (re-search-forward "^#\\+FILETAGS:[ \t]*\\(.*\\)$" nil t)
+          (let ((begin (match-beginning 1))
+                (end (copy-marker (match-end 1))))
+            (save-restriction
+              (narrow-to-region begin end)
+              (goto-char (point-min))
+              (while (re-search-forward pattern nil t)
+                (let ((prefix (match-string-no-properties 1))
+                      (suffix (match-string-no-properties 3)))
+                  (replace-match (concat prefix new-tag-name suffix) t t)
+                  ;; Revisit a consumed separator so adjacent tokens match.
+                  (unless (string-empty-p suffix)
+                    (backward-char)))
+                (setq renamed-count (1+ renamed-count))))
+            (set-marker end nil))))
       renamed-count)))
 
 (defun supertag-view-helper-rename-tag-text-in-files (old-tag-name new-tag-name files)
@@ -902,20 +923,9 @@ Returns the total number of instances renamed."
       (when (and file (file-exists-p file))
         (with-current-buffer (find-file-noselect file)
           (save-excursion
-            (goto-char (point-min))
-            (let ((renamed-count 0))
-              (while (re-search-forward supertag-inline-tag-regexp nil t)
-                ;; Only rename tags that are not in comments or code blocks
-                (when (and (string= (match-string-no-properties 2) old-tag-name)
-                           (not (or (save-excursion
-                                      (goto-char (match-beginning 0))
-                                      (org-in-src-block-p))
-                                    (save-excursion
-                                      (goto-char (match-beginning 0))
-                                      (beginning-of-line)
-                                      (looking-at-p "^[ \t]*#\\+")))))
-                  (replace-match new-tag-name t t nil 2)
-                  (setq renamed-count (1+ renamed-count))))
+            (let ((renamed-count
+                   (supertag-view-helper-rename-tag-text-in-buffer
+                    old-tag-name new-tag-name)))
               (when (> renamed-count 0)
                 (save-buffer)
                 (setq total-renamed (+ total-renamed renamed-count))

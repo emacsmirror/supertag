@@ -637,7 +637,7 @@ new tag name, bypassing fuzzy completion matching."
                        (unless (supertag-node-get node-id)
                          (supertag-node-sync-at-point))
                        (list node-id))))
-         (all-tags (mapcar #'car (supertag-query :tags))) ; For completion candidates
+         (all-tags (supertag-view-api-list-tag-ids))
          (raw-name (or (supertag-ui-read-tag
                         (format "Add tag to %d node(s) (use =tagname for exact match): "
                                 (length node-ids))
@@ -652,16 +652,18 @@ new tag name, bypassing fuzzy completion matching."
       (let* ((tag-name (if literal-tag
                           (substring raw-name 1) ; Remove the '=' prefix
                         raw-name))
-             (tag-id (supertag-sanitize-tag-name tag-name)))
-        (when (or (supertag-tag-get tag-id)
+             (token (supertag-sanitize-tag-name tag-name))
+             (tag-id (or (and (supertag-tag-get token) token)
+                         (supertag-tag-resolve-occurrence token))))
+        (when (or tag-id
                   (yes-or-no-p
                    (if literal-tag
                        (format "Create new tag '%s' and add to %d node(s)? "
-                               tag-id (length node-ids))
+                               token (length node-ids))
                      (format "Tag '%s' does not exist. Create and add it to %d node(s)? "
-                             tag-id (length node-ids)))))
-          (unless (supertag-tag-get tag-id)
-            (supertag-tag-create `(:name ,tag-id :id ,tag-id)))
+                             token (length node-ids)))))
+          (unless tag-id
+            (setq tag-id (plist-get (supertag-tag-create `(:name ,token)) :id)))
           (dolist (node-id node-ids)
             (unless (supertag-node-get node-id)
               (when-let* ((marker (supertag-ui--find-node-marker node-id)))
@@ -688,7 +690,7 @@ Can be used both at headings and within node content areas."
 ;;; --- Enhanced Tag Management Commands ---
 
 (defun supertag-rename-tag (&optional old-id)
-  "Interactively rename OLD-ID across all files.
+  "Interactively rename OLD-ID's canonical Semantic Tag name.
 When OLD-ID is nil, prompt for the tag to rename."
   (interactive)
   (let* ((old-id (or old-id
@@ -699,7 +701,9 @@ When OLD-ID is nil, prompt for the tag to rename."
                    (read-string (format "New name for '%s': " old-id)))))
     (when (and old-id (not (string-empty-p old-id))
              new-id (not (string-empty-p new-id)))
-      (when (yes-or-no-p (format "Rename tag '%s' to '%s'? This will affect all files." old-id new-id))
+      (when (yes-or-no-p
+             (format "Rename Semantic Tag '%s' to '%s'? Org tokens stay unchanged. "
+                     old-id new-id))
         ;; Call the single, authoritative backend function
         (supertag-tag-rename old-id new-id)))))
 
@@ -742,14 +746,17 @@ This command reads the authoritative list of tags from the database."
                  (format "Change tag '%s' to: " current-tag)
                  all-tags t t)
                 ""))
-           (new-tag (supertag-sanitize-tag-name new-tag-raw)))
-      (when (and new-tag (not (string-empty-p new-tag)))
+           (new-token (supertag-sanitize-tag-name new-tag-raw))
+           (new-tag (or (and (supertag-tag-get new-token) new-token)
+                        (supertag-tag-resolve-occurrence new-token))))
+      (when (and new-token (not (string-empty-p new-token)))
         ;; 1. Create new tag if it doesn't exist
-        (unless (supertag-tag-get new-tag)
-          (when (yes-or-no-p (format "Tag '%s' does not exist. Create it? " new-tag))
-            (supertag-tag-create `(:name ,new-tag :id ,new-tag))))
+        (unless new-tag
+          (when (yes-or-no-p (format "Tag '%s' does not exist. Create it? " new-token))
+            (setq new-tag
+                  (plist-get (supertag-tag-create `(:name ,new-token)) :id))))
 
-        (when (supertag-tag-get new-tag)
+        (when new-tag
           (supertag-service-org-replace-tag node-id current-tag new-tag)
           (message "Tag changed from '%s' to '%s'." current-tag new-tag))))))
 

@@ -68,6 +68,8 @@ Board、Automation 等不可重建的 Semantic Facts。旧命令
 - 物理存储暂时沿用现有 Elisp Store；本阶段不引入 SQLite 或假想 backend adapter。
 - 数据迁移必须先 dry-run，输出映射、冲突和逆向恢复信息，再经确认执行。
 - Stable Semantic Tag 切换前运行 `M-x supertag-migration-audit-stable-tags`；它只输出 old↔stable、alias、继承、schema、引用与备份计划，任何冲突或 unresolved occurrence 都阻断后续 apply，且命令本身不写数据。
+- 审计通过后，以 prefix argument 运行 `M-x supertag-migration-run-stable-tags` 才会先备份 live Store、磁盘数据库与 query/view config，再事务性切换 Stable Tag；失败恢复 Store 与 runtime config，并保留备份。
+- Semantic Tag rename 只修改 canonical name/alias，不改稳定 ID、引用集合或 Org 文件。需要统一文本 token 时，先运行 `M-x supertag-migration-rewrite-tag-token` 审计，再以 prefix argument 显式执行；它独立 snapshot 文件、改写精确 occurrence 并 reindex。
 - 无法区分来源的旧 reciprocal links 默认保留，不自动删除。
 - Consumer 逐个迁移到具体查询 Interface；迁移完成前兼容 wrapper 可以保留，但禁止新增 raw Store caller。
 - 任何完整或部分扫描在输入快照不完整时都不得执行 orphan cleanup。

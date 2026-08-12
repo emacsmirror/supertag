@@ -269,6 +269,23 @@ preventing data loss from incorrect position calculations."
          (tags (plist-get node :tags)))
     (when (listp tags) tags)))
 
+(defun supertag-service-org--semantic-tag-id (tag)
+  "Return TAG as a Semantic Tag ID, or nil when it is unknown."
+  (and (stringp tag)
+       (or (and (supertag-tag-get tag) tag)
+           (supertag-tag-resolve-occurrence tag))))
+
+(defun supertag-service-org--tag-token (tag)
+  "Return the canonical Org occurrence token for TAG."
+  (let* ((id (or (supertag-service-org--semantic-tag-id tag)
+                 (user-error "Unknown Tag '%s'" tag)))
+         (entity (supertag-tag-get id)))
+    (supertag-sanitize-tag-name (plist-get entity :name))))
+
+(defun supertag-service-org--token-identifies-p (token tag-id)
+  "Return non-nil when occurrence TOKEN resolves to TAG-ID."
+  (equal tag-id (ignore-errors (supertag-tag-resolve-occurrence token))))
+
 (defun supertag-service-org--with-node-buffer (node-id func)
   "Find NODE-ID's Org buffer and execute FUNC at its source position."
   (let* ((node-info (supertag-node-get node-id))
@@ -365,51 +382,68 @@ If NODE-ID is already a top-level heading, return nil."
 (defun supertag-service-org-add-tag (node-id tag-name &optional position)
   "Add TAG-NAME to NODE-ID's Org source, save, then reproject.
 POSITION may be `beginning', `end', or a marker in the node buffer."
-  (supertag-service-org--update-buffer-and-resync
-   node-id
-   (lambda ()
-     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
-         (let ((tags (supertag-service-org--filetags)))
-           (unless (member tag-name tags)
-             (supertag-service-org--set-filetags (append tags (list tag-name)))))
-       (unless (member tag-name
-                       (plist-get (supertag--parse-node-at-point)
-                                  :tag-occurrences))
-         (pcase position
-           ('beginning
-            (org-back-to-heading t)
-            (forward-word)
-            (when (org-get-todo-state) (forward-word)))
-           ((pred markerp)
-            (when (eq (marker-buffer position) (current-buffer))
-              (goto-char position)
-              (when (org-at-heading-p)
-                (end-of-line))))
-           (_ (end-of-line)))
-         (supertag-view-helper-insert-tag-text tag-name))))))
+  (let ((token (supertag-service-org--tag-token tag-name)))
+    (supertag-service-org--update-buffer-and-resync
+     node-id
+     (lambda ()
+       (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+           (let ((tags (supertag-service-org--filetags)))
+             (unless (member token tags)
+               (supertag-service-org--set-filetags (append tags (list token)))))
+         (unless (member token
+                         (plist-get (supertag--parse-node-at-point)
+                                    :tag-occurrences))
+           (pcase position
+             ('beginning
+              (org-back-to-heading t)
+              (forward-word)
+              (when (org-get-todo-state) (forward-word)))
+             ((pred markerp)
+              (when (eq (marker-buffer position) (current-buffer))
+                (goto-char position)
+                (when (org-at-heading-p)
+                  (end-of-line))))
+             (_ (end-of-line)))
+           (supertag-view-helper-insert-tag-text token)))))))
 
 (defun supertag-service-org-remove-tag (node-id tag-name)
   "Remove TAG-NAME from NODE-ID's Org source, save, then reproject."
-  (supertag-service-org--update-buffer-and-resync
-   node-id
-   (lambda ()
-     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
-         (supertag-service-org--set-filetags
-          (remove tag-name (supertag-service-org--filetags)))
-       (supertag-view-helper-remove-tag-text tag-name)))))
+  (let ((tag-id (or (supertag-service-org--semantic-tag-id tag-name)
+                    (user-error "Unknown Tag '%s'" tag-name))))
+    (supertag-service-org--update-buffer-and-resync
+     node-id
+     (lambda ()
+       (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+           (supertag-service-org--set-filetags
+            (cl-remove-if
+             (lambda (token)
+               (supertag-service-org--token-identifies-p token tag-id))
+             (supertag-service-org--filetags)))
+         (dolist (token (plist-get (supertag--parse-node-at-point)
+                                   :tag-occurrences))
+           (when (supertag-service-org--token-identifies-p token tag-id)
+             (supertag-view-helper-remove-tag-text token))))))))
 
 (defun supertag-service-org-replace-tag (node-id old-tag-name new-tag-name)
   "Replace OLD-TAG-NAME with NEW-TAG-NAME in Org, then reproject NODE-ID."
-  (supertag-service-org--update-buffer-and-resync
-   node-id
-   (lambda ()
-     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
-         (supertag-service-org--set-filetags
-          (mapcar (lambda (tag)
-                    (if (equal tag old-tag-name) new-tag-name tag))
-                  (supertag-service-org--filetags)))
-       (supertag-view-helper-rename-tag-text-in-node
-        old-tag-name new-tag-name)))))
+  (let ((old-id (or (supertag-service-org--semantic-tag-id old-tag-name)
+                    (user-error "Unknown Tag '%s'" old-tag-name)))
+        (new-token (supertag-service-org--tag-token new-tag-name)))
+    (supertag-service-org--update-buffer-and-resync
+     node-id
+     (lambda ()
+       (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+           (supertag-service-org--set-filetags
+            (mapcar (lambda (tag)
+                      (if (supertag-service-org--token-identifies-p tag old-id)
+                          new-token
+                        tag))
+                    (supertag-service-org--filetags)))
+         (dolist (token (plist-get (supertag--parse-node-at-point)
+                                   :tag-occurrences))
+           (when (supertag-service-org--token-identifies-p token old-id)
+             (supertag-view-helper-rename-tag-text-in-node
+              token new-token))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Field export helpers (DB -> Org properties)

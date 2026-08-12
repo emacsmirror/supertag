@@ -154,6 +154,32 @@
               supertag-ownership-test-node-a "replacement" :node-tag)))
         (kill-buffer buffer)))))
 
+(ert-deftest supertag-tag-membership-writes-canonical-token-for-stable-id ()
+  "The Org service never leaks a Stable Semantic Tag ID into source text."
+  (supertag-tag-membership-test--with-vault
+    (let* ((tag (supertag-tag-create '(:name "stable-entry")))
+           (tag-id (plist-get tag :id))
+           (file (car files))
+           (buffer (supertag-tag-membership-test--goto-node
+                    file supertag-ownership-test-node-a)))
+      (unwind-protect
+          (with-current-buffer buffer
+            (supertag-service-org-add-tag
+             supertag-ownership-test-node-a tag-id)
+            (should (member "stable-entry"
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tag-occurrences)))
+            (should (member tag-id
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tags)))
+            (goto-char (point-min))
+            (should (search-forward "#stable-entry" nil t))
+            (goto-char (point-min))
+            (should-not (search-forward tag-id nil t)))
+        (kill-buffer buffer)))))
+
 (ert-deftest supertag-tag-membership-ui-commands-use-org-first-path ()
   "Interactive add/change/remove retain one save-before-projection path."
   (supertag-tag-membership-test--with-vault

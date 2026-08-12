@@ -635,13 +635,20 @@ capture DSL."
                   (let* ((chosen
                           (supertag-capture--get-from-tags-prompt
                            (list "Supertag tags (comma separated): ")))
-                         (sanitized (mapcar #'supertag-sanitize-tag-name chosen))
-                         (unique-tags (cl-delete-duplicates sanitized :test #'string=)))
+                         (unique-tags
+                          (cl-delete-duplicates chosen :test #'string=)))
                     (when unique-tags
                       ;; Create Semantic Tags first; Org still owns membership.
-                      (dolist (tag-id unique-tags)
-                        (unless (supertag-tag-get tag-id)
-                          (supertag-tag-create `(:name ,tag-id :id ,tag-id))))
+                      (setq unique-tags
+                            (mapcar
+                             (lambda (tag)
+                               (let ((tag-id
+                                      (or (and (supertag-tag-get tag) tag)
+                                          (supertag-tag-resolve-occurrence tag))))
+                                 (or tag-id
+                                     (plist-get
+                                      (supertag-tag-create `(:name ,tag)) :id))))
+                             unique-tags))
                       ;; Update inline #tag on the Org headline
                       (org-back-to-heading t)
                       (let* ((title (org-get-heading t t t t))
@@ -650,7 +657,12 @@ capture DSL."
                                (replace-regexp-in-string
                                 "\\(?:^\\|\\s-\\)#[^[:space:]#]+" "" title)))
                              (tag-string
-                              (mapconcat (lambda (tag) (concat "#" tag))
+                              (mapconcat
+                               (lambda (tag-id)
+                                 (concat
+                                  "#"
+                                  (supertag-sanitize-tag-name
+                                   (plist-get (supertag-tag-get tag-id) :name))))
                                          unique-tags " "))
                              (new-title
                               (string-trim

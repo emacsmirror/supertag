@@ -761,18 +761,26 @@ PARAMS should contain :state with the new TODO keyword (e.g., \"DONE\")."
   (when-let ((state (plist-get params :state)))
     (supertag-service-org-set-todo-state node-id state)))
 
+(defun supertag-automation--semantic-tag-id (tag)
+  "Return TAG's Semantic Tag ID, or TAG when it is unresolved."
+  (or (and (supertag-tag-get tag) tag)
+      (supertag-tag-resolve-occurrence tag)
+      tag))
+
 (defun supertag-automation-action-add-tag (node-id params)
   "Add a tag to the node.
 Append inline #tag at the end of the headline when it is not present."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
       (let* ((node (supertag-node-get node-id))
-             (tags (plist-get node :tags)))
-        (if (member tag-name tags)
+             (tags (plist-get node :tags))
+             (tag-id (supertag-automation--semantic-tag-id tag-name)))
+        (if (and tag-id (member tag-id tags))
             (supertag-automation--log "SKIP(add-tag): tag '%s' already on node %s" tag-name node-id)
-          (unless (supertag-tag-get tag-name)
-            (supertag-tag-create `(:name ,tag-name :id ,tag-name)))
-          (supertag-service-org-add-tag node-id tag-name 'end)
+          (unless (supertag-tag-get tag-id)
+            (setq tag-id
+                  (plist-get (supertag-tag-create `(:name ,tag-name)) :id)))
+          (supertag-service-org-add-tag node-id tag-id 'end)
           (supertag-automation--log "Automation: Added tag '%s' to node %s" tag-name node-id))))))
 
 (defun supertag-automation-action-remove-tag (node-id params)
@@ -781,10 +789,11 @@ Uses the same Org-first path as UI commands."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
       (let* ((node (supertag-node-get node-id))
-             (tags (plist-get node :tags)))
-        (if (not (member tag-name tags))
+             (tags (plist-get node :tags))
+             (tag-id (supertag-automation--semantic-tag-id tag-name)))
+        (if (not (member tag-id tags))
             (supertag-automation--log "SKIP(remove-tag): tag '%s' not present on node %s" tag-name node-id)
-          (supertag-service-org-remove-tag node-id tag-name)
+          (supertag-service-org-remove-tag node-id tag-id)
           (supertag-automation--log "Automation: Removed tag '%s' from node %s" tag-name node-id))))))
 
 (defun supertag-automation-action-call-function (node-id params context)
@@ -1256,20 +1265,27 @@ Returns t if condition passes, nil otherwise."
 
       ;; Tag conditions
       ('has-tag
-       (and tags (member (car args) tags)))
+       (and tags
+            (member (supertag-automation--semantic-tag-id (car args)) tags)))
 
       ;; Multi-tag conditions (new)
       ('has-any-tag
        ;; Return t if node has ANY of the specified tags
        ;; Args: list of tag names, e.g., (has-any-tag "task" "project" "note")
        (and tags
-            (cl-some (lambda (tag) (member tag tags)) args)))
+            (cl-some
+             (lambda (tag)
+               (member (supertag-automation--semantic-tag-id tag) tags))
+             args)))
 
       ('has-all-tags
        ;; Return t if node has ALL of the specified tags
        ;; Args: list of tag names, e.g., (has-all-tags "task" "urgent")
        (and tags
-            (cl-every (lambda (tag) (member tag tags)) args)))
+            (cl-every
+             (lambda (tag)
+               (member (supertag-automation--semantic-tag-id tag) tags))
+             args)))
 
       ;; Field conditions
       ('field-equals

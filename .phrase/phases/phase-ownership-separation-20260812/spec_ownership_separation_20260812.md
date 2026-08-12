@@ -54,6 +54,15 @@
 3. 相关 Query Projection 失效并重建。
 4. 系统不向 Org 插入伪装成事实的 reciprocal text。
 5. 字段显示名修改保留稳定 field ID 与已有 node values；消费者通过 resolver 继续命中同一字段。
+6. Semantic Tag rename 只修改 canonical name/alias，稳定 Tag ID、引用集合与 Org token 均保持不变；旧 token 继续通过 alias 解析。
+
+### Explicit Tag token migration
+
+1. 用户先以 `M-x supertag-migration-rewrite-tag-token` 运行只读审计，确认旧、新 token 唯一解析到同一 Semantic Tag。
+2. 系统要求 complete Vault snapshot，并拒绝含未保存 buffer、不可读文件或 owner 不一致的迁移。
+3. 用户以 prefix argument 明确执行后，系统先 snapshot 全部受影响文件，再只改写精确 inline occurrence 与 `#+FILETAGS` token。
+4. 改写成功后完整 reindex Document Projection；文件写入或 reindex 失败时恢复 snapshot 并重新投影。
+5. 该操作不改变 Stable Semantic Tag identity 或其他 Semantic Facts。
 
 ### Reference navigation
 
@@ -75,6 +84,8 @@
 - 未解析 occurrence 必须继续可查询并出现在补全中；它与显式创建 Semantic Tag 的 `[New]` action 是两个不同选择。
 - Semantic Tag alias 必须全局唯一；冲突时 fail closed。
 - Stable Tag apply 前必须通过只读 audit：old↔stable、alias、inheritance、schema 与所有 durable/runtime reference mapping 完整；任何 unresolved occurrence 或 missing owner 都阻断写入。
+- Stable Tag apply 必须先创建 live Store、磁盘数据库与 query/view config 备份，并在同一 Store transaction 内改写所有已审计引用；derived rebuild 失败必须恢复 Store 与 runtime config。
+- Semantic Tag rename 与 Org token migration 必须是两个独立操作；rename 不得隐式打开或批量保存 Org 文件。
 - ID-less heading 不得产生下次扫描会漂移的临时身份。
 - ID-less heading 在用户显式创建持久 Org ID 前保持普通 heading，并被 Document Projector 跳过。
 - Document Link、field-reference 与 Semantic Edge 必须可区分来源。
@@ -96,6 +107,8 @@
 - Node projection 不再依赖 unknown-key merge 保存 Semantic Facts。
 - Semantic Tag 使用稳定 ID；rename 不要求重写所有引用集合和 Org 文件。
 - Stable Tag dry-run 对同一逻辑 Store 产生相同报告，并保持 Store、Org、数据库文件、saved queries 与 loaded views 字节/值不变。
+- Stable Tag apply 后 node membership、schema、relation、Tag field、Board、Automation、saved query 与 loaded view 均引用稳定 ID；旧 token 通过 alias 继续解析。
+- 显式 Org token migration 只改写同一 Semantic Tag 的 alias，失败可恢复，前后 Semantic Fact fingerprint 完全一致。
 - UI、View、Completion、Board、Query 与 Automation 不再读取 raw collection hash table。
 - Legacy `:fields` 不再有生产 reader/writer；只保留 migration/低层兼容 seam，并在 task028 完成可验证迁移后删除。
 - 字段定义、Tag 关联和值只写入 `:field-definitions`、`:tag-field-associations`、`:field-values`；旧开关不能改变该路径。

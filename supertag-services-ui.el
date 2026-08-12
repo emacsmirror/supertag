@@ -472,13 +472,23 @@ ID.  When ALLOW-NEW is non-nil, a valid new ID may be returned.  When
 ALLOW-EMPTY is non-nil, empty input returns nil.  ALLOW-NAMESPACE is
 accepted for backward compatibility but no longer creates virtual IDs."
   (ignore allow-namespace)
-  (let ((known-tags (sort (delete-dups
-                           (copy-sequence
-                            (if tag-ids-supplied-p
-                                tag-ids
-                              (supertag-view-api-list-tag-ids))))
-                          #'string<)))
-    (let* ((candidates known-tags)
+  (let* ((known-tags
+          (sort (delete-dups
+                 (copy-sequence
+                  (if tag-ids-supplied-p
+                      tag-ids
+                    (supertag-view-api-list-tag-ids))))
+                #'string<))
+         (candidate-map
+          (mapcar
+           (lambda (id)
+             (cons (propertize
+                    (supertag-sanitize-tag-name
+                     (or (plist-get (supertag-tag-get id) :name) id))
+                               'supertag-tag-id id)
+                   id))
+           known-tags)))
+    (let* ((candidates (mapcar #'car candidate-map))
            (completion-extra-properties
             '(:affixation-function supertag-tag-affixate-candidates))
            (answer (completing-read
@@ -491,12 +501,14 @@ accepted for backward compatibility but no longer creates virtual IDs."
        ((not (supertag-tag-path-valid-p answer))
         (user-error "Tag paths cannot contain empty segments"))
        ((and (string-match-p "/" answer)
-             (not (member answer known-tags)))
+             (not (supertag-tag-resolve-occurrence answer known-tags)))
         (user-error
          "Tag IDs cannot contain '/'; create the tag and set :extends instead"))
-       ((or allow-new
-            (member answer known-tags))
-        answer)
+       ((or (get-text-property 0 'supertag-tag-id answer)
+            (assoc answer candidate-map))
+        (or (get-text-property 0 'supertag-tag-id answer)
+            (cdr (assoc answer candidate-map))))
+       (allow-new answer)
        (t (user-error "Unknown tag '%s'" answer))))))
 
 (defun supertag-ui-read-tags (prompt &optional tag-ids allow-new initial-tags)

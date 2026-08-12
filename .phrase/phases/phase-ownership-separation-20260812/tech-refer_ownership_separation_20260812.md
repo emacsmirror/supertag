@@ -226,6 +226,32 @@ saved queries and loaded views, and marks all of them required before task017
 may write.  The audit neither serializes a backup nor changes Store, Org files,
 queries or view registries.
 
+Task017 executes the cutover through
+`supertag-migration-run-stable-tags`.  Without a prefix argument it remains the
+same read-only audit; with a prefix argument it first creates a serialized
+live-Store backup, copies the current disk database when present, and snapshots
+saved queries plus loaded views.  One Store transaction then rekeys Tags,
+inheritance, schema, node membership, relations, Tag-typed field data, Boards,
+Automations, saved queries and views before rebuilding derived state.  Any
+mutation or rebuild error restores Store and runtime query/view config; backup
+artifacts are retained.
+
+Runtime creation uses an opaque UUID-derived `tag-<32hex>` ID.  The single
+`supertag-tag-resolve-occurrence` boundary accepts stable ID, canonical name,
+display path or unique alias, returns nil for no owner and fails closed for
+multiple owners.  `node.:tags` and `:node-tag` store only its resolved stable
+ID; `:tag-occurrences` remains the Org-owned text token.  Completion and pickers
+display canonical names/paths but carry stable IDs as properties, so IDs never
+leak into Org text.
+
+Semantic rename updates only canonical name and aliases while retaining the
+stable ID and every reference.  Org text rewrite is the separate
+`supertag-migration-rewrite-tag-token` command: its default invocation audits a
+complete Vault snapshot; prefix execution snapshots affected files, rewrites
+only exact inline/`#+FILETAGS` occurrences, and reindexes.  Failure restores the
+files and projection.  This resolver intentionally scans Tags until task018
+provides the one cold-rebuild cache contract.
+
 ### Fields
 
 Global field cutover requires per-node/per-field parity. Legacy storage becomes read-only before deletion.

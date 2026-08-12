@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task017 Stable Semantic Tag cutover 与统一 resolver
+
+- Modify Semantic Tag identity：新建 Tag 使用 UUID-derived `tag-<32hex>` 稳定 ID；canonical name、display path 与 alias 不再承担实体身份，所有 token claim 在 semantic write boundary 全局唯一。
+- Add `supertag-tag-resolve-occurrence`：稳定 ID、canonical name、显式 `:extends` display path 与旧 alias 统一返回稳定 ID；零 owner 返回 nil，多 owner fail closed。Node `:tags` / `:node-tag` 只保存 derived stable membership，`:tag-occurrences` 保留 Org token。
+- Modify Completion、picker、Capture、Automation、Query、Stream/Schema 与 Org service：UI 只显示并写入 canonical token/path，stable ID 通过 text property 或 operation 参数传递，不泄漏到 Org；rename 后旧 token 继续通过 alias 命中同一 Tag。
+- Modify semantic rename：只更新 canonical name/alias，保留 ID、schema、field value、relation、Board、Automation、saved query、loaded view 与 Org 文件。Tag merge 同时支持 legacy fixture 与 stable participant，文件只写 canonical target token。
+- Add `supertag-migration-run-stable-tags` apply：每次写入前重跑 task016 audit；unsafe 零备份/零写入，safe 时备份 live Store、已有磁盘 DB 与 query/view config，再在一个 Store transaction rekey 全部审计引用并重建 derived state；失败恢复 Store/runtime config 且保留备份。
+- Add `supertag-migration-rewrite-tag-token`：默认只读审计 complete Vault snapshot，要求 old/new token 唯一指向同一 owner；prefix execution snapshot 受影响文件，只改 exact inline/`#+FILETAGS` occurrence 后 reindex，写入或 projection 失败时恢复文件并再次 reindex。
+
+Behavior：Semantic Tag 的身份现在与显示名分离。用户重命名 Tag 后，已有 Org `#token` 不会被批量打开或改写，仍通过 alias 正确查询；只有用户明确运行独立 token migration 才会统一文本。嵌套关系仍只由 `:extends` 表达，斜杠只作为 completion 操作/display path。
+
+Risk：当前 resolver 是显式 O(Tag) 单一扫描，避免在 task018 的统一 cold rebuild contract 前引入局部 cache 与第二套失效语义。一次性 Stable cutover 会修改多个 durable collection，因此仍要求 task016 完整 audit 与自动备份；任何 ambiguous alias、unresolved occurrence、missing owner 或 rebuild failure 都 fail closed。
+
+Verification：稳定创建/resolver/歧义、rename identity、旧 alias Query/Automation、完整 cutover mapping/backup、unsafe 零备份、rollback、显式 inline + `#+FILETAGS` rewrite/recovery、canonical Org writes 与 stable merge 均有回归；只含 HEAD + task017 patch 的干净临时 worktree 全量 ERT 477/477；14 个修改生产 Elisp 文件 byte compile 成功（仅仓库既有 warning），全部修改 Elisp `check-parens` 与 `git diff --check` 通过。用户未提交的 dashboard/textui 实验未进入 patch 或验证。
+
 ## 2026-08-12 — task016 Stable Semantic Tag ID dry-run
 
 - Add `supertag-migration-audit-stable-tags`：确定性生成 name-based old ID → `tag-<32hex>` proposed stable ID、stable → old reverse mapping、canonical name 与 normalized alias owner 表；已经符合 stable shape 的 ID 保持不变。

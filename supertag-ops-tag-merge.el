@@ -112,6 +112,25 @@ Returns (DEFINITION . CONFLICT), with either side possibly nil."
      (supertag-store-get-collection :nodes))
     (nreverse nodes)))
 
+(defun supertag-tag-merge--canonical-token (tag-id)
+  "Return TAG-ID's canonical Org occurrence token."
+  (supertag-sanitize-tag-name
+   (plist-get (supertag--ensure-plist (supertag-tag-get tag-id)) :name)))
+
+(defun supertag-tag-merge--file-token-rewrites
+    (nodes source-ids target-token)
+  "Return exact Org token rewrites for NODES into TARGET-TOKEN."
+  (let (tokens)
+    (dolist (node nodes)
+      (dolist (token (plist-get node :tag-occurrences))
+        (when (member (ignore-errors (supertag-tag-resolve-occurrence token))
+                      source-ids)
+          (push token tokens))))
+    (dolist (source source-ids)
+      (push (supertag-tag-merge--canonical-token source) tokens))
+    (mapcar (lambda (token) (cons token target-token))
+            (supertag-tag-merge--unique (nreverse tokens)))))
+
 (defun supertag-tag-merge--file-conflicts (nodes)
   "Return preflight conflicts for source files referenced by NODES."
   (let (conflicts)
@@ -305,15 +324,26 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
           (supertag-tag-merge--unique
            (mapcar (lambda (id)
                      (unless (stringp id) (error "Invalid tag id: %S" id))
-                     (supertag-sanitize-tag-name id))
+                     (let ((token (supertag-sanitize-tag-name id)))
+                       (or (and (supertag-tag-get token) token)
+                           (supertag-tag-resolve-occurrence token)
+                           (error "Tag '%s' does not exist" id))))
                    tag-ids)))
-         (target (supertag-sanitize-tag-name target-id)))
+         (target-name (supertag-sanitize-tag-name target-id))
+         (existing-target
+          (or (and (supertag-tag-get target-name) target-name)
+              (supertag-tag-resolve-occurrence target-name)))
+         (canonical-target-name
+          (if existing-target
+              (supertag-tag-merge--canonical-token existing-target)
+            target-name))
+         (stable-mode (cl-every #'supertag-tag-stable-id-p participants))
+         (target (or existing-target
+                     (and stable-mode (supertag-tag--new-stable-id))
+                     target-name)))
     (unless (>= (length participants) 2)
       (error "Tag merge requires at least two participating tags"))
-    (dolist (tag-id participants)
-      (unless (supertag-tag-get tag-id)
-        (error "Tag '%s' does not exist" tag-id)))
-    (let* ((target-exists-p (and (supertag-tag-get target) t))
+    (let* ((target-exists-p (and existing-target t))
            (source-ids (if (member target participants)
                            (remove target participants)
                          participants))
@@ -344,6 +374,10 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
       (let* ((nodes (supertag-tag-merge--affected-nodes source-ids))
              (files (supertag-tag-merge--unique
                      (delq nil (mapcar (lambda (node) (plist-get node :file)) nodes))))
+             (target-token
+              (if target-exists-p
+                  (supertag-tag-merge--canonical-token target)
+                target-name))
              (tag-field-maps (make-hash-table :test 'equal))
              value-writes)
         (dolist (tag-id (supertag-tag-merge--unique
@@ -373,12 +407,17 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
           (list :participants participants
                 :source-ids source-ids
                 :target-id target
+                :target-name canonical-target-name
+                :target-token target-token
                 :target-exists-p target-exists-p
                 :selected-fields selected-keys
                 :field-definitions field-definitions
                 :value-writes (nreverse value-writes)
                 :nodes nodes
                 :files files
+                :file-token-rewrites
+                (supertag-tag-merge--file-token-rewrites
+                 nodes source-ids target-token)
                 :saved-query-updates query-updates
                 :conflicts conflicts
                 :warnings query-warnings))))))
@@ -395,7 +434,7 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
         (definitions (plist-get plan :field-definitions)))
     (unless (plist-get plan :target-exists-p)
       (supertag-tag-create
-       (list :id target :name target)))
+       (list :id target :name (plist-get plan :target-name))))
     (dolist (entry definitions)
       (let ((key (car entry)) (definition (cdr entry)))
         (ignore definition)
@@ -409,16 +448,29 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
 (defun supertag-tag-merge--rewrite-nodes (plan)
   "Rewrite affected node tag lists from PLAN."
   (let ((sources (plist-get plan :source-ids))
-        (target (plist-get plan :target-id)))
+        (target (plist-get plan :target-id))
+        (token-rewrites (plist-get plan :file-token-rewrites)))
     (dolist (node (plist-get plan :nodes))
       (let ((node-id (plist-get node :id)))
         (supertag-node-update
          node-id
          (lambda (current)
            (let ((copy (copy-sequence current)))
-             (plist-put copy :tags
-                        (supertag-tag-merge--rewrite-node-tags
-                         (or (plist-get current :tags) '()) sources target)))))))))
+             (setq copy
+                   (plist-put
+                    copy :tags
+                    (supertag-tag-merge--rewrite-node-tags
+                     (or (plist-get current :tags) '()) sources target)))
+             (when (plist-member current :tag-occurrences)
+               (setq copy
+                     (plist-put
+                      copy :tag-occurrences
+                      (supertag-tag-merge--unique
+                       (mapcar
+                        (lambda (token)
+                          (or (cdr (assoc token token-rewrites)) token))
+                        (plist-get current :tag-occurrences))))))
+             copy)))))))
 
 (defun supertag-tag-merge--tag-has-global-field-p (tag-id field-id)
   "Return non-nil when TAG-ID resolves FIELD-ID in global field mode."
@@ -572,13 +624,12 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
 (defun supertag-tag-merge--rewrite-files (plan)
   "Rewrite source tag text in PLAN's Org files and return change count."
   (let ((total 0)
-        (target (plist-get plan :target-id))
         (files (plist-get plan :files)))
-    (dolist (source (plist-get plan :source-ids) total)
+    (dolist (rewrite (plist-get plan :file-token-rewrites) total)
       (setq total
             (+ total
                (or (supertag-view-helper-rename-tag-text-in-files
-                    source target files)
+                    (car rewrite) (cdr rewrite) files)
                    0))))))
 
 (defun supertag-tag-merge-execute (plan)

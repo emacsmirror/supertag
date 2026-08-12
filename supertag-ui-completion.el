@@ -144,7 +144,10 @@ Handles edge cases: cursor right after # (empty prefix), mid-word, etc."
 
 (defun supertag-completion--decorate-candidate (candidate)
   "Attach Tag identity to CANDIDATE."
-  (propertize candidate 'supertag-tag-id candidate))
+  (let* ((tag (supertag--ensure-plist (supertag-tag-get candidate)))
+         (name (supertag-sanitize-tag-name
+                (or (plist-get tag :name) candidate))))
+    (propertize name 'supertag-tag-id candidate)))
 
 (defun supertag-completion--restore-display-path (path)
   "Replace the current completion token with PATH."
@@ -188,9 +191,11 @@ marker so completion UIs cannot treat unfinished input as an exact match."
             (delq nil
                   (mapcar
                    (lambda (tag-id)
-                     (let ((path (supertag-tag-display-path tag-id)))
-                       (when (and (not (equal path tag-id))
-                                  (not (member path semantic-tags))
+                     (let* ((path (supertag-tag-display-path tag-id))
+                            (name (substring-no-properties
+                                   (supertag-completion--decorate-candidate
+                                    tag-id))))
+                       (when (and (not (equal path name))
                                   (string-prefix-p safe-prefix path))
                          (propertize path 'supertag-tag-id tag-id))))
                    semantic-tags))))
@@ -220,18 +225,23 @@ marker so completion UIs cannot treat unfinished input as an exact match."
                        (supertag-tag-path-leaf safe-prefix)
                      safe-prefix))
          (new-name-valid-p (supertag-transform-inline-tag-name-p new-name))
-         (existing-new-tag (and parent-id (supertag-tag-get new-name)))
+         (existing-new-id
+          (and new-name-valid-p
+               (supertag-tag-resolve-occurrence new-name semantic-tags)))
+         (existing-new-tag (and existing-new-id
+                                (supertag-tag-get existing-new-id)))
          (should-add-new
           (and (not (string-empty-p safe-prefix))
                (supertag-tag-path-valid-p safe-prefix)
                new-name-valid-p
                (or (not (string-match-p "/" safe-prefix)) parent-id)
-               (not (member safe-prefix semantic-tags))
-               (not (member new-name semantic-tags))
-               (not (member new-name current-tags))))
+               (not (supertag-tag-resolve-occurrence
+                     safe-prefix semantic-tags))
+               (not existing-new-id)))
          (parent-conflict
           (and new-name-valid-p parent-id existing-new-tag
-               (not (member safe-prefix semantic-tags))
+               (not (supertag-tag-resolve-occurrence
+                     safe-prefix semantic-tags))
                (not (equal parent-id
                            (plist-get (supertag--ensure-plist existing-new-tag)
                                       :extends))))))
@@ -264,15 +274,16 @@ marker so completion UIs cannot treat unfinished input as an exact match."
 
 (defun supertag-completion--post-completion-action (selected-string)
   "Post-completion action invoked after the UI inserts SELECTED-STRING.
-Display aliases are replaced with their real Tag ID after a successful write."
+Display aliases are replaced with their canonical Org token before writing."
   (let* ((is-new (get-text-property 0 'is-new-tag selected-string))
          (conflict (get-text-property 0 'supertag-tag-conflict selected-string))
          (parent-id (get-text-property 0 'new-tag-parent selected-string))
          (display-path (get-text-property 0 'new-tag-display-path selected-string))
-         (selected-name (substring-no-properties selected-string))
-         (tag-name (or (get-text-property 0 'supertag-tag-id selected-string)
-                       (get-text-property 0 'new-tag-name selected-string)
-                       selected-name))
+         (selected-name
+          (replace-regexp-in-string
+           "\u200b\\'" "" (substring-no-properties selected-string)))
+         (selected-id (get-text-property 0 'supertag-tag-id selected-string))
+         (new-name (get-text-property 0 'new-tag-name selected-string))
          (original-node-id (org-id-get))
          (normalized-token-p nil)
          (heading-position
@@ -281,28 +292,34 @@ Display aliases are replaced with their real Tag ID after a successful write."
               (copy-marker (point))))))
     (when conflict
       (supertag-completion--restore-display-path display-path)
-      (user-error "Tag '%s' already exists under a different parent" tag-name))
+      (user-error "Tag '%s' already exists under a different parent" new-name))
     (condition-case err
-        (when-let* ((node-id (and (supertag-tag-path-valid-p tag-name)
+        (when-let* ((node-id (and (supertag-tag-path-valid-p selected-name)
                                   (or original-node-id (org-id-get-create)))))
           ;; Semantic Tag creation may precede the write, but membership never does.
-          (when (and is-new (not (supertag-tag-get tag-name)))
-            (supertag-tag-create
-             `(:name ,tag-name :id ,tag-name :extends ,parent-id)))
-          (unless (supertag-tag-get tag-name)
-            (user-error "Tag '%s' does not exist" tag-name))
-          (unless (equal selected-name tag-name)
+          (let* ((tag-id
+                 (or selected-id
+                     (and is-new
+                          (plist-get
+                           (supertag-tag-create
+                            `(:name ,new-name :extends ,parent-id))
+                           :id))))
+                 (tag (supertag--ensure-plist (supertag-tag-get tag-id)))
+                 (occurrence-token
+                  (supertag-sanitize-tag-name (plist-get tag :name))))
+            (unless (supertag-tag-get tag-id)
+              (user-error "Tag '%s' does not exist" selected-name))
             (when-let* ((bounds (supertag-completion--get-prefix-bounds)))
               (delete-region (car bounds) (cdr bounds))
               (goto-char (car bounds))
-              (insert tag-name)))
-          (setq normalized-token-p t)
-          (insert " ")
-          (supertag-service-org-save-and-project-current-node node-id)
-          (if is-new
-              (message "New tag '%s' created and added to node %s"
-                       tag-name node-id)
-            (message "Tag '%s' added to node %s" tag-name node-id)))
+              (insert occurrence-token))
+            (setq normalized-token-p t)
+            (insert " ")
+            (supertag-service-org-save-and-project-current-node node-id)
+            (if is-new
+                (message "New tag '%s' created and added to node %s"
+                         occurrence-token node-id)
+              (message "Tag '%s' added to node %s" occurrence-token node-id))))
       (error
        (unless normalized-token-p
          (supertag-completion--restore-display-path display-path))
@@ -468,12 +485,12 @@ CAPF `[New]' candidate."
                   (prefix (buffer-substring-no-properties
                            (car bounds) (cdr bounds)))
                   (_ (supertag-tag-path-valid-p prefix))
-                  (_ (supertag-tag-get prefix)))
+                  (tag-id (supertag-tag-resolve-occurrence prefix)))
         (condition-case err
             (let ((node-id (org-id-get-create)))
               (when node-id
                 (let ((node-tags (supertag-completion--get-node-tags node-id)))
-                  (unless (member prefix node-tags)
+                  (unless (member tag-id node-tags)
                     (supertag-service-org-save-and-project-current-node
                      node-id)))))
           (error
@@ -540,15 +557,22 @@ RET creates and records the tag immediately."
     (when (and input (not (string-empty-p input)))
       (unless (supertag-tag-path-valid-p input)
         (user-error "Tag paths cannot contain empty segments"))
-      (let ((is-new (not (member input all))))
+      (let* ((existing-id
+              (or (and (supertag-tag-get input) input)
+                  (supertag-tag-resolve-occurrence input)))
+             (is-new (not existing-id))
+             (tag (and existing-id (supertag-tag-get existing-id)))
+             (token (if tag
+                        (supertag-sanitize-tag-name (plist-get tag :name))
+                      input)))
         (when (looking-back "[^#]" 1)
           (insert "#"))
-        (insert input " ")
+        (insert token " ")
         (when is-new
-          (supertag-tag-create `(:name ,input :id ,input)))
+          (supertag-tag-create `(:name ,input)))
         (supertag-service-org-save-and-project-current-node node-id)
         (message "%s tag '%s' added to node %s"
-                 (if is-new "New" "Existing") input node-id)))))
+                 (if is-new "New" "Existing") token node-id)))))
 
 ;;;###autoload
 (defun supertag-completion-debug ()
