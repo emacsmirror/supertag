@@ -321,3 +321,15 @@ Behavior：查询语义不变；解析次数从 1 次增为最多 2 次（O(size
 Risk：`supertag-query-field-value` raw 模式与旧 `--get-node-field-value` 等价（resolve-id nil + global store 原始值）。
 
 Verification：query-block/query-library/query-model 28/28 通过；干净临时 worktree（HEAD + task023 patch）全量 ERT 489/489；3 个修改 Elisp byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
+
+## 2026-08-13 — task024 Automation 读取路径迁移
+
+- Add `supertag-services-query.el`：新增具体读取 `supertag-query-automations`（automation rule 列表，可带 filter，名字升序）。
+- Modify `supertag-automation.el`：`supertag-automation-list` 收缩为 `supertag-query-automations` 消费点（rule index cold rebuild 随之从 query interface 取源）；条件/动作中的 node 读取改走 `supertag-query-node`；`update-field` 动作的当前值读取改走 `supertag-query-field-value` raw；关系同步读取改走 `supertag-query-relations-from`；`--get-field-value` 全局字段读取改走 `supertag-query-field-value`。写入路径保持既有模块归属：Document Tag 动作走 service-org，Semantic field 动作走 field ops。
+- Modify `supertag-automation-sync.el`：`--get-affected-node-ids` 改走 `supertag-query-nodes` 带同语义 filter；node 读取改走 `supertag-query-node`；`--get-field-value` 的 node 分支改走 `supertag-query-field-value` raw。
+
+Behavior：触发恰好一次、recursion guard、tag/field/relation condition 语义不变。
+
+Risk：无；所有替换均为 1:1 等价映射。
+
+Verification：`test-automation-scheduled.el` self-check 通过（scheduled rule 触发 + days-of-week filter）；sync-worker/query-model/ownership 定向 47/47；干净临时 worktree（HEAD + task024 patch）全量 ERT 489/489；3 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过（automation 两文件的 check-parens 报错为仓库既有 false positive，与本次修改无关）。
