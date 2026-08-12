@@ -40,10 +40,11 @@
   - 影响范围：sync、tag resolution、completion/query fixtures
   - 完成：2026-08-12；定向 ownership/extractor/tag-path/sync/query/Stream/Smart Key/Tag merge 回归通过；干净临时 clone 全量 ERT 427/427 通过
 
-- task007 [ ] 将 Document Link 导入改为纯 Projection
+- task007 [x] 将 Document Link 导入改为纯 Projection
   - 产出：document-link import 使用无 Org 副作用的写入路径；relation/projection 记录明确 kind/origin
   - 验证方式：reindex 前后所有 Org file hash 不变；link projection parity 通过
   - 影响范围：sync、relation ops/index、reference tests
+  - 完成：2026-08-12；ownership 6/6、relation/field-reference/sync/node 定向回归 39/39；干净临时 clone 全量 ERT 427/427 通过
 
 - task008 [ ] 提供准确的 Org reindex 命令与契约
   - 产出：`supertag-reindex-org`；旧 full-rescan command 作为兼容入口并明确不是 Semantic Restore 或 whole-store reset

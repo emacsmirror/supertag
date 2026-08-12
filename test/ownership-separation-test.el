@@ -130,6 +130,131 @@
                      (supertag-query-sexp '(tag "emerging"))))
       (should (equal before (supertag-ownership-test-semantic-fingerprint))))))
 
+(ert-deftest supertag-reindex-projects-document-links-without-writing-org ()
+  "Reindex projects Org links without inserting reciprocal file links."
+  (supertag-ownership-test-with-vault
+    (let* ((project-file (car files))
+           (reference-file (cadr files))
+           (supertag-sync--state
+            (list :sync-state (make-hash-table :test 'equal)))
+           (supertag-sync--deferred-files (make-hash-table :test 'equal))
+           (supertag-sync--is-full-rescan-p t)
+           (counters (list :nodes-created 0 :nodes-updated 0 :nodes-deleted 0
+                           :references-created 0 :references-deleted 0))
+           (target-buffer (find-file-noselect reference-file))
+           before relation)
+      (supertag-index-rebuild-relations)
+      (supertag-relation-delete supertag-ownership-test-document-link)
+      (supertag-store-put-entity
+       :nodes supertag-ownership-test-node-a
+       (plist-put (copy-sequence
+                   (supertag-node-get supertag-ownership-test-node-a))
+                  :hash "stale"))
+      (setq before
+            (mapcar (lambda (file)
+                      (with-temp-buffer
+                        (insert-file-contents-literally file)
+                        (secure-hash 'sha256 (current-buffer))))
+                    files))
+      (unwind-protect
+          (cl-letf (((symbol-function 'supertag-sync--allow-destructive-p)
+                     (lambda () t))
+                    ((symbol-function 'supertag-ui--find-node-marker)
+                     (lambda (_node-id)
+                       (with-current-buffer target-buffer
+                         (copy-marker (point-min)))))
+                    ((symbol-function 'supertag-ui--file-node-p)
+                     (lambda (_node-id) nil)))
+            (supertag-sync--process-single-file project-file counters)
+            (should
+             (equal before
+                    (mapcar (lambda (file)
+                              (with-temp-buffer
+                                (insert-file-contents-literally file)
+                                (secure-hash 'sha256 (current-buffer))))
+                            files)))
+            (setq relation
+                  (car (supertag-relation-find-between
+                        supertag-ownership-test-node-a
+                        supertag-ownership-test-node-b :reference)))
+            (should relation)
+            (should (eq :document-link (plist-get relation :kind)))
+            (should (eq :org (plist-get relation :origin)))
+            (should (= 1 (length (supertag-relation-find-by-from
+                                  supertag-ownership-test-node-a :reference))))
+            (should (= 1 (length (supertag-relation-find-by-to
+                                  supertag-ownership-test-node-b :reference))))
+            (should (= 1 (plist-get counters :references-created)))
+            ;; A partially classified projection is completed in place.
+            (supertag-store-put-entity
+             :relations (plist-get relation :id)
+             (plist-put (plist-put (copy-sequence relation)
+                                   :kind :document-link)
+                        :origin nil))
+            (supertag-store-put-entity
+             :nodes supertag-ownership-test-node-a
+             (plist-put (copy-sequence
+                         (supertag-node-get supertag-ownership-test-node-a))
+                        :hash "stale"))
+            (supertag-sync--process-single-file project-file counters)
+            (setq relation
+                  (car (supertag-relation-find-between
+                        supertag-ownership-test-node-a
+                        supertag-ownership-test-node-b :reference)))
+            (should (eq :document-link (plist-get relation :kind)))
+            (should (eq :org (plist-get relation :origin)))
+            (should (= 1 (plist-get counters :references-created)))
+            ;; Fully unowned legacy references are ambiguous and stay intact.
+            (supertag-store-put-entity
+             :relations (plist-get relation :id)
+             (plist-put (plist-put (copy-sequence relation) :kind nil)
+                        :origin nil))
+            (supertag-store-put-entity
+             :nodes supertag-ownership-test-node-a
+             (plist-put (copy-sequence
+                         (supertag-node-get supertag-ownership-test-node-a))
+                        :hash "stale"))
+            (supertag-sync--process-single-file project-file counters)
+            (setq relation
+                  (car (supertag-relation-find-between
+                        supertag-ownership-test-node-a
+                        supertag-ownership-test-node-b :reference)))
+            (should-not (plist-get relation :kind))
+            (should-not (plist-get relation :origin))
+            (should (= 1 (plist-get counters :references-created)))
+            (should
+             (equal before
+                    (mapcar (lambda (file)
+                              (with-temp-buffer
+                                (insert-file-contents-literally file)
+                                (secure-hash 'sha256 (current-buffer))))
+                            files))))
+        (kill-buffer target-buffer)))))
+
+(ert-deftest supertag-document-link-cleanup-preserves-field-references ()
+  "Removing an Org link does not delete a database-owned field reference."
+  (supertag-ownership-test-with-vault
+    (let* ((field-target "ownership-field-target")
+           (counters '(:references-created 0 :references-deleted 0))
+           field-reference)
+      (supertag-store-put-entity
+       :nodes field-target
+       (list :id field-target :type :node :title "Field Target"))
+      (supertag-index-rebuild-relations)
+      (setq field-reference
+            (supertag-relation-create
+             (list :type :reference
+                   :from supertag-ownership-test-node-a
+                   :to field-target
+                   :kind :field-reference
+                   :origin :field-value)))
+      (supertag--cleanup-orphaned-references
+       supertag-ownership-test-node-a nil counters)
+      (should-not
+       (supertag-relation-get supertag-ownership-test-document-link))
+      (should (supertag-relation-get (plist-get field-reference :id)))
+      (should (= 1 (plist-get counters :references-deleted))))))
+
 (provide 'ownership-separation-test)
 
 ;;; ownership-separation-test.el ends here

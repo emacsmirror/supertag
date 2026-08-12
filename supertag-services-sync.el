@@ -1733,7 +1733,7 @@ This function never creates or modifies Semantic Tags."
 
 
 (defun supertag--process-node-references (node-data counters)
-  "Process reference relations for a node, creating reference relations as needed.
+  "Project Org reference relations for NODE-DATA without modifying Org files.
 NODE-DATA is the node plist containing reference information.
 COUNTERS is a plist for tracking relation statistics.
 This function is called only when a node is actually being created or updated."
@@ -1745,16 +1745,18 @@ This function is called only when a node is actually being created or updated."
         (when (and (stringp target-id) (not (string-empty-p target-id)))
           ;; Check if target node exists in the store
           (let ((target-node (supertag-node-get target-id)))
-            (if target-node
-                (progn
-                  ;; Create reference relation using unified service (handles duplicates + backlinks)
-                  (let ((existing-relations (supertag-relation-find-between node-id target-id :reference)))
-                    (unless existing-relations
-                      (when (supertag-relation-add-reference node-id target-id)
-                        (setf (plist-get counters :references-created)
-                              (1+ (or (plist-get counters :references-created) 0)))))))
-              ;; Target node doesn't exist yet - this is normal during batch sync
-              )))))))
+            ;; A missing target is normal while a batch is still being imported.
+            (when target-node
+              (let ((existing
+                     (cl-find-if
+                      #'identity
+                      (supertag-relation-find-between
+                       node-id target-id :reference))))
+                (when (supertag-relation-project-document-link node-id target-id)
+                  (unless existing
+                    (setf (plist-get counters :references-created)
+                          (1+ (or (plist-get counters :references-created)
+                                  0)))))))))))))
 
 (defun supertag--cleanup-orphaned-references (node-id current-refs counters)
   "Clean up orphaned reference relations for a node.
@@ -1764,8 +1766,9 @@ COUNTERS is a plist for tracking relation statistics."
   (let ((existing-relations (supertag-relation-find-by-from node-id :reference)))
     (dolist (relation existing-relations)
       (let ((target-id (plist-get relation :to)))
-        ;; If this relation's target is not in current refs, delete it
-        (unless (member target-id current-refs)
+        ;; Only Org-owned projections may be deleted from an Org rescan.
+        (when (and (supertag-relation-document-link-p relation)
+                   (not (member target-id current-refs)))
           (supertag-relation-delete (plist-get relation :id))
           (setf (plist-get counters :references-deleted)
                 (1+ (or (plist-get counters :references-deleted) 0))))))))

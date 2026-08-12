@@ -347,6 +347,41 @@ Returns the deleted relation data."
 
 ;; 5.2 Reference Service
 
+(defun supertag-relation-document-link-p (relation)
+  "Return non-nil when RELATION is an Org-owned Document Link projection."
+  (and (eq (plist-get relation :kind) :document-link)
+       (eq (plist-get relation :origin) :org)))
+
+(defun supertag-relation-project-document-link (from-id to-id)
+  "Project the Org link FROM-ID -> TO-ID without modifying either Org file.
+Partially classified Document Links are completed in place.  Fully unowned
+legacy references remain unchanged until their ownership can be classified."
+  (let ((existing
+         (cl-find-if #'identity
+                     (supertag-relation-find-between
+                      from-id to-id :reference))))
+    (cond
+     ((null existing)
+      (supertag-relation-create
+       (list :type :reference :from from-id :to to-id
+             :kind :document-link :origin :org)))
+     ((supertag-relation-document-link-p existing)
+      existing)
+     ((and (null (plist-get existing :kind))
+           (null (plist-get existing :origin)))
+      existing)
+     ((and (memq (plist-get existing :kind) '(nil :document-link))
+           (memq (plist-get existing :origin) '(nil :org)))
+      (supertag-relation-update
+       (plist-get existing :id)
+       (lambda (relation)
+         (plist-put
+          (plist-put (copy-sequence relation) :kind :document-link)
+          :origin :org))))
+     (t
+      (error "Document Link conflicts with owned relation %s"
+             (plist-get existing :id))))))
+
 (defun supertag-relation-add-reference (from-id to-id)
   "Create a reference from FROM-ID to TO-ID at relation layer.
 

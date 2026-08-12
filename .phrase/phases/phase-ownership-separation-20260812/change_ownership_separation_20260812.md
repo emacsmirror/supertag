@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task007 Document Link 纯 Projection
+
+- Add `supertag-relation-project-document-link`：scanner 使用只写 Store 的 Document Link 投影入口，不再调用会向 target Org 插入 reciprocal link 的 `supertag-relation-add-reference`。
+- Add `supertag-relation-document-link-p`：新 Document Link relation 明确记录 `:kind :document-link` 与 `:origin :org`；只补齐已部分分类的记录，完全无 owner 的 legacy reference 保持不变。
+- Modify orphan cleanup：Org reindex 只删除 `:document-link/:org` relation，不再把 field-reference 或其他明确归属的 reference 当作缺失 Org link 清除。
+- Modify ownership tests：覆盖所有 fixture Org 文件 SHA-256 在 reindex 前后不变、from/to index parity、部分 legacy metadata 补齐、完全无 owner 记录保留，以及 field-reference cleanup isolation。
+- Add `issue042`：记录 scanner 复用 reciprocal-link 写命令造成的 Org 双写、修复与真实 Vault 确认项。
+
+Behavior：已有 Org forward link 在同步时只产生可重建 relation projection；不会修改 source/target Org 文件。交互式 reference 创建命令仍保留原行为，直到 task009 将其改成单一 forward Document Link。
+
+Risk：legacy unowned reference 无论是否存在当前 Org occurrence 都不会被猜测或删除，以免误删字段或语义数据；task015 再执行正式分类迁移。清空 Projection 后的完整冷重建仍由 task008 负责。
+
+Verification：两条回归测试先红后绿；ownership 6/6，reference/field-reference/sync-worker/node 定向回归共 39/39；`check-parens`、`git diff --check` 通过；修改文件 byte-compile 成功，仅有既有 warning；干净临时 clone 全量 ERT 427/427 通过。
+
 ## 2026-08-12 — task006 Tag Occurrence 与 Semantic Tag 分离
 
 - Modify `supertag-services-sync.el`：extractor 将 Org token 写入 `:tag-occurrences`；Document Projector 只读解析已存在 Semantic Tag，将结果分别存为 resolved `:tags` 与 `:unresolved-tags`；普通 reindex 不再创建 Tag entity。

@@ -41,3 +41,4 @@
 - issue039 [ ] Node 删除遗留 global field values 与 relation indexes（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_node_delete_cleanup_20260812.md）
 - issue040 [ ] Document Projector 生成临时身份且 point/file 增量结果分叉（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_document_projector_identity_parity_20260812.md）
 - issue041 [ ] Reindex 把未知 Org Tag Occurrence 静默注册为 Semantic Tag（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_tag_occurrence_semantic_tag_20260812.md）
+- issue042 [ ] Reindex 导入 Document Link 时向目标 Org 写入 reciprocal link（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_document_link_projection_writes_org_20260812.md）
