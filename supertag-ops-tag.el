@@ -171,6 +171,15 @@ Limit the search to TAG-IDS when supplied."
        (supertag-store-get-collection :tags))
       nil)))
 
+(defun supertag-tag-resolve-occurrence (token)
+  "Return the existing Semantic Tag ID resolved from occurrence TOKEN.
+Return nil when TOKEN has no Semantic Tag.  This function never creates or
+modifies Tag entities."
+  (when (and (stringp token) (not (string-empty-p token)))
+    (let ((normalized (supertag-sanitize-tag-name token)))
+      (or (and (supertag-tag-get normalized) normalized)
+          (supertag-tag-resolve-display-path normalized)))))
+
 (defun supertag-tag-affixate-candidates (candidates)
   "Display CANDIDATES with parent paths without changing their Tag IDs."
   (mapcar
@@ -187,6 +196,8 @@ Limit the search to TAG-IDS when supplied."
                (propertize "  [Conflict]" 'face 'error))
               ((get-text-property 0 'is-new-tag candidate)
                (propertize "  [New]" 'face 'warning))
+              ((get-text-property 0 'supertag-tag-occurrence candidate)
+               (propertize "  [Unresolved]" 'face 'shadow))
               (t ""))))
        (list path "" suffix)))
    candidates))

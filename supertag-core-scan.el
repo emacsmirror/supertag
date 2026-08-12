@@ -36,6 +36,12 @@
   "Return non-nil when TAGS contain one of MATCHING-TAGS."
   (cl-some (lambda (tag) (member tag matching-tags)) tags))
 
+(defun supertag-node-tag-query-keys (node-data)
+  "Return Semantic Tag IDs and Org Tag Occurrences from NODE-DATA."
+  (delete-dups
+   (append (copy-sequence (or (plist-get node-data :tags) '()))
+           (copy-sequence (or (plist-get node-data :tag-occurrences) '())))))
+
 (defun supertag-find-tag-descendants (tag-name)
   "Return stored tag IDs that transitively extend TAG-NAME."
   (let ((tags-ht (supertag-store-get-collection :tags))
@@ -61,7 +67,7 @@ also match tags that transitively extend TAG-NAME."
     (when (hash-table-p nodes-ht)
       (maphash (lambda (node-id node-data)
                  (when (supertag--node-tags-match-p
-                        (plist-get node-data :tags)
+                        (supertag-node-tag-query-keys node-data)
                         matching-tags)
                    (push node-id results)))
                nodes-ht))
@@ -117,7 +123,7 @@ Returns a list of (node-id . node-data) pairs."
       (maphash (lambda (node-id node-data)
                  (when (and node-data
                             (supertag--node-tags-match-p
-                             (plist-get node-data :tags)
+                             (supertag-node-tag-query-keys node-data)
                              matching-tags))
                    (push (cons node-id node-data) results)))
                nodes-ht))
@@ -173,7 +179,7 @@ Returns a list of (node-id . node-data) pairs that satisfy all predicates."
   "Check if a node has a specific tag by direct lookup.
 This is an O(1) operation on the node data."
   (when-let ((node-data (supertag-node-get node-id)))
-    (member tag-name (plist-get node-data :tags))))
+    (member tag-name (supertag-node-tag-query-keys node-data))))
 
 
 (defun supertag-find-nodes-by-parent (parent-id)

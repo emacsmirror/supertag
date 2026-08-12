@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task006 Tag Occurrence / Semantic Tag separation
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task005 Document Projector identity + incremental parity
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task004 transactional node delete cleanup
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task003 durable roots + full save verification

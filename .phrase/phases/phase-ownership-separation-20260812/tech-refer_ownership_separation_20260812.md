@@ -31,6 +31,16 @@ The Store is a physical container, not a single owner. The ownership seam is cur
 
 A single Org token is represented by `node.:tags`, a Tag entity and a `:node-tag` relation. Consumers merge these representations again.
 
+Task006 establishes the first explicit runtime split:
+
+- `node.:tag-occurrences` stores sanitized Org-owned tokens.
+- `node.:tags` stores only IDs resolved against existing Semantic Tags.
+- `node.:unresolved-tags` is a rebuildable diagnostic projection.
+- reindex reconciles `:node-tag` only from resolved IDs and never creates a Tag entity.
+- explicit migration or the completion `[New]` action remains the creation boundary.
+
+This is an intermediate name-based resolver. Stable IDs and aliases remain gated by task016–017.
+
 ### Reference
 
 A reference may be represented by a source Org link, a reciprocal target Org link, a relation and node ref caches. Scanner reconciliation calls a command that can write the source documents it is supposed to project.

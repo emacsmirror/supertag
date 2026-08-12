@@ -61,6 +61,7 @@
 ## Edge Cases
 
 - 未解析的 Tag Occurrence 可以存在，但不得静默绑定到错误的 Semantic Tag。
+- 未解析 occurrence 必须继续可查询并出现在补全中；它与显式创建 Semantic Tag 的 `[New]` action 是两个不同选择。
 - Semantic Tag alias 必须全局唯一；冲突时 fail closed。
 - ID-less heading 不得产生下次扫描会漂移的临时身份。
 - ID-less heading 在用户显式创建持久 Org ID 前保持普通 heading，并被 Document Projector 跳过。

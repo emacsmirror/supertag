@@ -34,10 +34,11 @@
 
 ## M1 — One-way Document Projection
 
-- task006 [ ] 分开 Tag Occurrence 与 Semantic Tag
+- task006 [x] 分开 Tag Occurrence 与 Semantic Tag
   - 产出：scanner 只记录 occurrence；未知 token 进入 unresolved projection/diagnostic，不再由 reindex 静默创建或修改 Semantic Tag
   - 验证方式：新 token 仍可 completion/query；reindex 不改变 semantic Tag/schema fingerprint
   - 影响范围：sync、tag resolution、completion/query fixtures
+  - 完成：2026-08-12；定向 ownership/extractor/tag-path/sync/query/Stream/Smart Key/Tag merge 回归通过；干净临时 clone 全量 ERT 427/427 通过
 
 - task007 [ ] 将 Document Link 导入改为纯 Projection
   - 产出：document-link import 使用无 Org 副作用的写入路径；relation/projection 记录明确 kind/origin

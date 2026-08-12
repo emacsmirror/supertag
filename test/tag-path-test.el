@@ -166,6 +166,10 @@
         (should (= 0 (plist-get result :errors)))))
     (should (equal '("happy")
                    (plist-get (supertag-node-get "node-1") :tags)))
+    (should (equal '("diary/happy")
+                   (plist-get (supertag-node-get "node-1")
+                              :tag-occurrences)))
+    (should-not (plist-get (supertag-node-get "node-1") :unresolved-tags))
     (should (= 1 (length (supertag-relation-find-between
                           "node-1" "happy" :node-tag))))))
 
@@ -189,10 +193,11 @@
           (should (equal '("legacy")
                          (plist-get
                           (supertag-extractor--tags headline nil nil)
-                          :tags)))))
+                          :tag-occurrences)))))
       (let ((supertag-sync-legacy-tags-policy 'ignore))
         (should-not
-         (plist-get (supertag-extractor--tags headline nil nil) :tags))))))
+         (plist-get (supertag-extractor--tags headline nil nil)
+                    :tag-occurrences))))))
 
 (ert-deftest nested-tag-schema-tree-uses-explicit-parents-only ()
   (tag-path-test--with-clean-store
@@ -298,6 +303,44 @@
         (should (equal "" (nth 1 display)))
         (should (equal "diary/happy"
                        (substring-no-properties (car display))))))))
+
+(ert-deftest tag-occurrence-completion-keeps-unresolved-token-and-new-action-distinct ()
+  "An unresolved occurrence remains searchable without becoming a Tag entity."
+  (tag-path-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "occurrence-node"
+     '(:id "occurrence-node" :title "Occurrence" :type :node
+       :tag-occurrences ("emerging") :tags nil
+       :unresolved-tags ("emerging")))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Occurrence #emerging\n"
+              ":PROPERTIES:\n:ID: occurrence-node\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "#emerging")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (table (nth 2 capf))
+             (candidates (all-completions "emerging" table))
+             (occurrence
+              (cl-find-if
+               (lambda (candidate)
+                 (get-text-property 0 'supertag-tag-occurrence candidate))
+               candidates))
+             (new
+              (cl-find-if
+               (lambda (candidate)
+                 (get-text-property 0 'is-new-tag candidate))
+               candidates)))
+        (should occurrence)
+        (should new)
+        (should-not (supertag-tag-get "emerging"))
+        (should-not (funcall table "emerging" nil 'lambda))
+        (should
+         (string-match-p
+          "Unresolved"
+          (nth 2 (car (supertag-tag-affixate-candidates
+                       (list occurrence))))))))))
 
 (ert-deftest tag-path-completion-triggers-from-leading-hash ()
   "A recognized #tag context must bypass generic UI prefix thresholds."

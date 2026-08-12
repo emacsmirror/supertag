@@ -12,6 +12,8 @@
   (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name))))
 
 (require 'ownership-fixture)
+(require 'supertag-core-scan)
+(require 'supertag-services-sync)
 
 (ert-deftest supertag-ownership-test-fixture-is-repeatable-and-complete ()
   "The two-file fixture recreates the same files and every required fact."
@@ -92,6 +94,40 @@
                   :title "Project Alpha rescanned"))
       (supertag-store-remove-entity
        :relations supertag-ownership-test-document-link)
+      (should (equal before (supertag-ownership-test-semantic-fingerprint))))))
+
+(ert-deftest supertag-reindex-keeps-unknown-tag-occurrence-out-of-semantic-store ()
+  "Reindex records unknown Org tokens without creating Semantic Tags."
+  (supertag-ownership-test-with-vault
+    (let* ((file (cadr files))
+           (before (supertag-ownership-test-semantic-fingerprint))
+           (supertag-sync--state
+            (list :sync-state (make-hash-table :test 'equal)))
+           (supertag-sync--deferred-files (make-hash-table :test 'equal))
+           (counters (list :nodes-created 0 :nodes-updated 0 :nodes-deleted 0
+                           :references-created 0 :references-deleted 0)))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (end-of-line)
+        (insert " #emerging")
+        (write-region nil nil file nil 'silent))
+      (cl-letf (((symbol-function 'supertag-sync--allow-destructive-p)
+                 (lambda () t)))
+        (supertag-sync--process-single-file file counters))
+      (let ((node (supertag-node-get supertag-ownership-test-node-b)))
+        (should (equal '("reference" "emerging")
+                       (plist-get node :tag-occurrences)))
+        (should (equal '("reference") (plist-get node :tags)))
+        (should (equal '("emerging") (plist-get node :unresolved-tags))))
+      (should-not (supertag-tag-get "emerging"))
+      (should-not
+       (supertag-relation-find-between
+        supertag-ownership-test-node-b "emerging" :node-tag))
+      (should (equal (list supertag-ownership-test-node-b)
+                     (supertag-index-get-nodes-by-tag "emerging")))
+      (should (equal (list supertag-ownership-test-node-b)
+                     (supertag-query-sexp '(tag "emerging"))))
       (should (equal before (supertag-ownership-test-semantic-fingerprint))))))
 
 (provide 'ownership-separation-test)

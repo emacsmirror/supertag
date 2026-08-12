@@ -122,8 +122,8 @@ this option can extend that contract, but cannot remove Document Facts."
 
 (defconst supertag-sync-document-fact-hash-props
   '(:title :raw-value :olp :tags :todo :priority :scheduled :deadline
-    :content :properties :ref-to :file :level :position :pos :parent-id
-    :link-type)
+    :tag-occurrences :unresolved-tags :content :properties :ref-to :file
+    :level :position :pos :parent-id :link-type)
   "Document Projection properties that must participate in node hashes.")
 
 (defcustom supertag-sync-smart-detection-enabled nil
@@ -855,6 +855,30 @@ Includes the node's ID to ensure absolute uniqueness of the state fingerprint."
 File nodes represent file-level identity rather than Org headings."
   (eq (plist-get node :level) 0))
 
+(defun supertag-sync--resolve-node-tag-occurrences (props)
+  "Resolve PROPS Tag Occurrences against existing Semantic Tags.
+The returned copy stores Org tokens in :tag-occurrences, resolved Semantic
+Tag IDs in :tags, and unresolved tokens in :unresolved-tags.  Resolution is
+read-only and never creates or modifies Semantic Tags."
+  (if (not (or (plist-member props :tag-occurrences)
+               (plist-member props :tags)))
+      props
+    (let* ((raw (if (plist-member props :tag-occurrences)
+                    (plist-get props :tag-occurrences)
+                  (plist-get props :tags)))
+           (occurrences
+            (delete-dups (mapcar #'supertag-sanitize-tag-name (or raw '()))))
+           resolved unresolved
+           (result (copy-sequence props)))
+      (dolist (occurrence occurrences)
+        (let ((tag-id (supertag-tag-resolve-occurrence occurrence)))
+          (if tag-id
+              (push tag-id resolved)
+            (push occurrence unresolved))))
+      (setq result (plist-put result :tag-occurrences occurrences))
+      (setq result (plist-put result :tags (delete-dups (nreverse resolved))))
+      (plist-put result :unresolved-tags (nreverse unresolved)))))
+
 (defun supertag-node-mark-deleted-from-file (id)
   "Mark a node as deleted from its file by setting its :file property to nil.
 This does not remove the node from the store immediately."
@@ -875,11 +899,7 @@ COUNTERS is an optional plist for tracking statistics."
   (when-let* ((existing (supertag-node-get id))
               (created-at (plist-get existing :created-at)))
     (setq props (plist-put (copy-sequence props) :created-at created-at)))
-  (when (plist-member props :tags)
-    (setq props
-          (plist-put (copy-sequence props) :tags
-                     (mapcar #'supertag--normalize-tag-id
-                             (plist-get props :tags)))))
+  (setq props (supertag-sync--resolve-node-tag-occurrences props))
   (let ((node-hash (supertag-node-hash props)))
     ;; Ensure :id, :type and :hash are added to props while preserving existing fields
     (let ((node-props (plist-put props :id id)))
@@ -902,9 +922,11 @@ COUNTERS is an optional plist for tracking statistics."
 (defun supertag-node-changed-p (old-node new-node)
   "Compare OLD-NODE and NEW-NODE to detect changes.
 If OLD-NODE doesn't have a hash value, calculate it on the fly."
-  (let ((old-hash (or (plist-get old-node :hash)
-                      (supertag-node-hash old-node)))
-        (new-hash (supertag-node-hash new-node)))
+  (let* ((projected-new
+          (supertag-sync--resolve-node-tag-occurrences new-node))
+         (old-hash (or (plist-get old-node :hash)
+                       (supertag-node-hash old-node)))
+         (new-hash (supertag-node-hash projected-new)))
     (not (string= old-hash new-hash))))
 
 (defun supertag--merge-node-properties (new-props old-props)
@@ -912,7 +934,10 @@ If OLD-NODE doesn't have a hash value, calculate it on the fly."
 NEW-PROPS is the source of truth for file-based properties.
 OLD-PROPS is the source of truth for database-only fields."
   (let ((merged-props (copy-sequence new-props))
-        (standard-keys '(:id :title :raw-value :olp :tags :properties :ref-to :file :content :level :todo :priority :scheduled :deadline :position :pos :hash :type :parent-id :link-type)))
+        (standard-keys '(:id :title :raw-value :olp :tags :tag-occurrences
+                         :unresolved-tags :properties :ref-to :file :content
+                         :level :todo :priority :scheduled :deadline :position
+                         :pos :hash :type :parent-id :link-type)))
     (cl-loop for (key value) on old-props by #'cddr
              do (unless (member key standard-keys)
                   (plist-put merged-props key value)))
@@ -1695,19 +1720,16 @@ Relation creation function now has built-in duplicate checking."
            :created-at (current-time)))))
 
 (defun supertag--process-node-tags (node-data)
-  "Make tag entities and node-tag relations agree with NODE-DATA.
+  "Make node-tag relations agree with resolved tags in NODE-DATA.
 NODE-DATA is the node plist containing tag information.
-This function is called only when a node is actually being created or updated."
+This function never creates or modifies Semantic Tags."
   (let ((node-id (plist-get node-data :id))
-        (all-tags (plist-get node-data :tags)))
+        (tag-ids (plist-get node-data :tags)))
     (when node-id
-      (let ((tag-ids (if all-tags
-                         (supertag--create-tag-entities all-tags)
-                       '())))
-        (dolist (relation (supertag-relation-find-by-from node-id :node-tag))
-          (unless (member (plist-get relation :to) tag-ids)
-            (supertag-relation-delete (plist-get relation :id))))
-        (supertag--create-node-tag-relations node-id tag-ids)))))
+      (dolist (relation (supertag-relation-find-by-from node-id :node-tag))
+        (unless (member (plist-get relation :to) tag-ids)
+          (supertag-relation-delete (plist-get relation :id))))
+      (supertag--create-node-tag-relations node-id tag-ids))))
 
 
 (defun supertag--process-node-references (node-data counters)
@@ -1875,7 +1897,7 @@ Returns: :olp (list of ancestor titles from root to current)."
   "Extract tags from a headline element.
 Reads inline #tags from title/content and native org :tags: unless the
 legacy-tag policy is `ignore'.
-Returns: :tags (list of sanitized tag strings)."
+Returns: :tag-occurrences (list of sanitized Org tokens)."
   (let* ((inline-tags (supertag--extract-inline-tags headline))
          (org-native-tags
           (if (eq supertag-sync-legacy-tags-policy 'ignore)
@@ -1883,7 +1905,7 @@ Returns: :tags (list of sanitized tag strings)."
             (or (supertag--extract-org-headline-tags headline) '())))
          (all-tags (supertag--merge-and-sanitize-tags
                     inline-tags org-native-tags)))
-    (list :tags all-tags)))
+    (list :tag-occurrences all-tags)))
 
 (defun supertag-extractor--properties (headline _file _ctx)
   "Extract user-defined properties from a headline element.
@@ -1942,7 +1964,8 @@ always requires an Org-owned persistent ID and skips ID-less headings."
     (let* ((ctx (list :file file
                       :full-rescan-p supertag-sync--is-full-rescan-p))
            (extracted (supertag-extractor--run headline file ctx)))
-      (append (list :id id :file file) extracted))))
+      (supertag-sync--resolve-node-tag-occurrences
+       (append (list :id id :file file) extracted)))))
 
 (defun supertag--map-headlines (parsed-ast file &optional migration-mode)
   "Map over headlines in PARSED-AST and parse them into nodes.
@@ -2271,7 +2294,8 @@ It will create entities of type :node and :tag, and establish relations between 
               (setq all-nodes (append all-nodes nodes))
               ;; Collect tags from valid nodes
               (dolist (node nodes)
-                (let ((node-tags (plist-get node :tags)))
+                (let ((node-tags (or (plist-get node :tag-occurrences)
+                                     (plist-get node :tags))))
                   (when node-tags
                     (setq all-tags (append all-tags node-tags))))))
             (setf (plist-get counters :files-processed)
@@ -2296,9 +2320,9 @@ It will create entities of type :node and :tag, and establish relations between 
     (message "Creating node entities and relations...")
     (dolist (node all-nodes)
       (condition-case err
-          (let* ((node-tags (plist-get node :tags))
-                 (tag-ids (mapcar #'supertag--normalize-tag-id node-tags))
-                 (canonical-node (plist-put (copy-sequence node) :tags tag-ids)))
+          (let* ((canonical-node
+                  (supertag-sync--resolve-node-tag-occurrences node))
+                 (tag-ids (plist-get canonical-node :tags)))
             ;; Create node
             (supertag-node-create canonical-node)
             (setf (plist-get counters :nodes-created)

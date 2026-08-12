@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task006 Tag Occurrence 与 Semantic Tag 分离
+
+- Modify `supertag-services-sync.el`：extractor 将 Org token 写入 `:tag-occurrences`；Document Projector 只读解析已存在 Semantic Tag，将结果分别存为 resolved `:tags` 与 `:unresolved-tags`；普通 reindex 不再创建 Tag entity。
+- Modify `supertag-ops-tag.el`：新增无副作用 occurrence resolver，支持真实 Tag ID 与现有 `:extends` display path；补全为未解析 occurrence 显示 `[Unresolved]`。
+- Modify `supertag-core-scan.el`：Tag 查询复用 node 的 resolved Semantic Tag IDs 与原始 occurrence keys，使未知 token 在不注册 Semantic Tag 的前提下仍可查询。
+- Modify `supertag-ui-completion.el`：补全合并 Semantic Tags 与 unresolved occurrence catalog，并保留独立 `[New]` action；选择 occurrence 只插入文本，只有显式选择 `[New]` 才创建 Semantic Tag。
+- Modify extractor/ownership/tag-path tests：覆盖源字段、未知 occurrence 的 query/completion、无 node-tag relation 与 Semantic Fact fingerprint 不变。
+- Add `issue041`：记录 reindex 静默注册 Semantic Tag 的根因、修复与真实 Vault 确认项。
+
+Behavior：Org 中出现 `#emerging` 不再等于创建 Semantic Tag；reindex 后它保留为 Document Projection diagnostic，可搜索、可补全，但 schema/Tag Store 不变。一次性显式 migration 与用户选择 `[New]` 的创建入口保留。
+
+Risk：当前 unresolved occurrence catalog 仍通过 node projection 做 O(N) 收集；task019–020 建立具体 query/index 后再迁移，当前不新增第二套索引。Semantic Tag 后续新增后，需要受影响文件再次 reindex 才会把 occurrence 解析为 membership。
+
+Verification：两条回归测试先红后绿；ownership 4/4、extractor 22/22、tag-path 40/40，并通过 sync-worker、query、view-stream、smart-key、tag-merge 定向回归；`check-parens`、`git diff --check` 通过；干净临时 clone 全量 ERT 427/427 通过。
+
 ## 2026-08-12 — task005 Document Projector identity 与增量 parity
 
 - Modify `supertag-services-sync.el`：ID-less heading 在所有扫描/迁移模式中统一跳过；新增不可被 Customize 删减的 Document Fact hash keys；file/point sync 统一进入 `supertag-sync--reconcile-node`。

@@ -228,11 +228,11 @@
                        (plist-get node :title)))))))
 
 (ert-deftest extractor-tags ()
-  "Tags extractor produces :tags combining org tags and inline #tags."
+  "Tags extractor produces occurrences from Org tags and inline #tags."
   (extractor-test--with-headline "* Tagged :orgtag:"
     (let ((result (supertag-extractor--tags hl "/tmp/f" '(:full-rescan-p t))))
-      (should (plist-get result :tags))
-      (should (member "orgtag" (plist-get result :tags))))))
+      (should (plist-get result :tag-occurrences))
+      (should (member "orgtag" (plist-get result :tag-occurrences))))))
 
 (ert-deftest extractor-inline-tags-respect-org-prose-boundaries ()
   "Inline tags come from this node's direct Org prose, not nested objects."
@@ -254,7 +254,7 @@
            (tags (plist-get
                   (supertag-extractor--tags
                    headline "/tmp/f" '(:full-rescan-p t))
-                  :tags))
+                  :tag-occurrences))
            (title (plist-get
                    (supertag-extractor--title headline "/tmp/f" nil)
                    :title)))
@@ -271,7 +271,7 @@
     (insert "* COMMENT Hidden #heading\nBody #body\n")
     (let* ((headline (car (org-element-contents (org-element-parse-buffer))))
            (result (supertag-extractor--tags headline "/tmp/f" nil)))
-      (should-not (plist-get result :tags)))))
+      (should-not (plist-get result :tag-occurrences)))))
 
 (ert-deftest extractor-inline-tags-preserve-underscores ()
   "Org subscript parsing must not rewrite underscores inside Tag tokens."
@@ -284,7 +284,7 @@
     (let* ((headline (car (org-element-contents (org-element-parse-buffer))))
            (tags (plist-get
                   (supertag-extractor--tags headline "/tmp/f" nil)
-                  :tags))
+                  :tag-occurrences))
            (title (plist-get
                    (supertag-extractor--title headline "/tmp/f" nil)
                    :title)))
@@ -304,7 +304,7 @@
     (let* ((headline (car (org-element-contents (org-element-parse-buffer))))
            (tags (plist-get
                   (supertag-extractor--tags headline "/tmp/f" nil)
-                  :tags))
+                  :tag-occurrences))
            (title (plist-get
                    (supertag-extractor--title headline "/tmp/f" nil)
                    :title)))
@@ -322,7 +322,7 @@
     (let* ((headline (car (org-element-contents (org-element-parse-buffer))))
            (tags (plist-get
                   (supertag-extractor--tags headline "/tmp/f" nil)
-                  :tags))
+                  :tag-occurrences))
            (title (plist-get
                    (supertag-extractor--title headline "/tmp/f" nil)
                    :title)))

@@ -95,9 +95,20 @@ When non-nil, `global-supertag-ui-completion-mode' will be enabled by default."
      '())))
 
 (defun supertag-completion--get-node-tags (node-id)
-  "Get tags currently applied to NODE-ID."
+  "Get resolved Semantic Tags currently applied to NODE-ID."
   (when-let ((node-data (supertag-node-get node-id)))
     (plist-get node-data :tags)))
+
+(defun supertag-completion--get-all-tag-occurrences ()
+  "Return sorted unique Org Tag Occurrences from projected nodes."
+  (let (occurrences)
+    (maphash
+     (lambda (_node-id node-data)
+       (dolist (token (plist-get node-data :tag-occurrences))
+         (when (supertag-transform-inline-tag-name-p token)
+           (push token occurrences))))
+     (supertag-store-get-collection :nodes))
+    (sort (delete-dups occurrences) #'string<)))
 
 (defun supertag-completion--valid-tag-char-p (char)
   "Return non-nil if CHAR should be considered part of a tag name.
@@ -167,7 +178,10 @@ marker so completion UIs cannot treat unfinished input as an exact match."
   (let* ((safe-prefix (or prefix ""))
          (node-id (org-id-get))
          (current-tags (when node-id (supertag-completion--get-node-tags node-id)))
-         (all-tags (supertag-completion--get-all-tags))
+         (semantic-tags (supertag-completion--get-all-tags))
+         (unresolved-occurrences
+          (seq-remove #'supertag-tag-resolve-occurrence
+                      (supertag-completion--get-all-tag-occurrences)))
          (path-aliases
           (unless (string-empty-p safe-prefix)
             (delq nil
@@ -175,25 +189,32 @@ marker so completion UIs cannot treat unfinished input as an exact match."
                    (lambda (tag-id)
                      (let ((path (supertag-tag-display-path tag-id)))
                        (when (and (not (equal path tag-id))
-                                  (not (member path all-tags))
+                                  (not (member path semantic-tags))
                                   (string-prefix-p safe-prefix path))
                          (propertize path 'supertag-tag-id tag-id))))
-                   all-tags))))
+                   semantic-tags))))
          (all-candidates
-          (append (mapcar #'supertag-completion--decorate-candidate all-tags)
-                  path-aliases))
+          (append
+           (mapcar #'supertag-completion--decorate-candidate semantic-tags)
+           path-aliases
+           (mapcar (lambda (token)
+                     (propertize token 'supertag-tag-occurrence token))
+                   unresolved-occurrences)))
          (available-tags (if current-tags
                              (seq-remove
                               (lambda (tag)
-                                (when-let* ((tag-id (get-text-property
-                                                    0 'supertag-tag-id tag)))
-                                  (member tag-id current-tags)))
+                                (let ((tag-key
+                                       (or (get-text-property
+                                            0 'supertag-tag-id tag)
+                                           (get-text-property
+                                            0 'supertag-tag-occurrence tag))))
+                                  (and tag-key (member tag-key current-tags))))
                               all-candidates)
                            all-candidates))
          (parent-path (supertag-tag-path-parent safe-prefix))
          (parent-id (and parent-path
                          (supertag-tag-resolve-display-path
-                          parent-path all-tags)))
+                          parent-path semantic-tags)))
          (new-name (if parent-id
                        (supertag-tag-path-leaf safe-prefix)
                      safe-prefix))
@@ -204,12 +225,12 @@ marker so completion UIs cannot treat unfinished input as an exact match."
                (supertag-tag-path-valid-p safe-prefix)
                new-name-valid-p
                (or (not (string-match-p "/" safe-prefix)) parent-id)
-               (not (member safe-prefix all-tags))
-               (not (member new-name all-tags))
+               (not (member safe-prefix semantic-tags))
+               (not (member new-name semantic-tags))
                (not (member new-name current-tags))))
          (parent-conflict
           (and new-name-valid-p parent-id existing-new-tag
-               (not (member safe-prefix all-tags))
+               (not (member safe-prefix semantic-tags))
                (not (equal parent-id
                            (plist-get (supertag--ensure-plist existing-new-tag)
                                       :extends))))))
@@ -332,6 +353,8 @@ Display aliases are replaced with their real Tag ID after a successful write."
                        (lambda (candidate)
                          (or (get-text-property 0 'is-new-tag candidate)
                              (get-text-property 0 'supertag-tag-conflict
+                                                candidate)
+                             (get-text-property 0 'supertag-tag-occurrence
                                                 candidate)))
                        candidates)))
                 (cond
@@ -350,6 +373,8 @@ Display aliases are replaced with their real Tag ID after a successful write."
                           ((get-text-property 0 'is-new-tag cand) 'snippet)
                           ((get-text-property 0 'supertag-tag-conflict cand)
                            'text)
+                          ((get-text-property 0 'supertag-tag-occurrence cand)
+                           'text)
                           (t 'keyword))))
                     (annotation-function
                      . (lambda (cand)
@@ -357,7 +382,9 @@ Display aliases are replaced with their real Tag ID after a successful write."
                           ((get-text-property 0 'supertag-tag-conflict cand)
                            (propertize "  [Conflict]" 'face 'error))
                           ((get-text-property 0 'is-new-tag cand)
-                           (propertize "  [New]" 'face 'warning)))))))
+                           (propertize "  [New]" 'face 'warning))
+                          ((get-text-property 0 'supertag-tag-occurrence cand)
+                           (propertize "  [Unresolved]" 'face 'shadow)))))))
                ;; Return all candidates (for display).
                ;; Two gotchas to handle here:
                ;;

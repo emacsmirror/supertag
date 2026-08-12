@@ -40,3 +40,4 @@
 - issue038 [ ] 普通 Org buffer 的 `#tag` 自动补全被通用前缀阈值延迟（实现与回归完成，待用户实机确认；phase-smart-key-20260721/issue_tag_completion_prefix_threshold_20260809.md）
 - issue039 [ ] Node 删除遗留 global field values 与 relation indexes（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_node_delete_cleanup_20260812.md）
 - issue040 [ ] Document Projector 生成临时身份且 point/file 增量结果分叉（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_document_projector_identity_parity_20260812.md）
+- issue041 [ ] Reindex 把未知 Org Tag Occurrence 静默注册为 Semantic Tag（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_tag_occurrence_semantic_tag_20260812.md）
