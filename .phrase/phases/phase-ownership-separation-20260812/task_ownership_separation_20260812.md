@@ -135,10 +135,11 @@
   - 影响范围：Node/Table/Kanban、services-ui、view tests
   - 完成：2026-08-13；view/table/kanban/node 定向 59/59、view-runtime 除隔离的 TextUI 实验外全过；干净临时 worktree 全量 ERT 489/489
 
-- task022 [ ] 迁移 Board 与 Graph
+- task022 [x] 迁移 Board 与 Graph
   - 产出：Board/Graph 使用 board detail、node summaries 与 relations-among
   - 验证方式：missing node、board-local/global edge、groups、viewport、WS DTO parity
   - 影响范围：board backend、graph UI、Board frontend contract tests
+  - 完成：2026-08-13；query-model 的 board-detail/WS DTO parity 测试通过；干净临时 worktree 全量 ERT 489/489；无 frontend contract test（ext/ 无测试目录）
 
 - task023 [ ] 迁移 Query Block 与 Saved Query executor
   - 产出：只调用公开 node-query interface，不再调用私有 parser/executor/field getter
