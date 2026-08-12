@@ -117,10 +117,11 @@
   - 影响范围：core-index、schema/automation caches、persistence/transaction hooks
   - 完成：2026-08-12；ownership ERT 26/26、跨模块定向 ERT 158/158、只含 HEAD + task018 patch 的干净临时 worktree 全量 ERT 482/482 通过；14 个修改生产 Elisp 与 performance benchmark byte compile 成功（仅仓库既有 warning），全部修改 Elisp `check-parens` 与 `git diff --check` 通过
 
-- task019 [ ] 在现有 query 模块提供具体、非泛化读取接口
+- task019 [x] 在现有 query 模块提供具体、非泛化读取接口
   - 产出：node、Tag paths、nodes-by-tag、resolved fields、field value、relations from/to/among、node detail、board detail、node query 等真实查询
   - 验证方式：每个接口至少一个生产 consumer 和 parity test；不新增 arbitrary collection/path read
   - 影响范围：`supertag-services-query.el`、`supertag-view-api.el`、query tests
+  - 完成：2026-08-12；query-model ERT 6/6、ownership 26/26；干净临时 worktree 全量 ERT 488/488；5 个修改文件 byte-compile 零新增 warning、check-parens、`git diff --check` 通过；`resolved-fields`/`relations-*` 的外部消费者按计划由 task021/task022 接入
 
 - task020 [ ] 迁移 Completion、Tag picker 与 Stream
   - 产出：统一消费 Tag display path 与 nodes-by-tag projection

@@ -253,3 +253,19 @@ Behavior：仅文档变化；runtime、数据库和用户 Org 文件均不变。
 Risk：文档描述的是分阶段迁移目标；当前 mixed Store 与 legacy raw read 仍存在，后续 task 不得把目标状态误当作已完成状态。
 
 Verification：`git diff --check`；Ownership 文档链接存在；旧的正向 “Store is the single source of truth” 与 “full rescan rebuilds the database” 表述已移除。
+
+## 2026-08-12 — task019 具体 Query Model 读取接口
+
+- Add `supertag-services-query.el`：新增具体查询接口 `supertag-query-node`、`supertag-query-tag-paths`、`supertag-query-node-ids-by-tag`、`supertag-query-resolved-fields`、`supertag-query-field-value`、`supertag-query-relations-from/-to/-among`、`supertag-query-node-tags`、`supertag-query-node-detail`、`supertag-query-board-detail`；删除 "only S-expression engine, use core-scan" 的旧架构注释，改为 read boundary 定位。
+- Modify `supertag-services-query.el`：`supertag-query-sexp` 更名 `supertag-query-node-ids` 并保留兼容 wrapper；移除 debug message。
+- Modify `supertag-view-api.el`：`:nodes` get-entity、`nodes-by-tag`、`list-tags`、`list-tag-ids`、`node-field-in-tag` 改为消费具体 query 接口，不再 maphash raw `:tags`/`:relations` collection。
+- Modify `supertag-services-ui.el`：`supertag-view--resolve-node-tags` 与 `supertag-view-build-node-state` 收缩为 `supertag-query-node-tags`/`supertag-query-node-detail` 的兼容包装。
+- Modify `supertag-board.el`：board 数据序列化改走 `supertag-query-board-detail`，字段预览与 global edge 收集不再直接触碰 store/relation collection。
+- Add `test/query-model-test.el`：6 项 parity 测试覆盖 node/tag read、resolved fields/values、relations from/to/among、node detail、board detail、node query sexp 兼容。
+- Modify `test/run-tests.sh`：接入 `query-model` filter 与稳定测试集。
+
+Behavior：读路径开始收敛到具体接口；`supertag-query-resolved-fields` 与 relations-from/to/among 目前由 node-detail/board-detail 内部组合消费，其外部消费者由 task021（Node/Table/Kanban）与 task022（Board/Graph）迁移时接入；未新增任意 collection/path 读取。
+
+Risk：`supertag-query-sexp` 兼容 wrapper 覆盖 query-library/diagnostics 既有调用；task023 前该兼容入口保留。
+
+Verification：query-model ERT 6/6、ownership 26/26 通过；干净临时 worktree（HEAD + task019 patch + query-model-test.el）全量 ERT 488/488；5 个修改文件 byte-compile 无 error/warning（仅仓库既有 obsolete/docstring 提示）、check-parens 与 `git diff --check` 通过；工作树中用户未提交的 Dashboard/TextUI 实验未进入本 task 提交。
