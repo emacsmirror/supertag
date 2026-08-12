@@ -123,10 +123,11 @@
   - 影响范围：`supertag-services-query.el`、`supertag-view-api.el`、query tests
   - 完成：2026-08-12；query-model ERT 6/6、ownership 26/26；干净临时 worktree 全量 ERT 488/488；5 个修改文件 byte-compile 零新增 warning、check-parens、`git diff --check` 通过；`resolved-fields`/`relations-*` 的外部消费者按计划由 task021/task022 接入
 
-- task020 [ ] 迁移 Completion、Tag picker 与 Stream
+- task020 [x] 迁移 Completion、Tag picker 与 Stream
   - 产出：统一消费 Tag display path 与 nodes-by-tag projection
   - 验证方式：nested/unresolved/duplicate/cycle cases、descendants、Stream date/title/tag order 无回归
   - 影响范围：completion、schema picker、Stream tests
+  - 完成：2026-08-12；smart-key+tag-path 55/55、stream 定向回归、ownership 26/26、query-model 7/7、两个 completion self-check 通过；干净临时 worktree 全量 ERT 489/489；`get-all-tags` 改为 display-path 排序后三处既有测试全部通过
 
 - task021 [ ] 迁移 Node、Table 与 Kanban
   - 产出：统一 resolved fields、node field value、relations from/to 和 node detail；移除 view 内重复 join
