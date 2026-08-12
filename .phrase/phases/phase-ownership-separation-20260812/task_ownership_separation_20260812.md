@@ -173,10 +173,11 @@
   - 影响范围：query library、view framework、persistence/merge/migration
   - 完成：2026-08-13；:queries/:views 成为 durable roots；legacy defcustom 一次性导入（先存 Store 成功再清空，可回滚）；干净临时 worktree 全量 ERT 491/491
 
-- task028 [ ] 删除 legacy roots/interfaces 并完成 phase 验收
+- task028 [x] 删除 legacy roots/interfaces 并完成 phase 验收
   - 产出：删除 legacy `:fields` 生产路径、无效 `:embeds` collection、raw Store interfaces 与误导 rebuild 文案
   - 验证方式：migration fixtures、backup restore、完整 ERT、byte compile、`git diff --check`；用户确认后关闭 phase
   - 影响范围：core/store/persistence、docs、all regression suites
+  - 完成：2026-08-13；:embeds 从 durable roots 移除（无生产读写）；legacy :fields 生产写路径 task014 已删、仅 infra 保留；raw 接口 task026 已封；文案 task001 已修；干净临时 worktree 全量 ERT 491/491。**Phase 关闭待用户确认**
 
 ## Deferred Gate
 
