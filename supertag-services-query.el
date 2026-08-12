@@ -42,6 +42,15 @@ Each descriptor contains :id, :name, and :display-path."
                   (string< (plist-get left :id) (plist-get right :id))
                 (string< left-path right-path)))))))
 
+(defun supertag-query-tags ()
+  "Return Semantic Tags as (id . tag-plist) pairs."
+  (let (result)
+    (maphash
+     (lambda (id tag)
+       (push (cons id (supertag--ensure-plist tag)) result))
+     (supertag-store-get-collection :tags))
+    result))
+
 (defun supertag-query-node-ids-by-tag (tag-name &optional include-descendants)
   "Return node IDs tagged with TAG-NAME.
 When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' children."
@@ -70,6 +79,47 @@ FILTER is a function receiving an automation plist and returning non-nil."
            (push token occurrences))))
      (supertag-store-get-collection :nodes))
     (sort (delete-dups occurrences) #'string<)))
+
+(defun supertag-query-tag-children (tag-id)
+  "Return Semantic Tag IDs whose explicit parent is TAG-ID."
+  (let (result)
+    (maphash
+     (lambda (id tag)
+       (when (string= (plist-get (supertag--ensure-plist tag) :extends) tag-id)
+         (push id result)))
+     (supertag-store-get-collection :tags))
+    result))
+
+(defun supertag-query-field-definition-ids ()
+  "Return sorted global field definition IDs."
+  (let (ids)
+    (maphash
+     (lambda (fid _def) (push fid ids))
+     (supertag-store-get-collection :field-definitions))
+    (sort ids #'string<)))
+
+(defun supertag-query-field-definitions ()
+  "Return global field definitions as (id . definition) pairs."
+  (let (result)
+    (maphash
+     (lambda (fid def)
+       (push (cons fid def) result))
+     (supertag-store-get-collection :field-definitions))
+    result))
+
+(defun supertag-query-tag-field-associations (tag-id)
+  "Return TAG-ID's global field association entries."
+  (gethash tag-id (supertag-store-get-collection :tag-field-associations)))
+
+(defun supertag-query-relations (&optional filter)
+  "Return all relations, optionally filtered by FILTER predicate."
+  (let (result)
+    (maphash
+     (lambda (_id relation)
+       (when (or (null filter) (funcall filter relation))
+         (push relation result)))
+     (supertag-store-get-collection :relations))
+    result))
 
 (defun supertag-query-resolved-fields (tag-id)
   "Return inherited field definitions resolved for TAG-ID."

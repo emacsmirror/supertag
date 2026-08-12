@@ -319,7 +319,7 @@ with no UI entry point provided elsewhere in the codebase to invoke it.")
 
 (defun supertag-automation-templates--all-tag-names ()
   "Return known tag names for completion, or nil if unavailable."
-  (ignore-errors (mapcar #'car (supertag-query :tags))))
+  (ignore-errors (supertag-view-api-list-tag-ids)))
 
 (defun supertag-automation-templates--read-tag (prompt)
   "Read a tag name for PROMPT, offering existing tags as completion."

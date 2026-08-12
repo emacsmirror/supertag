@@ -293,10 +293,8 @@ parameters (:sort/:order/:limit/:columns and friends)."
     (if desc (format "  --  %s" desc) "")))
 
 (defun supertag-query-library--live-tag-names ()
-  "Return known tag names from live data, or nil if unavailable.
-Mirrors the (mapcar #\\='car (supertag-query :tags)) pattern used
-throughout supertag-ui-commands.el."
-  (ignore-errors (mapcar #'car (supertag-query :tags))))
+  "Return known tag names from live data, or nil if unavailable."
+  (ignore-errors (supertag-view-api-list-tag-ids)))
 
 (defun supertag-query-library--live-field-names ()
   "Return known global field names from live data, or nil if unavailable."
@@ -306,7 +304,7 @@ throughout supertag-ui-commands.el."
            (mapcar (lambda (pair)
                      (or (plist-get (cdr pair) :name)
                          (and (car pair) (format "%s" (car pair)))))
-                   (supertag-query :field-definitions))))))
+                   (supertag-query-field-definitions))))))
 
 (defun supertag-query-library--read-tag-name ()
   "Read a tag name, completing against live tags when available."

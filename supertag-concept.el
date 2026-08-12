@@ -121,19 +121,16 @@ Each entry is (TERM . NODE-ID).")
 
 (defun supertag-concept--term-index ()
   "Return a hash table mapping each concept term to all matching node IDs."
-  (let ((nodes (supertag-store-get-collection :nodes))
-        (index (make-hash-table :test 'equal)))
-    (when (hash-table-p nodes)
-      (maphash
-       (lambda (id node)
-         (when (supertag-concept-node-p node)
-           (dolist (term (cons (or (supertag-concept--node-prop node :title)
-                                   (supertag-concept--node-prop node :raw-value))
-                               (supertag-concept-node-aliases node)))
-             (let ((clean (and term (string-trim (format "%s" term)))))
-               (when (supertag-concept--valid-term-p clean)
-                 (cl-pushnew id (gethash clean index) :test #'equal))))))
-       nodes))
+  (let ((index (make-hash-table :test 'equal)))
+    (dolist (pair (supertag-query-nodes
+                   (lambda (_id node) (supertag-concept-node-p node))))
+      (let ((node (cdr pair)))
+        (dolist (term (cons (or (supertag-concept--node-prop node :title)
+                                (supertag-concept--node-prop node :raw-value))
+                            (supertag-concept-node-aliases node)))
+          (let ((clean (and term (string-trim (format "%s" term)))))
+            (when (supertag-concept--valid-term-p clean)
+              (cl-pushnew (car pair) (gethash clean index) :test #'equal))))))
     index))
 
 (defun supertag-concept-entries ()
@@ -267,18 +264,15 @@ Each entry is (TERM . NODE-ID).")
 
 (defun supertag-concept--find-node-id-by-title (title)
   "Return the unique heading node ID whose title exactly equals TITLE."
-  (let ((nodes (supertag-store-get-collection :nodes))
-        matches)
-    (when (hash-table-p nodes)
-      (maphash
-       (lambda (id node)
-         (when (and (let ((level (supertag-concept--node-prop node :level)))
-                      (and (integerp level) (> level 0)))
-                    (member title
-                            (delq nil (list (supertag-concept--node-prop node :title)
-                                            (supertag-concept--node-prop node :raw-value)))))
-           (push id matches)))
-       nodes))
+  (let (matches)
+    (dolist (pair (supertag-query-nodes
+                   (lambda (id node)
+                     (let ((level (supertag-concept--node-prop node :level)))
+                       (and (integerp level) (> level 0)
+                            (member title
+                                    (delq nil (list (supertag-concept--node-prop node :title)
+                                                    (supertag-concept--node-prop node :raw-value)))))))))
+      (push (car pair) matches))
     (cond
      ((null matches) nil)
      ((null (cdr matches)) (car matches))

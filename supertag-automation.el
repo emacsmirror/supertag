@@ -1406,14 +1406,13 @@ Empty/nil conditions always return t."
   "Recalculate all rollup values in the system.
 This is useful for data consistency maintenance."
   (interactive)
-  (let ((relations (supertag-store-get-collection :relations))
+  (let ((relations (supertag-query-relations
+                    (lambda (relation) (plist-get relation :rollup-property))))
         (count 0))
 
-    (maphash (lambda (id relation)
-               (when (plist-get relation :rollup-property)
-                 (supertag-automation-calculate-rollup id nil t)
-                 (cl-incf count)))
-             relations)
+    (dolist (relation relations)
+      (supertag-automation-calculate-rollup (plist-get relation :id) nil t)
+      (cl-incf count))
 
     (message "Recalculated %d rollup values" count)
     count))
@@ -1422,15 +1421,14 @@ This is useful for data consistency maintenance."
   "Sync all field synchronization relations.
 This ensures all related entities have consistent field values."
   (interactive)
-  (let ((relations (supertag-store-get-collection :relations))
+  (let ((relations (supertag-query-relations
+                    (lambda (relation) (plist-get relation :sync-fields))))
         (count 0))
 
-    (maphash (lambda (id relation)
-               (when (plist-get relation :sync-fields)
-                 (when (fboundp 'supertag-relation-sync-fields)
-                   (supertag-relation-sync-fields id))
-                 (cl-incf count)))
-             relations)
+    (dolist (relation relations)
+      (when (fboundp 'supertag-relation-sync-fields)
+        (supertag-relation-sync-fields (plist-get relation :id)))
+      (cl-incf count))
 
     (message "Synced %d field synchronization relations" count)
     count))

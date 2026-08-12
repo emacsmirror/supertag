@@ -34,7 +34,7 @@ This is a simple wrapper around the core sync functionality."
 Prompts user for title and allows multi-select of tags.
 Returns a plist with :headline string and :tags list."
   (let* ((title (read-string "Node title: "))
-         (all-tags (mapcar #'car (supertag-query :tags)))
+         (all-tags (supertag-view-api-list-tag-ids))
          (selected-tags
           (supertag-ui-read-tags "Select tags (empty finishes): "
                                  all-tags t)))
@@ -274,7 +274,7 @@ Supported placeholders:
   (let* ((prompt (car args))
          (props (cdr args))
          (initial-input (plist-get props :initial-input))
-         (all-tags (mapcar #'car (supertag-query :tags)))
+         (all-tags (supertag-view-api-list-tag-ids))
          (initial-tags
           (when (and (stringp initial-input)
                      (not (string-empty-p initial-input)))

@@ -54,7 +54,7 @@
 This command modifies the `:extends` property of the child tags.
 When invoked interactively, allows selecting multiple child tags."
   (interactive
-   (let* ((tags (mapcar #'car (supertag-query :tags))))
+   (let* ((tags (supertag-view-api-list-tag-ids)))
      (when (null tags)
        (user-error "No tags available"))
      (let* ((parent (supertag-ui-read-tag "Parent tag: " tags nil nil))
@@ -77,7 +77,7 @@ When invoked interactively, allows selecting multiple child tags."
 (defun supertag-clear-parent (child-tags)
   "Clear parent relationships for one or more CHILD-TAGS."
   (interactive
-   (let* ((tags (mapcar #'car (supertag-query :tags))))
+   (let* ((tags (supertag-view-api-list-tag-ids)))
      (when (null tags)
        (user-error "No tags available"))
      (let ((children (supertag-ui-read-tags
@@ -696,7 +696,7 @@ When OLD-ID is nil, prompt for the tag to rename."
   (let* ((old-id (or old-id
                      (supertag-ui-read-tag
                       "Tag to rename: "
-                      (mapcar #'car (supertag-query :tags)) nil nil)))
+                      (supertag-view-api-list-tag-ids) nil nil)))
          (new-id (when (and old-id (not (string-empty-p old-id)))
                    (read-string (format "New name for '%s': " old-id)))))
     (when (and old-id (not (string-empty-p old-id))
@@ -715,7 +715,7 @@ WARNING: This removes the tag from the database and from all org files."
   (let ((tag-name (or tag-name
                       (supertag-ui-read-tag
                        "Delete tag permanently: "
-                       (mapcar #'car (supertag-query :tags)) nil nil))))
+                       (supertag-view-api-list-tag-ids) nil nil))))
     (when (and (not (string-empty-p tag-name))
                (yes-or-no-p (format "DELETE tag '%s' and ALL its uses? This is irreversible." tag-name)))
       ;; Call the centralized ops function to perform the deletion.
@@ -740,7 +740,7 @@ This command reads the authoritative list of tags from the database."
     (unless current-tag
       (user-error "No tag selected."))
 
-    (let* ((all-tags (mapcar #'car (supertag-query :tags)))
+    (let* ((all-tags (supertag-view-api-list-tag-ids))
            (new-tag-raw
             (or (supertag-ui-read-tag
                  (format "Change tag '%s' to: " current-tag)
@@ -1059,13 +1059,7 @@ user selects Tags and confirms; Org files are never edited."
 A 'ghost' tag is a tag entry that has a nil value, which can
 cause inconsistencies in the system. This command cleans them up."
   (interactive)
-  (let ((tags-to-remove '())
-        (tags-table (supertag-store-get-collection :tags)))
-    (when tags-table
-      (maphash (lambda (key value)
-                 (when (null value)
-                   (push key tags-to-remove)))
-               tags-table))
+  (let ((tags-to-remove (supertag-tag-find-ghosts)))
     (if tags-to-remove
         (progn
           (message "Removing %d ghost tags: %s" (length tags-to-remove) tags-to-remove)

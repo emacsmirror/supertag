@@ -346,6 +346,16 @@ ID is the unique identifier of the tag.
 Returns tag data, or nil if it does not exist."
   (supertag-store-get-entity :tags id))
 
+(defun supertag-tag-find-ghosts ()
+  "Return Tag IDs whose stored value is nil (ghost entries)."
+  (let (ghosts)
+    (maphash
+     (lambda (key value)
+       (when (null value)
+         (push key ghosts)))
+     (supertag-store-get-collection :tags))
+    ghosts))
+
 (defun supertag-tag-display-path (tag-id)
   "Return TAG-ID's canonical occurrence path through explicit parents."
   (supertag-tag--ensure-index)

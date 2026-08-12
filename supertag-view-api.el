@@ -23,6 +23,7 @@
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
 (require 'supertag-ops-field)
+(require 'supertag-ops-relation)
 (require 'supertag-services-query)
 
 ;; --- Query & Entity Fetch ---
@@ -52,35 +53,23 @@ This function is UI-agnostic and read-only."
            :automation :automations
            :behavior :behaviors
            :database :databases)
-       (let* ((collection (pcase type
-                            (:automation :automations)
-                            (:behavior :behaviors)
-                            (:database :databases)
-                            (_ type)))
-              (bucket (supertag-store-get-collection collection))
-             (ids '()))
-         (when (hash-table-p bucket)
-           (maphash (lambda (id _v) (push id ids)) bucket))
-         (nreverse ids)))
+       (let ((type (pcase type
+                     (:automation :automations)
+                     (:behavior :behaviors)
+                     (:database :databases)
+                     (_ type))))
+         (pcase type
+           (:nodes (mapcar #'car (supertag-query-nodes)))
+           (:tags (supertag-view-api-list-tag-ids))
+           (:relations (mapcar (lambda (relation) (plist-get relation :id))
+                               (supertag-query-relations)))
+           (:automations (mapcar (lambda (automation) (plist-get automation :id))
+                                 (supertag-query-automations)))
+           ;; :embeds/:behaviors/:databases are legacy/non-canonical
+           ;; collections; they contain no entities.
+           (_ '()))))
       (_
        (error "Unsupported query type: %S" type)))))
-
-(defun supertag-view-api-get-collection (collection)
-  "Return the underlying store collection hash table for COLLECTION.
-
-This is an internal public API intended for view data access only.
-Callers MUST treat the returned hash table as read-only."
-  (let ((normalized
-         (pcase collection
-           (:node :nodes)
-           (:tag :tags)
-           (:relation :relations)
-           (:embed :embeds)
-           (:automation :automations)
-           (:behavior :behaviors)
-           (:database :databases)
-           (_ collection))))
-    (supertag-store-get-collection normalized)))
 
 (defun supertag-view-api-get-entity (type entity-id)
   "Return entity plist for TYPE and ENTITY-ID (read-only)."
@@ -97,10 +86,15 @@ Callers MUST treat the returned hash table as read-only."
            (:database :databases)
            (_ type))))
     (pcase normalized
-    (:nodes (supertag-query-node entity-id))
-    (:tags (supertag-store-get-entity :tags entity-id))
-    (:automations (supertag-store-get-entity :automations entity-id))
-    (_ (supertag-store-get-entity normalized entity-id)))))
+      (:nodes (supertag-query-node entity-id))
+      (:tags (supertag-tag-get entity-id))
+      (:relations (supertag-relation-get entity-id))
+      (:automations
+       (car (supertag-query-automations
+             (lambda (automation)
+               (equal (plist-get automation :id) entity-id)))))
+      ;; :embeds/:behaviors/:databases are legacy/non-canonical collections.
+      (_ nil))))
 
 (defun supertag-view-api-get-entities (type entity-ids)
   "Return list of entities for TYPE and ENTITY-IDS.

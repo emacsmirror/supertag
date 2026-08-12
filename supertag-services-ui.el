@@ -153,14 +153,13 @@ For completion framework integration, e.g., live previews.")
 
 (defun supertag-ui--build-node-candidates ()
   "Build the node candidates list efficiently."
-  (let* ((nodes-hash (supertag-store-get-collection :nodes))
-         (candidates '()))
-    (maphash
-     (lambda (id node-data)
-       (when node-data
-         (let ((display (supertag-ui--format-node-display node-data)))
-           (push (cons display id) candidates))))
-     nodes-hash)
+  (let ((candidates
+         (mapcar
+          (lambda (pair)
+            (let ((id (car pair))
+                  (node-data (cdr pair)))
+              (cons (supertag-ui--format-node-display node-data) id)))
+          (supertag-query-nodes (lambda (_id data) data)))))
     (sort candidates (lambda (a b) (string< (car a) (car b))))))
 
 (defun supertag-ui--format-node-display (node-data)
@@ -514,7 +513,7 @@ Returns the selected tag ID, or nil if none."
   "Read tag field value with multi-selection support.
 CURRENT-VALUE is the existing value (can be string or list).
 Returns a comma-separated string of selected tags."
-  (let* ((all-tags (mapcar #'car (supertag-query :tags)))
+  (let* ((all-tags (supertag-view-api-list-tag-ids))
          (current-tags (cond
                         ((stringp current-value)
                          (if (string-empty-p current-value)

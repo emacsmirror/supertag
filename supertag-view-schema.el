@@ -37,7 +37,7 @@
 This function also defensively ensures that the plist data for each
 tag contains its own ID, ensuring consistency for later processing."
   (let ((tags-by-id (make-hash-table :test 'equal))
-        (all-tags-alist (supertag-query :tags)))
+        (all-tags-alist (supertag-query-tags)))
     (dolist (pair all-tags-alist)
       (let* ((id (car pair))
              (data (cdr pair))
@@ -197,20 +197,19 @@ For inherited fields, jumps to the parent tag definition."
 (defun supertag-schema--get-own-fields (tag-id)
   "Get only the fields directly defined on TAG-ID, not inherited ones.
 Reads global associations and definitions."
-  (let* ((assoc-table
-          (supertag-view-api-get-collection :tag-field-associations))
-         (entries (and (hash-table-p assoc-table)
-                       (gethash tag-id assoc-table)))
-         (definitions
-          (supertag-view-api-get-collection :field-definitions))
+  (let* ((entries (supertag-query-tag-field-associations tag-id))
+         (definitions (supertag-query-field-definitions))
+         (defs-by-id (make-hash-table :test 'equal))
          result)
-    (when (and entries (hash-table-p definitions))
+    (dolist (pair definitions)
+      (puthash (car pair) (cdr pair) defs-by-id))
+    (when entries
       (dolist (entry entries)
         (let* ((field-id (if (plistp entry)
                              (plist-get entry :field-id)
                            entry))
                (definition (and field-id
-                                (gethash field-id definitions))))
+                                (gethash field-id defs-by-id))))
           (when definition
             (push definition result)))))
     (nreverse result)))
@@ -428,7 +427,7 @@ Users can rebind keys in this map to avoid conflicts with modal editing.")
     (if (not (and context (eq (plist-get context :type) :tag)))
         (message "Not on a valid tag line.")
       (let* ((child-id (plist-get context :tag-id))
-             (all-tags (mapcar #'car (supertag-query :tags)))
+             (all-tags (supertag-view-api-list-tag-ids))
              (parent-candidates (cl-remove child-id all-tags :test #'equal))
              (parent-id
               (supertag-ui-read-tag
@@ -470,17 +469,9 @@ Offers choice between creating a new tag or selecting an existing tag."
 
          ;; Option 2: Select existing tag
          ((string= action "Select existing tag")
-          (let* ((all-tags (let (tags)
-                             (maphash (lambda (id _) (push id tags))
-                                     (supertag-store-get-collection :tags))
-                             tags))
+          (let* ((all-tags (supertag-view-api-list-tag-ids))
                  ;; Exclude current tag and its existing children
-                 (existing-children (let (children)
-                                     (maphash (lambda (id tag)
-                                               (when (string= (plist-get tag :extends) parent-id)
-                                                 (push id children)))
-                                             (supertag-store-get-collection :tags))
-                                     children))
+                 (existing-children (supertag-query-tag-children parent-id))
                  (available-tags (cl-remove-if (lambda (tag)
                                                 (or (string= tag parent-id)
                                                     (member tag existing-children)))
@@ -547,7 +538,7 @@ Offers choice between creating a new tag or selecting an existing tag."
   (let ((context (supertag-schema--get-context-at-point)))
     (if (and context (eq (plist-get context :type) :tag))
         (let* ((tag-id (plist-get context :tag-id))
-               (defs (supertag-view-api-get-collection :field-definitions))
+               (defs (supertag-query-field-definitions))
                (current (mapcar (lambda (f)
                                   (supertag-sanitize-field-id
                                    (or (plist-get f :id) (plist-get f :name))))
@@ -555,19 +546,18 @@ Offers choice between creating a new tag or selecting an existing tag."
                (current-set (let ((ht (make-hash-table :test 'equal)))
                               (dolist (fid current) (when fid (puthash fid t ht))) ht))
                (candidates '()))
-          (when (hash-table-p defs)
-            (maphash
-             (lambda (fid def)
-               (unless (gethash fid current-set)
-                 (let* ((name (or (plist-get def :name) fid))
-                        (type (plist-get def :type))
-                        (label (format "%s (%s%s%s)"
-                                       fid
-                                       (or type "unknown")
-                                       (if name " · " "")
-                                       (or name ""))))
-                   (push (cons label fid) candidates))))
-             defs))
+          (dolist (pair defs)
+            (let* ((fid (car pair))
+                   (def (cdr pair)))
+              (unless (gethash fid current-set)
+                (let* ((name (or (plist-get def :name) fid))
+                       (type (plist-get def :type))
+                       (label (format "%s (%s%s%s)"
+                                      fid
+                                      (or type "unknown")
+                                      (if name " · " "")
+                                      (or name ""))))
+                  (push (cons label fid) candidates)))))
           (if (null candidates)
               (message "No unbound global fields available.")
             (let* ((choice (completing-read "Bind existing field: "
@@ -739,7 +729,7 @@ Tries three strategies in order:
                                        supertag-schema--marked-items)))
     (if (not marked-tags)
         (message "No tags marked.")
-      (let* ((all-tags (mapcar #'car (supertag-query :tags)))
+      (let* ((all-tags (supertag-view-api-list-tag-ids))
              (marked-tag-ids (mapcar #'(lambda (ctx) (plist-get ctx :tag-id)) marked-tags))
              (parent-candidates (cl-set-difference all-tags marked-tag-ids :test #'equal))
              (parent-id
@@ -758,7 +748,7 @@ Tries three strategies in order:
   "Read a merge destination."
   (supertag-ui-read-tag
    "Merge destination (RET on a typed path creates it): "
-   (mapcar #'car (supertag-query :tags)) t nil))
+   (supertag-view-api-list-tag-ids) t nil))
 
 (defun supertag-schema--merge-read-fields (source-ids)
   "Read source field keys to retain from SOURCE-IDS.
@@ -968,7 +958,7 @@ a parent tag and a child tag."
 (defun supertag-schema--cleanup-all-inherited-associations ()
   "Clean up inherited field associations from all child tags."
   (interactive)
-  (let ((all-tags (supertag-query :tags))
+  (let ((all-tags (supertag-query-tags))
         (total-removed 0))
     (dolist (tag-pair all-tags)
       (let* ((tag-id (car tag-pair))
@@ -989,8 +979,8 @@ a parent tag and a child tag."
   (interactive "sTag ID: ")
   (let* ((tag-data (supertag-tag-get tag-id))
          (plist-data (and tag-data (supertag-schema--ensure-plist tag-data)))
-         (assoc-table (supertag-view-api-get-collection :tag-field-associations))
-         (own-fields-global (and (hash-table-p assoc-table) (gethash tag-id assoc-table)))
+         (assoc-table (supertag-query-tag-field-associations tag-id))
+         (own-fields-global assoc-table)
          (resolved (ignore-errors (supertag-ops-schema-get-resolved-tag tag-id))))
     (with-current-buffer (get-buffer-create "*Supertag Debug*")
       (erase-buffer)
