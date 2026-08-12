@@ -496,10 +496,14 @@ date regex (see `supertag--persistence--snapshot-preformat6')."
   (supertag-canon-test--with-temp-env
     (supertag-persistence-ensure-data-directory)
     (setq supertag--store (supertag-canon-test--build-store '("n1" "n2")))
-    (should-error
-     (cl-letf (((symbol-function 'supertag--count-nodes)
-                (lambda () 999)))
-       (supertag--persistence-write-store-atomically supertag-db-file)))
+    (let ((real-read (symbol-function 'supertag--persistence--try-read-store)))
+      (should-error
+       (cl-letf (((symbol-function 'supertag--persistence--try-read-store)
+                  (lambda (file)
+                    (let ((loaded (funcall real-read file)))
+                      (remhash :nodes loaded)
+                      loaded))))
+         (supertag--persistence-write-store-atomically supertag-db-file))))
     (should (null (directory-files supertag-data-directory nil "\\.tmp")))))
 
 (ert-deftest supertag-canon-test-atomic-save-then-verify-roundtrip-ok ()

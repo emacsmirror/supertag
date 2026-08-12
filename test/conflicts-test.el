@@ -134,15 +134,14 @@ or nil. Small helper so tests can pick a specific conflict out of
 
 ;;; --- 1. Query helpers ---
 
-(ert-deftest conflicts-test-list-empty-when-no-collection ()
-  "`supertag-conflicts-list'/`-count' are empty/zero on a fresh store, and
-never error even though `:sync-conflicts' does not exist yet."
+(ert-deftest conflicts-test-list-empty-on-fresh-store ()
+  "`supertag-conflicts-list'/`-count' are empty/zero on a fresh store."
   (conflicts-test--with-temp-env
     (supertag--ensure-store)
     (should (null (supertag-conflicts-list)))
     (should (= 0 (supertag-conflicts-count)))
-    ;; Merely asking must not have created the collection.
-    (should (null (gethash :sync-conflicts supertag--store)))))
+    (should (= 0 (hash-table-count
+                  (gethash :sync-conflicts supertag--store))))))
 
 ;;; --- 2. Field-level conflict on a node title ---
 

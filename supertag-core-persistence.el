@@ -90,10 +90,10 @@ Older backups will be automatically cleaned up."
 
 (defcustom supertag-db-verify-after-save t
   "When non-nil, verify the database file after saving.
-The freshly written file is re-read and its :nodes collection count is
-compared against the in-memory store before the previous database file
-is replaced. On mismatch or read error, the write is aborted and the
-previous database file is left untouched."
+The freshly written file is re-read and every durable collection declared
+by `supertag--store-collections' is compared with the in-memory Store before
+the previous database file is replaced. On mismatch or read error, the write
+is aborted and the previous database file is left untouched."
   :type 'boolean
   :group 'org-supertag)
 
@@ -847,6 +847,47 @@ for why this is safe with respect to cross-entity shared structure."
            (mapcar #'supertag--persistence--canonicalize-maybe-atom (append value nil))))
    (t value)))
 
+(defun supertag--persistence--empty-collection-p (value)
+  "Return non-nil when VALUE is a missing or empty Store collection."
+  (or (eq value supertag--not-found)
+      (and (hash-table-p value) (= 0 (hash-table-count value)))))
+
+(defun supertag--persistence--collection-roundtrip-equal-p (left right collection)
+  "Return non-nil when COLLECTION has equal contents in LEFT and RIGHT.
+Missing and empty collections are equivalent because the canonical writer
+does not emit lines for an empty hash table."
+  (let ((left-table (if (hash-table-p left)
+                        (gethash collection left supertag--not-found)
+                      supertag--not-found))
+        (right-table (if (hash-table-p right)
+                         (gethash collection right supertag--not-found)
+                       supertag--not-found)))
+    (cond
+     ((and (supertag--persistence--empty-collection-p left-table)
+           (supertag--persistence--empty-collection-p right-table))
+      t)
+     ((and (hash-table-p left-table) (hash-table-p right-table)
+           (= (hash-table-count left-table) (hash-table-count right-table)))
+      (catch 'mismatch
+        (maphash
+         (lambda (id value)
+           (let ((other (gethash id right-table supertag--not-found)))
+             (when (or (eq other supertag--not-found)
+                       (not (equal
+                             (supertag--persistence--canonicalize-value value)
+                             (supertag--persistence--canonicalize-value other))))
+               (throw 'mismatch nil))))
+         left-table)
+        t))
+     (t nil))))
+
+(defun supertag--persistence--mismatched-durable-collections (left right)
+  "Return durable collections whose contents differ between LEFT and RIGHT."
+  (cl-loop for collection in supertag--store-collections
+           unless (supertag--persistence--collection-roundtrip-equal-p
+                   left right collection)
+           collect collection))
+
 (defun supertag--persistence--thaw-value (value)
   "Inverse of `supertag--persistence--canonicalize-value'.
 Rebuilds an `equal'-test hash table from any
@@ -1069,6 +1110,9 @@ Signals an error if the file cannot be read or parsed."
                     (:field-definitions field-definitions "field-definitions")
                     (:tag-field-associations tag-field-associations "tag-field-associations")
                     (:field-values field-values "field-values")
+                    (:boards boards "boards")
+                    (:automations automations "automations")
+                    (:sync-conflicts sync-conflicts "sync-conflicts")
                     (:meta meta "meta")))
       (let ((canonical (car spec))
             (aliases (cdr spec)))
@@ -1314,9 +1358,9 @@ and the format commentary above
 `supertag--persistence-canonical-format-header'), and — when
 `supertag-db-verify-after-save' is non-nil — the temp file is re-read the
 same way the loader does (`supertag--persistence--try-read-store', which
-understands both the canonical and legacy formats) and its :nodes count
-is compared against the in-memory store's :nodes count before it
-replaces FILE.
+understands both the canonical and legacy formats). Every durable collection
+declared by `supertag--store-collections' is then compared by entity ID and
+canonicalized value before the temp file replaces FILE.
 
 Immediately before the atomic rename -- i.e. only once the new canonical
 content is fully written and verified, and FILE (still holding whatever
@@ -1339,21 +1383,27 @@ untouched."
             (let ((write-region-inhibit-fsync nil))
               (write-region (point-min) (point-max) temp-file nil 'silent)))
           (when supertag-db-verify-after-save
-            (let (verify-count)
+            (let (verify-data)
               (condition-case err
-                  (let* ((verify-data (supertag--persistence--try-read-store temp-file))
-                         (verify-nodes (and (hash-table-p verify-data)
-                                            (gethash :nodes verify-data))))
-                    (setq verify-count (if (hash-table-p verify-nodes)
-                                           (hash-table-count verify-nodes)
-                                         0)))
+                  (setq verify-data
+                        (supertag--persistence--try-read-store temp-file))
                 (error
                  (error "Supertag save verification failed to read %s: %s"
                         temp-file (error-message-string err))))
-              (let ((live-count (supertag--count-nodes)))
-                (unless (= verify-count live-count)
-                  (error "Supertag save verification mismatch for %s: wrote %d nodes, expected %d"
-                         file verify-count live-count)))))
+              (unless (hash-table-p verify-data)
+                (error "Supertag save verification returned an invalid Store root for %s"
+                       file))
+              (let ((mismatches
+                     (supertag--persistence--mismatched-durable-collections
+                      supertag--store verify-data)))
+                (when mismatches
+                  (error
+                   (concat "Supertag save verification mismatch for %s: "
+                           "durable collection(s) changed after write/read: %s")
+                   file
+                   (mapconcat (lambda (collection)
+                                (format "%S" collection))
+                              mismatches ", "))))))
           (when (file-exists-p file)
             (set-file-modes temp-file (file-modes file)))
           (when (supertag--persistence--legacy-format-file-p file)

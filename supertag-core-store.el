@@ -1,9 +1,9 @@
 ;;; org-supertag/store.el --- Core data storage and atomic update for Org-Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file implements the central data store for the Org-Supertag
-;; data-centric architecture. It provides a single source of truth for all
-;; application state and ensures atomic updates and consistent change notifications.
+;; This file implements the physical Store for Org-Supertag.  The Store holds
+;; Semantic Facts, Document Projections, and derived state; ownership is defined
+;; by doc/OWNERSHIP-CONSTITUTION_cn.md, not by physical residence here.
 
 ;;; Code:
 
@@ -32,11 +32,16 @@ Data is stored in a tree-like structure using nested hash tables.")
     :tag-field-associations     ; tag-id -> ordered list of association plists
     :field-values               ; node-id -> field-id -> value
     :boards                     ; board-id -> board plist (whiteboard layouts)
+    :automations                ; automation-id -> durable rule plist
+    :sync-conflicts             ; conflict-id -> durable unresolved conflict plist
     :meta)
-  "Canonical root collections maintained in `supertag--store'.")
+  "Durable root collections maintained in `supertag--store'.
+Every collection written to the database must be declared here so Store
+initialization and save/read verification share one contract.")
 
 (defconst supertag--canonical-collections
-  '(:nodes :tags :relations :embeds :field-definitions)
+  '(:nodes :tags :relations :embeds :field-definitions
+    :boards :automations :sync-conflicts)
   "Collections expected to contain entity plists keyed by identifier.")
 
 (defconst supertag--not-found (make-symbol "supertag-not-found")

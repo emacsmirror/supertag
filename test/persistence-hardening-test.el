@@ -23,11 +23,13 @@
 (require 'cl-lib)
 
 (when load-file-name
+  (add-to-list 'load-path (file-name-directory load-file-name))
   (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name))))
 
 (require 'supertag-core-store)
 (require 'supertag-core-persistence)
 (require 'supertag-doctor)
+(require 'ownership-fixture)
 
 ;;; --- Shared helpers ---
 
@@ -130,17 +132,97 @@ and internal state variables, so tests never touch the real
      supertag-db-file (supertag-hardening-test--make-store '("OLD")))
     (let ((original-bytes (supertag-hardening-test--read-file-bytes supertag-db-file)))
       (setq supertag--store (supertag-hardening-test--make-store '("OLD" "NEW")))
-      ;; Force the live node count used by the verification step to disagree
-      ;; with what was actually written to the temp file, without touching
-      ;; the write path itself.
-      (should-error
-       (cl-letf (((symbol-function 'supertag--count-nodes)
-                  (lambda () 999)))
-         (supertag--persistence-write-store-atomically supertag-db-file)))
+      (let ((real-read (symbol-function 'supertag--persistence--try-read-store)))
+        ;; Simulate a readable temp file that silently lost its node collection.
+        (should-error
+         (cl-letf (((symbol-function 'supertag--persistence--try-read-store)
+                    (lambda (file)
+                      (let ((loaded (funcall real-read file)))
+                        (remhash :nodes loaded)
+                        loaded))))
+           (supertag--persistence-write-store-atomically supertag-db-file))))
       (should (equal original-bytes
                      (supertag-hardening-test--read-file-bytes supertag-db-file)))
       (should (null (supertag-hardening-test--tmp-residues
                      (file-name-directory supertag-db-file)))))))
+
+(ert-deftest supertag-hardening-test-durable-roots-are-declared ()
+  "Every currently persisted root is created by the Store contract."
+  (dolist (collection '(:automations :sync-conflicts))
+    (should (memq collection supertag--store-collections)))
+  (let ((supertag--store nil))
+    (supertag--ensure-store)
+    (dolist (collection supertag--store-collections)
+      (should (hash-table-p (gethash collection supertag--store))))))
+
+(ert-deftest supertag-hardening-test-verify-detects-durable-collection-loss ()
+  "Save verification rejects loss of any populated durable collection."
+  (supertag-hardening-test--with-temp-env
+    (supertag-persistence-ensure-data-directory)
+    (let* ((vault (expand-file-name "vault" supertag-data-directory))
+           (files (supertag-ownership-test-create-vault vault))
+           (real-read (symbol-function 'supertag--persistence--try-read-store)))
+      (dolist (collection '(:tags
+                            :relations
+                            :field-definitions
+                            :tag-field-associations
+                            :field-values
+                            :boards
+                            :automations
+                            :sync-conflicts))
+        (supertag-hardening-test--write-store-file
+         supertag-db-file (supertag-hardening-test--make-store '("OLD")))
+        (let ((original-bytes
+               (supertag-hardening-test--read-file-bytes supertag-db-file)))
+          (supertag-ownership-test-populate-store files)
+          (supertag-store-put-entity
+           :sync-conflicts "ownership-conflict"
+           '(:id "ownership-conflict" :collection :tags :entity-id "project"
+             :kind :field-conflict :key :name
+             :ours "Project" :theirs "Projects"))
+          (should-error
+           (cl-letf (((symbol-function 'supertag--persistence--try-read-store)
+                      (lambda (file)
+                        (let ((loaded (funcall real-read file)))
+                          (remhash collection loaded)
+                          loaded))))
+             (supertag--persistence-write-store-atomically supertag-db-file)))
+          (should (equal original-bytes
+                         (supertag-hardening-test--read-file-bytes
+                          supertag-db-file))))))))
+
+(ert-deftest supertag-hardening-test-durable-roundtrip-preserves-all-collections ()
+  "A normal save/read round trip preserves every declared durable root."
+  (supertag-hardening-test--with-temp-env
+    (supertag-persistence-ensure-data-directory)
+    (let* ((vault (expand-file-name "vault" supertag-data-directory))
+           (files (supertag-ownership-test-create-vault vault)))
+      (supertag-ownership-test-populate-store files)
+      (supertag-store-put-entity
+       :sync-conflicts "ownership-conflict"
+       '(:id "ownership-conflict" :collection :tags :entity-id "project"
+         :kind :field-conflict :key :name :ours "Project" :theirs "Projects"))
+      (supertag--persistence-write-store-atomically supertag-db-file)
+      (let ((loaded (supertag--persistence--try-read-store supertag-db-file)))
+        (should-not
+         (supertag--persistence--mismatched-durable-collections
+          supertag--store loaded))))))
+
+(ert-deftest supertag-hardening-test-verify-detects-same-count-content-change ()
+  "Durable verification compares entity content, not only collection counts."
+  (supertag-hardening-test--with-temp-env
+    (supertag-persistence-ensure-data-directory)
+    (let* ((vault (expand-file-name "vault" supertag-data-directory))
+           (files (supertag-ownership-test-create-vault vault)))
+      (supertag-ownership-test-populate-store files)
+      (supertag--persistence-write-store-atomically supertag-db-file)
+      (let* ((loaded (supertag--persistence--try-read-store supertag-db-file))
+             (boards (gethash :boards loaded))
+             (board (copy-sequence (gethash "ownership-board" boards))))
+        (puthash "ownership-board" (plist-put board :title "Changed") boards)
+        (should (equal '(:boards)
+                       (supertag--persistence--mismatched-durable-collections
+                        supertag--store loaded)))))))
 
 ;;; --- 2. Multi-instance locking ---
 

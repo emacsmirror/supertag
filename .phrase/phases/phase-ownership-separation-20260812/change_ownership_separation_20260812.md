@@ -1,5 +1,18 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task003 Durable root contract 与完整保存验证
+
+- Modify `supertag-core-store.el`：将 `:automations`、`:sync-conflicts` 纳入唯一 Store root contract；补齐 entity-plist collection 声明，并移除代码注释中的 Store 全局单一真相源表述。
+- Modify `supertag-core-persistence.el`：保存后不再只比较 node count，而是按 `supertag--store-collections` 对每个 entity ID 的 canonical value 做 O(N) 内容比较；任一 durable collection 丢失、增删或同数量内容变化都会在替换旧数据库前中止。
+- Modify root normalization：兼容 `boards`、`automations`、`sync-conflicts` 的非 keyword legacy root 名称。
+- Modify persistence/canonical/conflict tests：复用 task002 fixture，覆盖正式 root 声明、所有已填充 durable roots 丢失、同数量内容变化、完整 round-trip、原数据库保留，以及 fresh Store 中空 `:sync-conflicts` contract。
+
+Behavior：数据库文件格式不变；成功保存仍走原 canonical writer。验证失败现在会列出发生变化的 durable collections，并继续保留旧数据库文件。
+
+Risk：启用默认 save verification 时增加一次 O(N) 内容比较；实现逐 entity 比较且不排序 whole collection，避免再构造一份完整 Store snapshot。空 collection 与 canonical 文件中的缺席等价。
+
+Verification：`./test/run-tests.sh persist canon` 51/51、`./test/run-tests.sh ownership` 3/3、`./test/run-tests.sh conflicts` 25/25 通过；修改文件 byte-compile 仅有既有 docstring/obsolete warning，本 task 新函数无 warning；`git diff --check` 通过；提交态临时 clone 全量 ERT 420/420 通过。
+
 ## 2026-08-12 — task002 两文件 Vault fixture 与 Semantic Fact fingerprint
 
 - Add `test/ownership-fixture.el`：动态创建两个确定性 Org 文件，并建立覆盖 node、Tag Occurrence、schema、field value、Document Link、Semantic Edge、Board、Automation 与 saved query 的隔离 Store。

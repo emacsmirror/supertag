@@ -14,10 +14,11 @@
   - 影响范围：`test/`、测试 helper
   - 完成：2026-08-12；3 项 ownership ERT、新增文件 byte-compile、提交态临时 clone 全量 416 项 ERT 全部通过
 
-- task003 [ ] 正式声明 durable roots 并强化持久化验证
+- task003 [x] 正式声明 durable roots 并强化持久化验证
   - 产出：将 `:automations`、`:sync-conflicts` 等真实 durable roots 纳入 Store contract；保存重读验证覆盖全部 semantic-owned collections
   - 验证方式：注入 fields/boards/automations 丢失时保存验证失败；正常 canonical round-trip 通过
   - 影响范围：`supertag-core-store.el`、`supertag-core-persistence.el`、persistence tests
+  - 完成：2026-08-12；定向 persistence/canonical ERT 51/51 通过；提交态临时 clone 全量 ERT 420/420 通过
 
 - task004 [ ] 修复 node delete 的 relation/field 清理完整性
   - 产出：node delete 通过 relation operations 清理关系，并同时清理 legacy `:fields` 与 global `:field-values`
