@@ -192,6 +192,40 @@ Store transaction plus file restoration covers projection failures.
 
 Dry-run must produce a complete old-ID mapping, alias conflict report and reverse mapping before any write. Unresolved occurrences remain visible and fail closed rather than silently rebinding.
 
+Task016 implements this gate as `supertag-migration-audit-stable-tags`.  It is
+read-only and deterministic: an already stable `tag-<32hex>` ID is preserved;
+each name-based legacy ID maps to the first 128 bits of
+`SHA-256(UTF-8("org-supertag:semantic-tag:v1:" + old-id))`, formatted as
+`tag-<32hex>`.  This is a namespaced content-derived migration identity, not a
+new name-based runtime identity: after task017 applies it, later canonical-name
+changes do not recalculate the ID.
+
+Every proposed Tag records its canonical name and the normalized union of its
+old ID, canonical name, current `:extends` display path and any pre-existing
+semantic `:aliases`.  The report exposes both old→stable and stable→old maps,
+plus alias→owner rows.  Duplicate alias claims, duplicate proposed IDs,
+malformed Tag entities/alias lists, missing parents and inheritance cycles all
+block apply.
+
+Reference coverage is explicit and sorted:
+
+- `:extends` inheritance and `:tag-field-associations` schema ownership;
+- legacy `:fields` Tag buckets and Tag-typed legacy field defaults retained
+  until task028 cleanup;
+- node resolved membership and Org-owned `:tag-occurrences` /
+  `:unresolved-tags` resolution;
+- relation endpoints and their post-migration deterministic relation IDs;
+- global `:tag` field defaults and values;
+- structured Automation, Board, saved-query and loaded-view references,
+  including `(:type :tag :value ID)` query objects.
+
+Missing Tag owners, unreadable saved queries and zero/ambiguous occurrence
+resolutions fail closed.  `:backup` remains a plan only: it fingerprints the
+full in-memory Store, current database file, collection counts, Customize-backed
+saved queries and loaded views, and marks all of them required before task017
+may write.  The audit neither serializes a backup nor changes Store, Org files,
+queries or view registries.
+
 ### Fields
 
 Global field cutover requires per-node/per-field parity. Legacy storage becomes read-only before deletion.

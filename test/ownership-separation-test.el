@@ -401,6 +401,128 @@
       (should (stringp
                (plist-get (plist-get report :backup) :store-sha256))))))
 
+(ert-deftest supertag-stable-tag-audit-is-complete-repeatable-and-read-only ()
+  "Stable Tag preflight maps every owner without changing live state."
+  (supertag-ownership-test-with-vault
+    (let* ((reference
+            (copy-tree (supertag-store-get-entity :tags "reference")))
+           (project
+            (copy-tree (supertag-store-get-entity :tags "project")))
+           (node-a
+            (copy-tree (supertag-node-get supertag-ownership-test-node-a)))
+           (node-b
+            (copy-tree (supertag-node-get supertag-ownership-test-node-b)))
+           (views (make-hash-table :test 'eq))
+           report before-store before-query before-views database-sha)
+      (supertag-store-put-entity
+       :tags "reference" (plist-put reference :extends "project"))
+      (supertag-store-put-entity
+       :tags "project"
+       (plist-put project :fields
+                  '((:name "Legacy Related" :type :tag
+                     :default "reference"))))
+      (supertag-store-put-entity
+       :nodes supertag-ownership-test-node-a
+       (plist-put node-a :tag-occurrences '("project")))
+      (supertag-store-put-entity
+       :nodes supertag-ownership-test-node-b
+       (plist-put node-b :tag-occurrences '("project/reference")))
+      (supertag-store-put-field-definition
+       "related-tag" '(:id "related-tag" :name "Related Tag" :type :tag
+                        :default "project"))
+      (supertag-store-put-field-value
+       supertag-ownership-test-node-a "related-tag" "reference")
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "project" "Legacy" "kept")
+      (supertag-store-put-entity
+       :relations "ownership-tag-edge"
+       '(:id "ownership-tag-edge" :type :categorizes
+         :from "project" :to "ownership-node-a"
+         :kind :semantic-edge :origin :semantic))
+      (supertag-store-put-entity
+       :boards "ownership-board"
+       (plist-put (copy-tree (supertag-store-get-entity
+                              :boards "ownership-board"))
+                  :filter '(:tag "project")))
+      (puthash 'ownership-view
+               '(:id ownership-view :name "Ownership View"
+                 :query (:type :tag :value "reference"))
+               views)
+      (make-directory (file-name-directory supertag-db-file) t)
+      (with-temp-file supertag-db-file (insert "stable-tag-audit-must-not-write\n"))
+      (setq before-store
+            (supertag--persistence--canonicalize-value supertag--store)
+            before-query (copy-tree supertag-query-saved)
+            before-views (supertag--persistence--canonicalize-value views)
+            database-sha (supertag-migration--file-sha256 supertag-db-file))
+      (let ((supertag--view-configs views))
+        (setq report (supertag-migration-audit-stable-tags))
+        (should (equal report (supertag-migration-audit-stable-tags))))
+      (should (equal "tag-f54e0c3adb0620477fe62b580bc9c188"
+                     (supertag-migration--proposed-stable-tag-id "日记")))
+      (should (plist-get report :safe-to-apply))
+      (should (= 2 (length (plist-get report :tag-mappings))))
+      (dolist (mapping (plist-get report :tag-mappings))
+        (should (string-match-p
+                 "\\`tag-[0-9a-f]\\{32\\}\\'"
+                 (plist-get mapping :stable-id)))
+        (should (member (plist-get mapping :old-id)
+                        (plist-get mapping :aliases))))
+      (should (equal "project"
+                     (plist-get
+                      (car (plist-get report :inheritance-mappings))
+                      :old-parent-id)))
+      (should (cl-find :schema (plist-get report :reference-mappings)
+                       :key (lambda (item) (plist-get item :kind))))
+      (dolist (kind '(:legacy-field-bucket :legacy-tag-field-default
+                      :node-membership :tag-occurrence :relation
+                      :tag-field-default :tag-field-value :automation
+                      :board :saved-query :view))
+        (should (cl-find kind (plist-get report :reference-mappings)
+                         :key (lambda (item) (plist-get item :kind)))))
+      (should-not (plist-get report :conflicts))
+      (should-not (plist-get report :unresolved-occurrences))
+      (should (plist-get (plist-get report :backup) :required-before-apply))
+      (should (equal supertag-migration--stable-tag-collections
+                     (plist-get (plist-get report :backup)
+                                :migration-collections)))
+      (should (equal before-store
+                     (supertag--persistence--canonicalize-value supertag--store)))
+      (should (equal before-query supertag-query-saved))
+      (should (equal before-views
+                     (supertag--persistence--canonicalize-value views)))
+      (should (equal database-sha
+                     (supertag-migration--file-sha256 supertag-db-file))))))
+
+(ert-deftest supertag-stable-tag-audit-fails-closed-on-identity-problems ()
+  "Alias ambiguity, inheritance cycles, and unknown tokens block migration."
+  (supertag-ownership-test-with-vault
+    (let* ((project (copy-tree (supertag-tag-get "project")))
+           (reference (copy-tree (supertag-tag-get "reference")))
+           (node (copy-tree (supertag-node-get supertag-ownership-test-node-a)))
+           before report reasons)
+      (setq project (plist-put project :extends "reference")
+            project (plist-put project :aliases '("shared"))
+            reference (plist-put reference :extends "project")
+            reference (plist-put reference :aliases '("shared")))
+      (supertag-store-put-entity :tags "project" project)
+      (supertag-store-put-entity :tags "reference" reference)
+      (supertag-store-put-entity
+       :nodes supertag-ownership-test-node-a
+       (plist-put node :tag-occurrences '("project" "unknown-token")))
+      (setq before (supertag--persistence--canonicalize-value supertag--store)
+            report (supertag-migration-audit-stable-tags)
+            reasons (mapcar (lambda (item) (plist-get item :reason))
+                            (plist-get report :conflicts)))
+      (should-not (plist-get report :safe-to-apply))
+      (should (memq :alias-conflict reasons))
+      (should (memq :inheritance-cycle reasons))
+      (should (equal '("unknown-token")
+                     (mapcar (lambda (item) (plist-get item :token))
+                             (plist-get report :unresolved-occurrences))))
+      (should (equal before
+                     (supertag--persistence--canonicalize-value supertag--store))))))
+
 (ert-deftest supertag-global-field-audit-conflicts-fail-closed ()
   "Definition/value mismatches block the existing force-write entry point."
   (supertag-ownership-test-with-vault

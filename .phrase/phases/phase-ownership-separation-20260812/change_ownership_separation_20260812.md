@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task016 Stable Semantic Tag ID dry-run
+
+- Add `supertag-migration-audit-stable-tags`：确定性生成 name-based old ID → `tag-<32hex>` proposed stable ID、stable → old reverse mapping、canonical name 与 normalized alias owner 表；已经符合 stable shape 的 ID 保持不变。
+- Add identity fail-closed gate：重复 alias/proposed ID、malformed Tag/alias、missing parent、inheritance cycle、missing membership/schema/Tag-field owner 与 unreadable saved query 全部进入 conflict；零 owner 或多 owner 的 Org occurrence 单列为 unresolved 并阻断 apply。
+- Add complete reference mapping：覆盖 `:extends`、`:tag-field-associations`、legacy field bucket/Tag field default、node membership/occurrence、relation endpoints/新 relation ID、global Tag field default/value、Automation、Board、saved query 与 loaded view；真实 `(:type :tag :value ID)` query object 也进入映射。
+- Add backup plan：完整 Store、当前数据库文件、collection counts、saved queries 与 loaded views 都生成 count/SHA-256 fingerprint 并标记 apply 前必须备份；task016 不创建备份、不写 Store/Org/config。
+- Add ownership regressions：正常 fixture 证明两次报告完全相同且 9 类 mapping 齐全；冲突 fixture 同时证明 alias ambiguity、inheritance cycle 与 unknown occurrence fail closed。
+
+Behavior：用户可运行 `M-x supertag-migration-audit-stable-tags` 在 `*supertag-migration*` 查看完整 proposed migration。只有 `:safe-to-apply t` 才说明 task017 可以进入真实备份/写入；task016 本身没有 apply 入口。
+
+Risk：proposed ID 使用 namespaced SHA-256 前 128 bit，由 old ID 确定，确保同一 Store 的 dry-run 可重复；它只决定一次性 cutover identity，task017 后 canonical rename 不重新计算 ID。扫描与排序是显式一次性 O(Store references) 操作，不进入日常 query path。旧 `:fields` 仅作为不透明 Tag payload 保留，生产 schema mapping 只认 task014 已确立的 global collections。
+
+Verification：红测先因 audit 命令不存在失败；实现后 ownership ERT 16/16，Tag merge/path 与 Query 定向 ERT 85/85，只含 HEAD + task016 patch 的干净临时 worktree 全量 ERT 468/468；`check-parens`、`git diff --check` 通过，修改生产文件 byte compile 成功且只有仓库既有 warning。当前用户工作树的完整 runner 为 466/468，两项额外失败来自未提交 dashboard 修改依赖未安装的 `textui`，其文件与测试不在 task016 patch，干净基线已证明 task016 全绿。
+
 ## 2026-08-12 — task015 Relation Ownership 分型
 
 - Modify relation identity 与 validation：所有新 relation 明确记录 `:kind/:origin`；Document Link 与 Field Reference 可在同一 endpoints 上共存，后者再按 stable field-id 区分；legacy unowned `:reference` 保留为 `:legacy-reference`，不猜 owner。

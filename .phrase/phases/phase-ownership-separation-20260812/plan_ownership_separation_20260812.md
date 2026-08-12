@@ -52,7 +52,7 @@
 task001 → task002 → task003 → task005
         → task006 → task007 → task008
         → sync-integrity/task013 → task009 → task010
-        → task012 → task014 → task015 → task017
+        → task012 → task014 → task015 → task016 → task017
         → task018 → task019
         → task020…task025 → task026
         → task027 → task028
@@ -69,6 +69,7 @@ task001 → task002 → task003 → task005
 
 - 旧 reciprocal backlink 与用户正向链接语法相同，禁止自动删除；依赖既有 `phase-sync-integrity-20251226/task013`。
 - Stable Tag ID 会影响 schema、relations、fields、automations、boards、saved queries 与 completion；必须先 dry-run 和备份。
+- task016 已固定 dry-run gate：只有 deterministic old↔stable、unique alias、完整引用面与 backup fingerprint 均无冲突，task017 才允许进入写入路径。
 - Legacy/global field 两套读取语义并存；必须用 parity fixture 证明 cutover。
 - 现有 View Data API 暴露 raw collections；必须逐 consumer 迁移，不能一次删除。
 - Store transaction 只回滚内存 Store；本阶段优先减少跨介质双写，不先造 crash journal。

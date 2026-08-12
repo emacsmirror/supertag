@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task016 deterministic Stable Semantic Tag ID dry-run
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task015 relation ownership separation
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task014 global-field production cutover
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task013 deterministic legacy/global field audit

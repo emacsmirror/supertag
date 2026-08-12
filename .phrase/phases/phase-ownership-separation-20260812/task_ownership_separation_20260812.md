@@ -97,10 +97,11 @@
   - 影响范围：relation/field ops、query model、automation
   - 完成：2026-08-12；同节点对三类 relation 共存、Projection 删除/重建、field-owner 收敛与 Notion Semantic Edge 已由稳定 ERT 覆盖；完整验证结论见 `change_ownership_separation_20260812.md`
 
-- task016 [ ] Stable Semantic Tag ID migration dry-run
+- task016 [x] Stable Semantic Tag ID migration dry-run
   - 产出：old ID → stable ID、canonical name、unique aliases、inheritance/schema/reference mapping；只生成报告与备份计划
   - 验证方式：alias conflict、inheritance cycle、unresolved occurrence 均被检出；dry-run 零写入
   - 影响范围：tag migration、fixtures、docs
+  - 完成：2026-08-12；新增确定性 `supertag-migration-audit-stable-tags`，以 namespaced SHA-256 前 128 bit 生成 `tag-<32hex>` proposed ID；报告覆盖 reverse/alias、`:extends`、global schema、membership/occurrence、relation、Tag field default/value、Automation、Board、saved query 与 loaded view，并给出完整 Store/磁盘/config fingerprint 备份计划；alias 一对多、继承环、missing owner 与 unresolved occurrence 全部 fail closed；ownership ERT 16/16、Tag/Query 定向 ERT 85/85、只含 HEAD + task016 patch 的干净临时 worktree 全量 ERT 468/468 通过
 
 - task017 [ ] 执行 Stable Semantic Tag 与 resolver 迁移
   - 产出：token → stable ID resolver、derived membership；rename 只改 canonical name/alias；Org token 改写为独立 migration

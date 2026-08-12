@@ -74,6 +74,7 @@
 - 未解析的 Tag Occurrence 可以存在，但不得静默绑定到错误的 Semantic Tag。
 - 未解析 occurrence 必须继续可查询并出现在补全中；它与显式创建 Semantic Tag 的 `[New]` action 是两个不同选择。
 - Semantic Tag alias 必须全局唯一；冲突时 fail closed。
+- Stable Tag apply 前必须通过只读 audit：old↔stable、alias、inheritance、schema 与所有 durable/runtime reference mapping 完整；任何 unresolved occurrence 或 missing owner 都阻断写入。
 - ID-less heading 不得产生下次扫描会漂移的临时身份。
 - ID-less heading 在用户显式创建持久 Org ID 前保持普通 heading，并被 Document Projector 跳过。
 - Document Link、field-reference 与 Semantic Edge 必须可区分来源。
@@ -94,6 +95,7 @@
 - 旧 reciprocal migration 只处理用户明确确认的 occurrence；dry-run/abort 零写入，失败可恢复。
 - Node projection 不再依赖 unknown-key merge 保存 Semantic Facts。
 - Semantic Tag 使用稳定 ID；rename 不要求重写所有引用集合和 Org 文件。
+- Stable Tag dry-run 对同一逻辑 Store 产生相同报告，并保持 Store、Org、数据库文件、saved queries 与 loaded views 字节/值不变。
 - UI、View、Completion、Board、Query 与 Automation 不再读取 raw collection hash table。
 - Legacy `:fields` 不再有生产 reader/writer；只保留 migration/低层兼容 seam，并在 task028 完成可验证迁移后删除。
 - 字段定义、Tag 关联和值只写入 `:field-definitions`、`:tag-field-associations`、`:field-values`；旧开关不能改变该路径。

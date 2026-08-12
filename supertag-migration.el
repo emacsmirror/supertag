@@ -18,12 +18,26 @@
 (require 'supertag-core-schema)
 (require 'supertag-core-persistence)
 (require 'supertag-ops-node)
+(require 'supertag-ops-relation)
 (require 'supertag-ops-schema)
+(require 'supertag-ops-tag)
 (require 'supertag-view-helper)
 (require 'supertag-services-sync)
 (require 'org-id)
 (require 'org)
 (require 'org-element)
+
+(defvar supertag-query-saved nil)
+(defvar supertag--view-configs (make-hash-table :test 'eq))
+
+(declare-function supertag-tag-merge--plist-p
+                  "supertag-ops-tag-merge" (value))
+(declare-function supertag-tag-merge--string-mentions-source-p
+                  "supertag-ops-tag-merge" (string source-ids))
+(declare-function supertag-tag-path-rename--rewrite-structured
+                  "supertag-ops-tag-merge" (form mapping))
+(declare-function supertag-tag-path-rename--rewrite-values
+                  "supertag-ops-tag-merge" (value mapping))
 
 ;;; --- Helper Functions ---
 
@@ -1441,6 +1455,569 @@ Return a deterministic report plist.  Conflicts and orphans set
              (if (plist-get report :safe-to-apply) "safe" "blocked")
              (length (plist-get report :conflicts))
              (length (plist-get report :orphans)))
+    (when (called-interactively-p 'interactive)
+      (display-buffer supertag-migration-log-buffer))
+    report))
+
+;;; --- Stable Semantic Tag ID audit ---
+
+(defconst supertag-migration--stable-tag-collections
+  '(:tags :nodes :relations :fields :field-definitions
+    :tag-field-associations :field-values :boards :automations)
+  "Collections whose Tag references task017 must migrate atomically.")
+
+(defun supertag-migration--stable-tag-id-p (value)
+  "Return non-nil when VALUE has the stable Semantic Tag ID shape."
+  (and (stringp value)
+       (string-match-p "\\`tag-[0-9a-f]\\{32\\}\\'" value)))
+
+(defun supertag-migration--proposed-stable-tag-id (old-id)
+  "Return the deterministic stable Semantic Tag ID proposed for OLD-ID."
+  (if (supertag-migration--stable-tag-id-p old-id)
+      old-id
+    (concat
+     "tag-"
+     (substring
+      (secure-hash 'sha256
+                   (encode-coding-string
+                    (concat "org-supertag:semantic-tag:v1:" old-id)
+                    'utf-8 t))
+      0 32))))
+
+(defun supertag-migration--mapping-value (value mapping)
+  "Return VALUE rewritten by old-to-stable MAPPING when present."
+  (or (cdr (assoc value mapping)) value))
+
+(defun supertag-migration--string-leaves (value)
+  "Return every string leaf in VALUE in deterministic order."
+  (let (result)
+    (cl-labels
+        ((walk (item)
+           (cond
+            ((stringp item) (push item result))
+            ((hash-table-p item)
+             (dolist (entry (supertag-migration--sorted-table-entries item))
+               (walk (cdr entry))))
+            ((consp item)
+             (walk (car item))
+             (walk (cdr item))))))
+      (walk value))
+    (sort (delete-dups result) #'string<)))
+
+(defun supertag-migration--rewrite-tag-structured (form mapping)
+  "Rewrite exact Tag IDs in structured FORM using MAPPING.
+This includes the existing tag slots and query objects shaped as
+`(:type :tag :value TAG-ID)'."
+  (let ((rewritten
+         (supertag-tag-path-rename--rewrite-structured form mapping)))
+    (cl-labels
+        ((walk (item)
+           (cond
+            ((atom item) item)
+            ((supertag-tag-merge--plist-p item)
+             (let ((tag-query-p (eq (plist-get item :type) :tag)) result)
+               (while item
+                 (let ((key (pop item)) (value (pop item)))
+                   (setq result
+                         (append result
+                                 (list key
+                                       (if (and tag-query-p (eq key :value))
+                                           (supertag-tag-path-rename--rewrite-values
+                                            value mapping)
+                                         (walk value)))))))
+               result))
+            (t (mapcar #'walk item)))))
+      (walk rewritten))))
+
+(defun supertag-migration--audit-saved-tag-queries (mapping)
+  "Return (REFERENCE-MAPPINGS . CONFLICTS) for saved queries and MAPPING."
+  (let ((source-ids (mapcar #'car mapping)) references conflicts)
+    (dolist (entry supertag-query-saved)
+      (let ((name (car entry)) (text (cdr entry)))
+        (when (and (stringp text)
+                   (supertag-tag-merge--string-mentions-source-p
+                    text source-ids))
+          (condition-case err
+              (pcase-let* ((`(,form . ,end) (read-from-string text))
+                           (tail (substring text end))
+                           (rewritten
+                            (supertag-migration--rewrite-tag-structured
+                             form mapping)))
+                (if (string-match-p "\\`[[:space:]]*\\'" tail)
+                    (unless (equal form rewritten)
+                      (push (list :kind :saved-query :owner-id name
+                                  :old-value text
+                                  :stable-value (prin1-to-string rewritten))
+                            references))
+                  (push (list :reason :saved-query-unmappable :owner-id name
+                              :value text)
+                        conflicts)))
+            (error
+             (push (list :reason :saved-query-unmappable :owner-id name
+                         :value text :error (error-message-string err))
+                   conflicts))))))
+    (cons references conflicts)))
+
+(defun supertag-migration--audit-stable-tag-identities ()
+  "Return proposed identities, alias reverse map, and identity conflicts."
+  (let ((alias-claims (make-hash-table :test 'equal))
+        (stable-claims (make-hash-table :test 'equal))
+        mappings conflicts)
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :tags)))
+      (let* ((old-id (car entry))
+             (tag (supertag-migration--audit-definition-plist (cdr entry)))
+             (stored-id (and tag (plist-get tag :id)))
+             (name (and tag (plist-get tag :name)))
+             (raw-aliases (and tag (plist-get tag :aliases)))
+             (stable-id (and (stringp old-id)
+                             (supertag-migration--proposed-stable-tag-id old-id)))
+             aliases)
+        (unless (and tag (stringp old-id) (stringp name)
+                     (not (string-empty-p name)))
+          (push (list :reason :invalid-tag :old-id old-id
+                      :value (supertag-migration--stable-value (cdr entry)))
+                conflicts))
+        (when (and tag (not (equal old-id stored-id)))
+          (push (list :reason :tag-key-id-mismatch :old-id old-id
+                      :stored-id stored-id)
+                conflicts))
+        (when (and raw-aliases
+                   (not (and (proper-list-p raw-aliases)
+                             (cl-every #'stringp raw-aliases))))
+          (push (list :reason :invalid-aliases :old-id old-id
+                      :aliases (supertag-migration--stable-value raw-aliases))
+                conflicts))
+        (when (and tag (stringp old-id) (stringp name) stable-id)
+          (dolist (candidate
+                   (append (list old-id name (supertag-tag-display-path old-id))
+                           (and (proper-list-p raw-aliases) raw-aliases)))
+            (when (stringp candidate)
+              (condition-case err
+                  (push (supertag-sanitize-tag-name candidate) aliases)
+                (error
+                 (push (list :reason :invalid-alias :old-id old-id
+                             :alias candidate
+                             :error (error-message-string err))
+                       conflicts)))))
+          (setq aliases (sort (delete-dups aliases) #'string<))
+          (puthash stable-id
+                   (cons old-id (gethash stable-id stable-claims))
+                   stable-claims)
+          (dolist (alias aliases)
+            (puthash alias (cons old-id (gethash alias alias-claims))
+                     alias-claims))
+          (push (list :old-id old-id :stable-id stable-id
+                      :canonical-name name :aliases aliases
+                      :legacy-field-count
+                      (if (proper-list-p (plist-get tag :fields))
+                          (length (plist-get tag :fields)) 0))
+                mappings))))
+    (dolist (entry (supertag-migration--sorted-table-entries alias-claims))
+      (let ((owners (sort (delete-dups (copy-sequence (cdr entry))) #'string<)))
+        (when (> (length owners) 1)
+          (push (list :reason :alias-conflict :alias (car entry)
+                      :old-tag-ids owners)
+                conflicts))))
+    (dolist (entry (supertag-migration--sorted-table-entries stable-claims))
+      (let ((owners (sort (delete-dups (copy-sequence (cdr entry))) #'string<)))
+        (when (> (length owners) 1)
+          (push (list :reason :stable-id-conflict :stable-id (car entry)
+                      :old-tag-ids owners)
+                conflicts))))
+    (setq mappings (supertag-migration--sort-report-items mappings))
+    (list :tag-mappings mappings
+          :reverse-mappings
+          (supertag-migration--sort-report-items
+           (mapcar (lambda (item)
+                     (list :stable-id (plist-get item :stable-id)
+                           :old-id (plist-get item :old-id)))
+                   mappings))
+          :alias-mappings
+          (supertag-migration--sort-report-items
+           (apply #'append
+                  (mapcar
+                   (lambda (item)
+                     (mapcar
+                      (lambda (alias)
+                        (list :alias alias
+                              :old-id (plist-get item :old-id)
+                              :stable-id (plist-get item :stable-id)))
+                      (plist-get item :aliases)))
+                   mappings)))
+          :alias-claims alias-claims
+          :conflicts (supertag-migration--sort-report-items conflicts))))
+
+(defun supertag-migration--audit-stable-tag-inheritance (mapping)
+  "Return inheritance mappings and conflicts for old-to-stable MAPPING."
+  (let ((tags (supertag-store-get-collection :tags))
+        (cycle-keys (make-hash-table :test 'equal))
+        edges conflicts)
+    (dolist (entry (supertag-migration--sorted-table-entries tags))
+      (let* ((child (car entry))
+             (tag (supertag-migration--audit-definition-plist (cdr entry)))
+             (parent (and tag (plist-get tag :extends))))
+        (when parent
+          (if (and (stringp parent) (assoc parent mapping))
+              (push (list :old-child-id child
+                          :stable-child-id
+                          (supertag-migration--mapping-value child mapping)
+                          :old-parent-id parent
+                          :stable-parent-id
+                          (supertag-migration--mapping-value parent mapping))
+                    edges)
+            (push (list :reason :missing-parent :old-tag-id child
+                        :parent-id parent)
+                  conflicts)))))
+    (dolist (entry (supertag-migration--sorted-table-entries tags))
+      (let ((current (car entry)) path done)
+        (while (and (stringp current) (not done))
+          (if-let* ((position (cl-position current path :test #'equal)))
+              (let* ((cycle (sort (copy-sequence
+                                   (cl-subseq path 0 (1+ position)))
+                                  #'string<))
+                     (key (string-join cycle "\0")))
+                (unless (gethash key cycle-keys)
+                  (puthash key t cycle-keys)
+                  (push (list :reason :inheritance-cycle
+                              :old-tag-ids cycle)
+                        conflicts))
+                (setq done t))
+            (push current path)
+            (let* ((tag (gethash current tags))
+                   (parent (and (listp tag) (plist-get tag :extends))))
+              (if (and parent (gethash parent tags))
+                  (setq current parent)
+                (setq done t)))))))
+    (list :inheritance-mappings
+          (supertag-migration--sort-report-items edges)
+          :conflicts (supertag-migration--sort-report-items conflicts))))
+
+(defun supertag-migration--audit-stable-tag-references
+    (mapping alias-claims)
+  "Return every reference rewrite and unresolved owner for MAPPING.
+ALIAS-CLAIMS maps occurrence tokens to their current Semantic Tag owners."
+  (require 'supertag-ops-tag-merge)
+  (let ((tags (supertag-store-get-collection :tags))
+        references unresolved conflicts schema-mappings)
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :tag-field-associations)))
+      (let ((old-id (car entry)))
+        (if (assoc old-id mapping)
+            (let ((item (list :kind :schema :old-tag-id old-id
+                              :stable-tag-id
+                              (supertag-migration--mapping-value old-id mapping)
+                              :field-associations
+                              (supertag-migration--stable-value (cdr entry)))))
+              (push item schema-mappings)
+              (push item references))
+          (push (list :reason :schema-missing-tag :old-tag-id old-id)
+                conflicts))))
+    (dolist (node-entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :fields)))
+      (dolist (tag-entry
+               (supertag-migration--sorted-table-entries (cdr node-entry)))
+        (let ((old-id (car tag-entry)))
+          (if (assoc old-id mapping)
+              (push (list :kind :legacy-field-bucket
+                          :owner-id (car node-entry) :old-id old-id
+                          :stable-id
+                          (supertag-migration--mapping-value old-id mapping)
+                          :value-sha256
+                          (supertag-migration--fingerprint (cdr tag-entry)))
+                    references)
+            (push (list :reason :legacy-field-bucket-missing-tag
+                        :node-id (car node-entry) :old-tag-id old-id)
+                  conflicts)))))
+    (dolist (tag-entry
+             (supertag-migration--sorted-table-entries tags))
+      (let ((fields (plist-get
+                     (supertag-migration--audit-definition-plist
+                      (cdr tag-entry))
+                     :fields)))
+        (when (proper-list-p fields)
+          (dolist (definition fields)
+            (when (and (listp definition)
+                       (eq (plist-get definition :type) :tag)
+                       (plist-member definition :default))
+              (let* ((value (plist-get definition :default))
+                     (rewritten
+                      (supertag-tag-path-rename--rewrite-values value mapping)))
+                (dolist (old-id (supertag-migration--string-leaves value))
+                  (unless (assoc old-id mapping)
+                    (push (list :reason :legacy-tag-field-default-missing-tag
+                                :old-tag-id (car tag-entry)
+                                :field-name (plist-get definition :name)
+                                :missing-tag-id old-id)
+                          conflicts)))
+                (unless (equal value rewritten)
+                  (push (list :kind :legacy-tag-field-default
+                              :owner-id (car tag-entry)
+                              :field-name (plist-get definition :name)
+                              :old-value
+                              (supertag-migration--stable-value value)
+                              :stable-value
+                              (supertag-migration--stable-value rewritten))
+                        references))))))))
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :nodes)))
+      (let* ((node-id (car entry))
+             (node (supertag-migration--audit-definition-plist (cdr entry)))
+             (raw-tags (and node (plist-get node :tags)))
+             (raw-occurrences (and node (plist-get node :tag-occurrences)))
+             (raw-unresolved (and node (plist-get node :unresolved-tags))))
+        (dolist (slot-value `((:tags . ,raw-tags)
+                              (:tag-occurrences . ,raw-occurrences)
+                              (:unresolved-tags . ,raw-unresolved)))
+          (when (and (cdr slot-value)
+                     (not (and (proper-list-p (cdr slot-value))
+                               (cl-every #'stringp (cdr slot-value)))))
+            (push (list :reason :invalid-node-tag-list :node-id node-id
+                        :slot (car slot-value)
+                        :value (supertag-migration--stable-value
+                                (cdr slot-value)))
+                  conflicts)))
+        (dolist (old-id (and (proper-list-p raw-tags)
+                             (cl-remove-if-not #'stringp raw-tags)))
+          (if (assoc old-id mapping)
+              (push (list :kind :node-membership :owner-id node-id
+                          :old-id old-id :stable-id
+                          (supertag-migration--mapping-value old-id mapping))
+                    references)
+            (push (list :reason :membership-missing-tag :node-id node-id
+                        :old-tag-id old-id)
+                  conflicts)))
+        (dolist (token
+                 (sort
+                  (delete-dups
+                   (append
+                    (and (proper-list-p raw-occurrences)
+                         (cl-remove-if-not #'stringp raw-occurrences))
+                    (and (proper-list-p raw-unresolved)
+                         (cl-remove-if-not #'stringp raw-unresolved))))
+                  #'string<))
+          (let* ((normalized
+                  (condition-case nil
+                      (supertag-sanitize-tag-name token)
+                    (error nil)))
+                 (owners (and normalized
+                              (sort (delete-dups
+                                     (copy-sequence
+                                      (gethash normalized alias-claims)))
+                                    #'string<))))
+            (if (= (length owners) 1)
+                (let ((old-id (car owners)))
+                  (push (list :kind :tag-occurrence :owner-id node-id
+                              :token token :old-id old-id :stable-id
+                              (supertag-migration--mapping-value old-id mapping))
+                        references))
+              (push (list :node-id node-id :token token
+                          :reason (if owners :ambiguous-alias
+                                    :unknown-alias)
+                          :old-tag-ids owners)
+                    unresolved))))))
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :relations)))
+      (let* ((id (car entry))
+             (relation (supertag-migration--audit-definition-plist (cdr entry)))
+             (from (and relation (plist-get relation :from)))
+             (to (and relation (plist-get relation :to)))
+             (new-from (supertag-migration--mapping-value from mapping))
+             (new-to (supertag-migration--mapping-value to mapping)))
+        (when (or (not (equal from new-from)) (not (equal to new-to)))
+          (push (list :kind :relation :owner-id id
+                      :old-from from :stable-from new-from
+                      :old-to to :stable-to new-to
+                      :stable-owner-id
+                      (supertag-generate-relation-id
+                       new-from new-to (plist-get relation :type)
+                       (plist-get relation :kind)
+                       (plist-get relation :field-id)))
+                references))
+        (when (and relation
+                   (or (eq (plist-get relation :type) :node-tag)
+                       (eq (plist-get relation :kind) :tag-membership))
+                   (not (gethash to tags)))
+          (push (list :reason :membership-relation-missing-tag
+                      :relation-id id :old-tag-id to)
+                conflicts))))
+    (dolist (node-entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :field-values)))
+      (when (hash-table-p (cdr node-entry))
+        (dolist (field-entry
+                 (supertag-migration--sorted-table-entries (cdr node-entry)))
+          (when (eq (plist-get
+                     (supertag-store-get-field-definition (car field-entry)) :type)
+                    :tag)
+            (let* ((value (cdr field-entry))
+                   (rewritten
+                    (supertag-tag-path-rename--rewrite-values value mapping)))
+              (dolist (old-id (supertag-migration--string-leaves value))
+                (unless (assoc old-id mapping)
+                  (push (list :reason :tag-field-missing-tag
+                              :node-id (car node-entry)
+                              :field-id (car field-entry)
+                              :old-tag-id old-id)
+                        conflicts)))
+              (unless (equal value rewritten)
+                (push (list :kind :tag-field-value
+                            :owner-id (car node-entry)
+                            :field-id (car field-entry)
+                            :old-value (supertag-migration--stable-value value)
+                            :stable-value
+                            (supertag-migration--stable-value rewritten))
+                      references)))))))
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :field-definitions)))
+      (let ((definition
+             (supertag-migration--audit-definition-plist (cdr entry))))
+        (when (and (eq (plist-get definition :type) :tag)
+                   (plist-member definition :default))
+          (let* ((value (plist-get definition :default))
+                 (rewritten
+                  (supertag-tag-path-rename--rewrite-values value mapping)))
+            (dolist (old-id (supertag-migration--string-leaves value))
+              (unless (assoc old-id mapping)
+                (push (list :reason :tag-field-default-missing-tag
+                            :field-id (car entry) :old-tag-id old-id)
+                      conflicts)))
+            (unless (equal value rewritten)
+              (push (list :kind :tag-field-default :owner-id (car entry)
+                          :old-value (supertag-migration--stable-value value)
+                          :stable-value
+                          (supertag-migration--stable-value rewritten))
+                    references))))))
+    (dolist (collection-kind '((:automations . :automation) (:boards . :board)))
+      (dolist (entry
+               (supertag-migration--sorted-table-entries
+                (supertag-store-get-collection (car collection-kind))))
+        (let ((rewritten
+               (supertag-migration--rewrite-tag-structured
+                (copy-tree (cdr entry)) mapping)))
+          (unless (equal (cdr entry) rewritten)
+            (push (list :kind (cdr collection-kind) :owner-id (car entry)
+                        :old-value (supertag-migration--stable-value (cdr entry))
+                        :stable-value
+                        (supertag-migration--stable-value rewritten))
+                  references)))))
+    (pcase-let ((`(,query-references . ,query-conflicts)
+                 (supertag-migration--audit-saved-tag-queries mapping)))
+      (setq references (append query-references references))
+      (dolist (conflict query-conflicts)
+        (push conflict conflicts)))
+    (when (hash-table-p supertag--view-configs)
+      (dolist (entry
+               (supertag-migration--sorted-table-entries supertag--view-configs))
+        (let ((rewritten
+               (supertag-migration--rewrite-tag-structured
+                (copy-tree (cdr entry)) mapping)))
+          (unless (equal (cdr entry) rewritten)
+            (push (list :kind :view :owner-id (car entry)
+                        :old-value (supertag-migration--stable-value (cdr entry))
+                        :stable-value
+                        (supertag-migration--stable-value rewritten))
+                  references)))))
+    (list :schema-mappings
+          (supertag-migration--sort-report-items schema-mappings)
+          :reference-mappings
+          (supertag-migration--sort-report-items references)
+          :unresolved-occurrences
+          (supertag-migration--sort-report-items unresolved)
+          :conflicts (supertag-migration--sort-report-items conflicts))))
+
+(defun supertag-migration--stable-tag-backup-report ()
+  "Return a read-only backup plan for Stable Semantic Tag migration."
+  (let ((report (supertag-migration--global-field-backup-report)))
+    (setq report
+          (plist-put report :migration-collections
+                     supertag-migration--stable-tag-collections))
+    (setq report
+          (plist-put
+           report :loaded-configs
+           (list :saved-query-count (length supertag-query-saved)
+                 :saved-query-sha256
+                 (supertag-migration--fingerprint supertag-query-saved)
+                 :view-count
+                 (if (hash-table-p supertag--view-configs)
+                     (hash-table-count supertag--view-configs) 0)
+                 :view-sha256
+                 (and (hash-table-p supertag--view-configs)
+                      (supertag-migration--fingerprint
+                       supertag--view-configs))
+                 :strategy :serialize-exact-loaded-values
+                 :backup-required t)))
+    report))
+
+(defun supertag-migration--build-stable-tag-audit ()
+  "Build the deterministic, read-only Stable Semantic Tag migration report."
+  (let* ((identity (supertag-migration--audit-stable-tag-identities))
+         (mappings (plist-get identity :tag-mappings))
+         (mapping (mapcar (lambda (item)
+                            (cons (plist-get item :old-id)
+                                  (plist-get item :stable-id)))
+                          mappings))
+         (inheritance
+          (supertag-migration--audit-stable-tag-inheritance mapping))
+         (references
+          (supertag-migration--audit-stable-tag-references
+           mapping (plist-get identity :alias-claims)))
+         (conflicts
+          (supertag-migration--sort-report-items
+           (append (plist-get identity :conflicts)
+                   (plist-get inheritance :conflicts)
+                   (plist-get references :conflicts))))
+         (unresolved (plist-get references :unresolved-occurrences)))
+    (list :safe-to-apply (and (null conflicts) (null unresolved))
+          :tag-mappings mappings
+          :reverse-mappings (plist-get identity :reverse-mappings)
+          :alias-mappings (plist-get identity :alias-mappings)
+          :inheritance-mappings
+          (plist-get inheritance :inheritance-mappings)
+          :schema-mappings (plist-get references :schema-mappings)
+          :reference-mappings (plist-get references :reference-mappings)
+          :unresolved-occurrences unresolved
+          :conflicts conflicts
+          :coverage
+          (list :tags (length mappings)
+                :aliases (length (plist-get identity :alias-mappings))
+                :inheritance
+                (length (plist-get inheritance :inheritance-mappings))
+                :schema (length (plist-get references :schema-mappings))
+                :references (length (plist-get references :reference-mappings))
+                :unresolved (length unresolved)
+                :blocked (+ (length conflicts) (length unresolved)))
+          :backup (supertag-migration--stable-tag-backup-report))))
+
+;;;###autoload
+(defun supertag-migration-audit-stable-tags ()
+  "Audit Stable Semantic Tag migration without modifying any live state."
+  (interactive)
+  (let ((report (supertag-migration--build-stable-tag-audit)))
+    (with-current-buffer (get-buffer-create supertag-migration-log-buffer)
+      (erase-buffer))
+    (supertag-migration--log "--- Stable Semantic Tag ID audit ---")
+    (supertag-migration--log "Safe to apply: %s"
+                             (if (plist-get report :safe-to-apply) "yes" "no"))
+    (supertag-migration--log "Coverage: %S" (plist-get report :coverage))
+    (dolist (section '(:tag-mappings :reverse-mappings :alias-mappings
+                        :inheritance-mappings :schema-mappings
+                        :reference-mappings :unresolved-occurrences :conflicts))
+      (let ((items (plist-get report section)))
+        (supertag-migration--log "\n%S (%d)" section (length items))
+        (dolist (item items)
+          (supertag-migration--log "  %S" item))))
+    (supertag-migration--log "\n:backup %S" (plist-get report :backup))
+    (message "Stable Tag audit: %s; conflicts=%d unresolved=%d"
+             (if (plist-get report :safe-to-apply) "safe" "blocked")
+             (length (plist-get report :conflicts))
+             (length (plist-get report :unresolved-occurrences)))
     (when (called-interactively-p 'interactive)
       (display-buffer supertag-migration-log-buffer))
     report))
