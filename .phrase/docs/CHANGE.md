@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task004 transactional node delete cleanup
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task003 durable roots + full save verification
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task002 ownership fixture + semantic fingerprint
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task001 Ownership Constitution and migration map

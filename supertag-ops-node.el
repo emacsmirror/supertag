@@ -16,6 +16,8 @@
 (require 'org-id)
 (require 'supertag-core-store)
 (require 'supertag-core-schema)
+(require 'supertag-core-transform)
+(require 'supertag-ops-relation)
 ;; Avoid requiring ops-field here to prevent circular deps via core-scan.
 ;; Use a forward declaration and call it when available.
 (declare-function supertag-field-remove "supertag-ops-field" (node-id tag-id field-name))
@@ -145,39 +147,18 @@ This operation is atomic and ensures no dangling references remain."
   (when node-id
     (let ((previous (supertag-node-get node-id)))
       (when previous
-        (supertag-ops-commit
-         :operation :delete
-         :collection :nodes
-         :id node-id
-         :previous previous
-         :perform (lambda ()
-                    ;; Custom deletion logic for relations and fields
-                    (let ((relations-table (supertag-store-get-collection :relations))
-                          (relations-to-delete '()))
-                      ;; Collect relations to delete
-                      (maphash
-                       (lambda (rel-id rel-data)
-                         (let ((relation
-                                (if (hash-table-p rel-data)
-                                    (let (plist)
-                                      (maphash (lambda (k v)
-                                                 (setq plist (plist-put plist k v)))
-                                               rel-data)
-                                      plist)
-                                  rel-data)))
-                           (when (or (equal (plist-get relation :from) node-id)
-                                     (equal (plist-get relation :to) node-id))
-                             (push rel-id relations-to-delete))))
-                       relations-table)
-                      ;; Delete relations
-                      (dolist (rel-id relations-to-delete)
-                        (supertag-store-remove-entity :relations rel-id)))
-                    ;; Remove field values
-                    (let ((fields-table (supertag-store-get-collection :fields)))
-                      (when (hash-table-p fields-table)
-                        (supertag-store-remove-entity :fields node-id)))
-                    (supertag-store-remove-entity :nodes node-id)
-                    nil))))))
+        (supertag-with-transaction
+          (supertag-ops-commit
+           :operation :delete
+           :collection :nodes
+           :id node-id
+           :previous previous
+           :perform (lambda ()
+                      (supertag-relation-delete-for-node node-id)
+                      (supertag-store-remove-entity :fields node-id)
+                      (supertag-store-remove-entity :field-values node-id)
+                      (supertag-store-remove-entity :nodes node-id)
+                      nil)))))))
 
 ;; 2.2 Tag Operations
 

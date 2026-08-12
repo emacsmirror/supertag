@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task004 Transactional node delete cleanup
+
+- Modify `supertag-ops-node.el`：删除 node 时不再直接扫描/remhash relations；统一调用 `supertag-relation-delete-for-node`，并在删除 node 前清理 legacy `:fields` 与 global `:field-values` per-node bucket；整个操作进入 `supertag-with-transaction`。
+- Modify `supertag-core-transform.el`：transaction rollback 对 `:fields` / `:field-values` 的 per-node nested hash table 使用同一个 direct restore 分支，避免 canonical entity normalization 把 hash table 压成 plist。
+- Modify `supertag-ops-relation.el`：transaction rollback 后复用 `supertag-index-rebuild-relations` 恢复 from/to derived indexes。
+- Modify `test/node-ops-test.el`：覆盖 incoming/outgoing relations、两类 field store、from/to indexes 的成功清理，以及后置 hook 失败后的完整 rollback。
+- Add `issue039`：记录旧删除路径的数据残留、根因、修复和真实 Vault 确认项。
+
+Behavior：公开命令和返回值不变；成功删除不再遗留 field bucket、relation 或 index entry。失败删除恢复 node、surviving peer ref cache、relations、fields 与 indexes。
+
+Risk：失败事务会执行一次 O(R) relation index rebuild；成功路径仍使用既有增量 index operations。未改变 Org headline 删除或 reciprocal link 文件行为。
+
+Verification：新增两条 ERT 先红后绿；`./test/run-tests.sh node tx field-ref` 39/39 通过；修改文件 byte-compile 仅有既有 obsolete/docstring/forward declaration warning；`git diff --check` 通过；提交态临时 clone 全量 ERT 422/422 通过。
+
 ## 2026-08-12 — task003 Durable root contract 与完整保存验证
 
 - Modify `supertag-core-store.el`：将 `:automations`、`:sync-conflicts` 纳入唯一 Store root contract；补齐 entity-plist collection 声明，并移除代码注释中的 Store 全局单一真相源表述。

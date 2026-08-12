@@ -17,6 +17,7 @@
 
 (require 'supertag-core-store)
 (require 'supertag-ops-node)
+(require 'supertag-ops-relation)
 
 ;;; --- Helpers ---
 
@@ -28,13 +29,29 @@
           (supertag-db-file (expand-file-name "supertag-db.el" tmp))
           (supertag-db-backup-directory (expand-file-name "backups" tmp))
           (supertag--store nil)
-          (supertag--store-origin nil))
+          (supertag--store-origin nil)
+          (supertag--index-relations-by-from (make-hash-table :test 'equal))
+          (supertag--index-relations-by-to (make-hash-table :test 'equal)))
      (unwind-protect
          (progn
            (supertag--ensure-store)
            ,@body)
        (ignore-errors
          (delete-directory tmp t)))))
+
+(defun node-ops-test--seed-delete-dependencies ()
+  "Seed one node with incoming/outgoing relations and both field stores."
+  (supertag-node-create
+   '(:id "victim" :title "Victim" :file "/tmp/victim.org"))
+  (supertag-node-create
+   '(:id "peer" :title "Peer" :file "/tmp/peer.org"))
+  (let ((outgoing (supertag-relation-create
+                   '(:type :reference :from "victim" :to "peer")))
+        (incoming (supertag-relation-create
+                   '(:type :reference :from "peer" :to "victim"))))
+    (supertag-store-put-legacy-field "victim" "tag" "legacy" "old")
+    (supertag-store-put-field-value "victim" "global" "new")
+    (list (plist-get outgoing :id) (plist-get incoming :id))))
 
 ;;; --- Node Create Tests ---
 
@@ -109,6 +126,50 @@
       (should (supertag-node-get id))
       (supertag-node-delete id)
       (should-not (supertag-node-get id)))))
+
+(ert-deftest node-ops-delete-cleans-relations-fields-and-indexes ()
+  "Deleting a node leaves no relation, field bucket, or relation index entry."
+  (node-ops-test--with-clean-store
+    (let ((relation-ids (node-ops-test--seed-delete-dependencies)))
+      (supertag-node-delete "victim")
+      (should-not (supertag-node-get "victim"))
+      (should-not (gethash "victim" (supertag-store-get-collection :fields)))
+      (should-not (gethash "victim"
+                           (supertag-store-get-collection :field-values)))
+      (dolist (relation-id relation-ids)
+        (should-not (supertag-relation-get relation-id)))
+      (dolist (entity-id '("victim" "peer"))
+        (should-not (gethash entity-id supertag--index-relations-by-from))
+        (should-not (gethash entity-id supertag--index-relations-by-to))))))
+
+(ert-deftest node-ops-delete-rolls-back-node-dependencies-and-indexes ()
+  "A failed node delete restores its node, relations, fields, and indexes."
+  (node-ops-test--with-clean-store
+    (let* ((relation-ids (node-ops-test--seed-delete-dependencies))
+           (before-victim (copy-tree (supertag-node-get "victim")))
+           (before-peer (copy-tree (supertag-node-get "peer")))
+           (supertag-after-operation-hook
+            (list (lambda (event)
+                    (when (and (eq (plist-get event :operation) :delete)
+                               (eq (plist-get event :collection) :nodes))
+                      (error "injected node delete failure"))))))
+      (should-error (supertag-node-delete "victim"))
+      (should (equal before-victim (supertag-node-get "victim")))
+      (should (equal before-peer (supertag-node-get "peer")))
+      (should (equal "old"
+                     (gethash "legacy"
+                              (gethash "tag"
+                                       (gethash "victim"
+                                                (supertag-store-get-collection
+                                                 :fields))))))
+      (should (equal "new"
+                     (supertag-store-get-field-value "victim" "global")))
+      (dolist (relation-id relation-ids)
+        (should (supertag-relation-get relation-id)))
+      (should (gethash (nth 0 relation-ids)
+                       (gethash "victim" supertag--index-relations-by-from)))
+      (should (gethash (nth 1 relation-ids)
+                       (gethash "victim" supertag--index-relations-by-to))))))
 
 ;;; --- Node Update Tests ---
 

@@ -66,17 +66,13 @@ Dispatches on the shape of PATH:
 - (:fields NODE-ID TAG-ID) — a per-tag hash table inside the legacy
   `:fields' collection (only ever recorded via
   `supertag-store-put-legacy-field''s node/tag creation markers).
-- (:fields NODE-ID) — a per-node hash table inside the legacy `:fields'
-  collection. These three `:fields' arms restore by direct
+- (:fields NODE-ID) or (:field-values NODE-ID) — a per-node hash table.
+  These nested-collection arms restore by direct
   `puthash'/`remhash' on the live nested hash tables — never through
   `supertag-store-put-entity'/`supertag--normalize-entity', which would
   flatten a hash-table OLD-VALUE into a plist.
 - (:field-values NODE-ID FIELD-ID) — a single field value.
-- (COLLECTION ID) — a canonical entity (also covers the :field-values
-  \"this node's bucket didn't exist yet\" marker, which always has
-  EXISTED-P nil and therefore only ever takes the remove branch, so it
-  never risks flattening a per-node field hash table into a plist via
-  `supertag--normalize-entity').
+- (COLLECTION ID) — a canonical entity, excluding the two nested field roots.
 - (COLLECTION) — a whole-collection replace/clear."
   (let ((path (nth 0 entry))
         (existed-p (nth 1 entry))
@@ -98,9 +94,10 @@ Dispatches on the shape of PATH:
           (if existed-p
               (puthash tag-id old-value node-table)
             (remhash tag-id node-table)))))
-     ((and (eq (nth 0 path) :fields) (= (length path) 2))
+     ((and (memq (nth 0 path) '(:fields :field-values))
+           (= (length path) 2))
       (let ((node-id (nth 1 path))
-            (fields-root (supertag-store-get-collection :fields)))
+            (fields-root (supertag-store-get-collection (nth 0 path))))
         (if existed-p
             (puthash node-id old-value fields-root)
           (remhash node-id fields-root))))

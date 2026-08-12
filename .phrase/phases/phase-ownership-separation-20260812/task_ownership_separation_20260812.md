@@ -20,10 +20,11 @@
   - 影响范围：`supertag-core-store.el`、`supertag-core-persistence.el`、persistence tests
   - 完成：2026-08-12；定向 persistence/canonical ERT 51/51 通过；提交态临时 clone 全量 ERT 420/420 通过
 
-- task004 [ ] 修复 node delete 的 relation/field 清理完整性
+- task004 [x] 修复 node delete 的 relation/field 清理完整性
   - 产出：node delete 通过 relation operations 清理关系，并同时清理 legacy `:fields` 与 global `:field-values`
   - 验证方式：删除后无 dangling relation、field value、from/to index entry；transaction rollback 可恢复
   - 影响范围：`supertag-ops-node.el`、relation/field tests
+  - 完成：2026-08-12；定向 node/transaction/field-reference ERT 39/39 通过；提交态临时 clone 全量 ERT 422/422 通过
 
 - task005 [ ] 修正 Document Projector 的身份与增量 parity
   - 产出：ID-less heading 不再产生不可持久身份；hash 覆盖全部 Document Facts；point/full sync 使用同一 reconciliation

@@ -822,4 +822,7 @@ This function finds all rollup relations and recalculates their values."
     (message "Synced %d field synchronization relations" count)
     count))
 
+(add-hook 'supertag-after-transaction-rollback-hook
+          #'supertag-index-rebuild-relations)
+
 (provide 'supertag-ops-relation)
