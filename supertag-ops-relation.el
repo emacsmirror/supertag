@@ -23,18 +23,6 @@
 
 ;;; --- Reference Field Ownership ---
 
-(defconst supertag-reference-default-field-id "refs"
-  "Default global field id used to store generic references.")
-
-(defconst supertag-reference-default-field-name "Refs"
-  "Default global field name used to store generic references.")
-
-(defconst supertag-reference--missing (list :supertag-reference-missing)
-  "Sentinel used to detect missing reference field values.")
-
-(defvar supertag-reference--materializing nil
-  "Non-nil while lazily materializing reference fields into relations.")
-
 (defvar supertag-relation--last-error nil
   "Last error produced by `supertag-relation-add-reference`.
 Value is a plist:
@@ -77,10 +65,6 @@ Reciprocal links are no longer written."
                            candidates))))
     cleaned))
 
-(defun supertag-reference--normalize-field-ids (fields)
-  "Normalize FIELDS into a list of field-id strings."
-  (supertag-reference--normalize-id-list fields))
-
 (defun supertag-reference--pack-targets (targets)
   "Pack TARGETS list into stored field form."
   (pcase targets
@@ -88,92 +72,23 @@ Reciprocal links are no longer written."
     (`(,single) single)
     (_ targets)))
 
-(defun supertag-reference--effective-fields (relation)
-  "Return effective field ids for RELATION, defaulting to Refs."
-  (let ((fields (supertag-reference--normalize-field-ids (plist-get relation :fields))))
-    (if (null fields)
-        (list supertag-reference-default-field-id)
-      fields)))
-
-(defun supertag-reference--relation-has-field-p (relation field-id)
-  "Return non-nil when RELATION is associated with FIELD-ID."
-  (member field-id (supertag-reference--effective-fields relation)))
-
 (defun supertag-reference--collect-targets (from-id field-id)
-  "Collect reference targets for FROM-ID filtered by FIELD-ID."
-  (let ((relations (supertag-relation-find-by-from from-id :reference)))
-    (cl-remove-duplicates
-     (cl-loop for rel in relations
-              when (supertag-reference--relation-has-field-p rel field-id)
-              collect (plist-get rel :to))
-     :test #'string=)))
-
-(defun supertag-reference--merge-field-ids (current new-fields)
-  "Merge NEW-FIELDS into CURRENT field list, preserving defaults."
-  (let* ((base (if (null current)
-                   (list supertag-reference-default-field-id)
-                 (supertag-reference--normalize-field-ids current)))
-         (extra (supertag-reference--normalize-field-ids new-fields)))
-    (cl-remove-duplicates (append base extra) :test #'string=)))
-
-(defun supertag-reference--update-field-cache (from-id field-id)
-  "Sync FIELD-ID value for FROM-ID from reference relations."
-  (when (and from-id field-id)
-    (unless supertag-reference--materializing
-      (let* ((raw (supertag-store-get-field-value from-id field-id supertag-reference--missing))
-             (legacy (if (eq raw supertag-reference--missing)
-                         '()
-                       (supertag-reference--normalize-id-list raw)))
-             (current (supertag-reference--collect-targets from-id field-id))
-             (missing (cl-set-difference legacy current :test #'string=)))
-        (when missing
-          (let ((supertag-reference--materializing t))
-            (dolist (target missing)
-              (supertag-relation-create
-               (list :type :reference
-                     :from from-id
-                     :to target
-                     :fields (list field-id))))))))
-    (let* ((targets (supertag-reference--collect-targets from-id field-id))
-           (packed (supertag-reference--pack-targets targets)))
-      (supertag-store-put-field-value from-id field-id packed t))))
+  "Read authoritative reference targets for FROM-ID/FIELD-ID."
+  (supertag-reference--normalize-id-list
+   (supertag-store-get-field-value from-id field-id)))
 
 (defun supertag-reference-get-targets (from-id field-id)
-  "Return reference targets for FROM-ID/FIELD-ID, lazily materializing legacy values."
+  "Return authoritative reference targets for FROM-ID/FIELD-ID."
   (when (and from-id field-id)
-    (supertag-reference--update-field-cache from-id field-id)
     (supertag-reference--collect-targets from-id field-id)))
 
 (defun supertag-reference-set-targets (from-id field-id targets)
-  "Set reference TARGETS for FROM-ID/FIELD-ID via relation updates."
-  (let* ((desired (supertag-reference--normalize-id-list targets))
-         (current (supertag-reference--collect-targets from-id field-id))
-         (removed (cl-set-difference current desired :test #'string=))
-         (added (cl-set-difference desired current :test #'string=)))
-    ;; Remove field membership (or relation) for removed targets.
-    (dolist (target removed)
-      (dolist (rel (supertag-relation-find-between from-id target :reference))
-        (let* ((rel-fields (supertag-reference--effective-fields rel))
-               (new-fields (remove field-id rel-fields)))
-          (if (null new-fields)
-              (supertag-relation-delete (plist-get rel :id))
-            (supertag-relation-update
-             (plist-get rel :id)
-             (lambda (old) (plist-put (copy-sequence old) :fields new-fields)))))))
-    ;; Add references for new targets.
-    (dolist (target added)
-      (if-let* ((relation (car (supertag-relation-find-between
-                                from-id target :reference))))
-          (supertag-relation-update
-           (plist-get relation :id)
-           (lambda (old)
-             (plist-put (copy-sequence old) :fields
-                        (supertag-reference--merge-field-ids
-                         (plist-get old :fields) (list field-id)))))
-        (supertag-relation-create
-         (list :type :reference :from from-id :to target
-               :fields (list field-id)))))
-    (supertag-reference--update-field-cache from-id field-id)
+  "Set authoritative reference TARGETS and reconcile their projection."
+  (let ((desired (supertag-reference--normalize-id-list targets)))
+    (supertag-with-transaction
+      (supertag-store-put-field-value
+       from-id field-id (supertag-reference--pack-targets desired) t)
+      (supertag-relation-reconcile-field-reference from-id field-id))
     desired))
 
 ;;; --- Internal Helper ---
@@ -219,34 +134,85 @@ Implements immediate error reporting as preferred by the user."
    ((stringp name) (intern (concat ":" name)))
    (t (error "Unsupported property key: %S" name))))
 
-(defun supertag-generate-relation-id (from-id to-id type)
-  "Generate a deterministic relation ID based on FROM-ID, TO-ID, and TYPE.
-Uses SHA1 hash for consistent ID generation, preventing duplicates."
-  (format "rel-%s" (secure-hash 'sha1 (format "%s|%s|%s" from-id to-id type))))
+(defun supertag-relation-kind (relation)
+  "Return RELATION's explicit or safely inferred ownership kind."
+  (or (plist-get relation :kind)
+      (pcase (plist-get relation :origin)
+        (:org (pcase (plist-get relation :type)
+                (:node-tag :tag-membership)
+                (:reference :document-link)
+                (_ :legacy-relation)))
+        (:field-value (if (eq (plist-get relation :type) :reference)
+                          :field-reference
+                        :legacy-relation))
+        (:semantic :semantic-edge))
+      (pcase (plist-get relation :type)
+        (:node-tag :tag-membership)
+        (:reference :legacy-reference)
+        (_ :semantic-edge))))
 
-(defun supertag--relation-update-node-references (from-id to-id operation)
-  "Private helper to update reference properties on nodes.
-OPERATION can be 'add or 'remove."
-  (let ((from-node (supertag-store-get-entity :nodes from-id))
-        (to-node (supertag-store-get-entity :nodes to-id)))
-    (when (and from-node to-node)
-      ;; Update the 'from' node's :ref-to list
-      (let* ((ref-to-list (or (plist-get from-node :ref-to) '()))
-             (new-ref-to (if (eq operation 'add)
-                             (if (member to-id ref-to-list) ref-to-list (cons to-id ref-to-list))
-                           (remove to-id ref-to-list))))
-        (supertag-store-put-entity :nodes from-id
-                                   (plist-put (copy-sequence from-node) :ref-to new-ref-to)))
+(defun supertag-relation-kind-p (relation kind)
+  "Return non-nil when RELATION has ownership KIND."
+  (eq (supertag-relation-kind relation) kind))
 
-      ;; Update the 'to' node's :ref-from and :ref-count
-      (let* ((ref-from-list (or (plist-get to-node :ref-from) '()))
-             (new-ref-from (if (eq operation 'add)
-                               (if (member from-id ref-from-list) ref-from-list (cons from-id ref-from-list))
-                             (remove from-id ref-from-list)))
-             (new-ref-count (length new-ref-from)))
-        (let* ((p-node (plist-put (copy-sequence to-node) :ref-from new-ref-from))
-               (p-node (plist-put p-node :ref-count new-ref-count)))
-          (supertag-store-put-entity :nodes to-id p-node))))))
+(defun supertag-relation-field-reference-p (relation &optional field-id)
+  "Return non-nil when RELATION projects FIELD-ID's authoritative value."
+  (and (supertag-relation-kind-p relation :field-reference)
+       (or (null field-id)
+           (equal field-id (plist-get relation :field-id)))))
+
+(defun supertag-relation--validate-owner (data)
+  "Validate DATA's explicit owner, allowing unclassified legacy references."
+  (when-let* ((kind (plist-get data :kind)))
+    (let ((type (plist-get data :type))
+          (origin (plist-get data :origin))
+          (expected-origin
+           (pcase kind
+             (:document-link :org)
+             (:field-reference :field-value)
+             (:tag-membership :org)
+             (:semantic-edge :semantic)
+             (_ (error "Unknown relation kind: %S" kind)))))
+      (unless (eq origin expected-origin)
+        (error "%S relations must use %S origin: %S"
+               kind expected-origin data))
+      (when (and (eq kind :field-reference)
+                 (not (stringp (plist-get data :field-id))))
+        (error "Field Reference missing string :field-id: %S" data))
+      (when (and (memq kind '(:document-link :field-reference))
+                 (not (eq type :reference)))
+        (error "%S relations must use :reference type: %S" kind data))
+      (when (and (eq kind :tag-membership)
+                 (not (eq type :node-tag)))
+        (error "Tag Membership must use :node-tag type: %S" data))))
+  data)
+
+(defun supertag-relation--normalize-owner (data)
+  "Return DATA with an explicit relation owner."
+  (let* ((type (plist-get data :type))
+         (kind (or (plist-get data :kind)
+                   (if (eq type :node-tag)
+                       :tag-membership
+                     :semantic-edge)))
+         (expected-origin
+          (pcase kind
+            (:document-link :org)
+            (:field-reference :field-value)
+            (:tag-membership :org)
+            (:semantic-edge :semantic)
+            (_ (error "Unknown relation kind: %S" kind))))
+         (origin (or (plist-get data :origin) expected-origin)))
+    (supertag-relation--validate-owner
+     (plist-put (plist-put data :kind kind) :origin origin))))
+
+(defun supertag-generate-relation-id (from-id to-id type &optional kind field-id)
+  "Generate a deterministic relation ID for one owned relation fact."
+  (let ((identity (format "%s|%s|%s" from-id to-id type)))
+    ;; Reference kinds may coexist between the same two nodes; Field
+    ;; References additionally coexist once per authoritative field.
+    (when (eq type :reference)
+      (setq identity (format "%s|%s|%s" identity kind (or field-id ""))))
+    (format "rel-%s" (secure-hash 'sha1 identity))))
 
 
 ;;; --- Relation Operations ---
@@ -257,11 +223,14 @@ OPERATION can be 'add or 'remove."
   "Create a new relation using the unified commit system.
 RELATION-DATA is a plist of relation properties.
 Returns the created relation data."
-  (let* ((data (supertag-ops-relation--ensure-plist relation-data))
+  (let* ((data (supertag-relation--normalize-owner
+                (supertag-ops-relation--ensure-plist relation-data)))
          (type (plist-get data :type))
          (from (plist-get data :from))
          (to   (plist-get data :to))
-         (rel-id (supertag-generate-relation-id from to type))
+         (kind (plist-get data :kind))
+         (field-id (plist-get data :field-id))
+         (rel-id (supertag-generate-relation-id from to type kind field-id))
          (relation-plist (plist-put data :id rel-id)))
 
     ;; Ensure created-at exists but don't overwrite if caller provided it.
@@ -272,9 +241,14 @@ Returns the created relation data."
     (supertag--validate-relation-data relation-plist)
 
     ;; Check if relation already exists
-    (let* ((existing-relations (supertag-relation-find-between from to type))
+    (let* ((existing-relations (supertag-relation-find-between from to type kind))
            ;; Be defensive against malformed/nil entries in relation buckets.
-           (existing-relation (cl-find-if #'identity existing-relations)))
+           (existing-relation
+            (cl-find-if
+             (lambda (relation)
+               (or (not (eq kind :field-reference))
+                   (equal field-id (plist-get relation :field-id))))
+             existing-relations)))
       (if existing-relation
           ;; Return the first valid existing relation.
           existing-relation
@@ -289,9 +263,6 @@ Returns the created relation data."
                     (supertag-store-put-entity :relations rel-id relation-plist)
                     ;; Maintain relation indexes
                     (supertag-index--on-relation-added rel-id from to)
-                    (when (or (eq type :reference)
-                              (supertag-relation-type-get type))
-                      (supertag--relation-update-node-references from to 'add))
                     relation-plist))))))
 
 (defun supertag-relation-get (id)
@@ -315,7 +286,10 @@ Returns the updated relation data."
        :perform (lambda ()
                   (let ((updated-relation (funcall updater previous)))
                     (when updated-relation
-                      (let ((final-relation (plist-put updated-relation :modified-at (current-time))))
+                      (let ((final-relation
+                             (supertag-relation--validate-owner
+                              (plist-put updated-relation :modified-at
+                                         (current-time)))))
                         (supertag--validate-relation-data final-relation)
                         ;; Update relation indexes if :from or :to changed
                         (let ((old-from (plist-get previous :from))
@@ -330,7 +304,7 @@ Returns the updated relation data."
                         final-relation))))))))
 
 (defun supertag-relation-delete (id)
-  "Delete a relation by its ID and update node ref-counts if applicable.
+  "Delete a relation by its ID.
 ID is the unique identifier of the relation.
 Returns the deleted relation data."
   (let ((previous (supertag-relation-get id)))
@@ -345,36 +319,29 @@ Returns the deleted relation data."
                   ;; Maintain relation indexes
                   (let ((from-id (plist-get previous :from))
                         (to-id (plist-get previous :to)))
-                    (supertag-index--on-relation-removed id from-id to-id)
-                    (when (or (eq (plist-get previous :type) :reference)
-                              (supertag-relation-type-get (plist-get previous :type)))
-                      (supertag--relation-update-node-references from-id to-id 'remove)))
+                    (supertag-index--on-relation-removed id from-id to-id))
                   nil)))))
 
 ;; 5.2 Reference Service
 
 (defun supertag-relation-document-link-p (relation)
   "Return non-nil when RELATION is an Org-owned Document Link projection."
-  (and (eq (plist-get relation :kind) :document-link)
+  (and (supertag-relation-kind-p relation :document-link)
        (eq (plist-get relation :origin) :org)))
 
 (defun supertag-relation-project-document-link (from-id to-id)
   "Project the Org link FROM-ID -> TO-ID without modifying either Org file.
-Partially classified Document Links are completed in place.  Fully unowned
-legacy references remain unchanged until their ownership can be classified."
+Partially classified Document Links are completed in place."
   (let ((existing
          (cl-find-if #'identity
                      (supertag-relation-find-between
-                      from-id to-id :reference))))
+                      from-id to-id :reference :document-link))))
     (cond
      ((null existing)
       (supertag-relation-create
        (list :type :reference :from from-id :to to-id
              :kind :document-link :origin :org)))
      ((supertag-relation-document-link-p existing)
-      existing)
-     ((and (null (plist-get existing :kind))
-           (null (plist-get existing :origin)))
       existing)
      ((and (memq (plist-get existing :kind) '(nil :document-link))
            (memq (plist-get existing :origin) '(nil :org)))
@@ -388,10 +355,66 @@ legacy references remain unchanged until their ownership can be classified."
       (error "Document Link conflicts with owned relation %s"
              (plist-get existing :id))))))
 
+(defun supertag-relation-project-field-reference (from-id to-id field-id)
+  "Project authoritative FROM-ID/FIELD-ID value pointing to TO-ID."
+  (supertag-relation-create
+   (list :type :reference :from from-id :to to-id
+         :kind :field-reference :origin :field-value :field-id field-id)))
+
+(defun supertag-relation-reconcile-field-reference (from-id field-id)
+  "Make FROM-ID/FIELD-ID's Field Reference projection match its value."
+  (let* ((desired (supertag-reference--collect-targets from-id field-id))
+         (current
+          (cl-remove-if-not
+           (lambda (relation)
+             (supertag-relation-field-reference-p relation field-id))
+           (supertag-relation-find-by-from
+            from-id :reference :field-reference))))
+    (dolist (relation current)
+      (unless (member (plist-get relation :to) desired)
+        (supertag-relation-delete (plist-get relation :id))))
+    (dolist (target desired)
+      (unless (cl-find target current
+                       :key (lambda (relation) (plist-get relation :to))
+                       :test #'string=)
+        (supertag-relation-project-field-reference from-id target field-id)))
+    desired))
+
+(defun supertag-relation-reconcile-field-references ()
+  "Rebuild every Field Reference projection from global field values."
+  (let (stale)
+    (maphash
+     (lambda (_id relation)
+       (when (supertag-relation-field-reference-p relation)
+         (let ((field-id (plist-get relation :field-id)))
+           (unless (and (eq :node-reference
+                            (plist-get
+                             (supertag-store-get-field-definition field-id)
+                             :type))
+                        (member
+                         (plist-get relation :to)
+                         (supertag-reference--collect-targets
+                          (plist-get relation :from) field-id)))
+             (push (plist-get relation :id) stale)))))
+     (supertag-store-get-collection :relations))
+    (dolist (id stale)
+      (supertag-relation-delete id))
+    (maphash
+     (lambda (node-id values)
+       (when (hash-table-p values)
+         (maphash
+          (lambda (field-id _value)
+            (when (eq :node-reference
+                      (plist-get (supertag-store-get-field-definition field-id)
+                                 :type))
+              (supertag-relation-reconcile-field-reference node-id field-id)))
+          values)))
+     (supertag-store-get-collection :field-values))))
+
 (defun supertag-relation-add-reference (from-id to-id)
-  "Create a reference from FROM-ID to TO-ID without modifying Org files.
-Returns t on success, nil on failure.  Document commands write their one
-physical forward link before projecting it through the scanner."
+  "Create a database-owned Semantic Edge from FROM-ID to TO-ID.
+Returns t on success and nil on failure.  Document Links and Field References
+use their projection functions instead."
   (setq supertag-relation--last-error nil)
   (cond
    ((or (not (stringp from-id)) (string-empty-p from-id))
@@ -409,7 +432,8 @@ physical forward link before projecting it through the scanner."
    (t
     (condition-case rel-err
         (if (supertag-relation-create
-             (list :type :reference :from from-id :to to-id))
+             (list :type :reference :from from-id :to to-id
+                   :kind :semantic-edge :origin :semantic))
             t
           (supertag-relation--set-last-error
            :db-create-failed
@@ -421,49 +445,68 @@ physical forward link before projecting it through the scanner."
         (error-message-string rel-err)))))))
 ;; 5.3 Relation Query Operations
 
-(defun supertag-relation-find-by-from (from-id &optional type)
+(defun supertag-relation-find-by-from (from-id &optional type kind)
   "Find all relations originating from a specific entity.
 FROM-ID is the unique identifier of the source entity.
-TYPE is an optional relation type filter.
+TYPE and KIND are optional relation filters.
 Returns a list of relations.
 Uses the in-memory from-index for O(k) lookup instead of O(N) scan."
-  (supertag-index-find-by-from from-id type))
+  (let ((relations (supertag-index-find-by-from from-id type)))
+    (if kind
+        (cl-remove-if-not
+         (lambda (relation) (supertag-relation-kind-p relation kind))
+         relations)
+      relations)))
 
-(defun supertag-relation-find-by-to (to-id &optional type)
+(defun supertag-relation-find-by-to (to-id &optional type kind)
   "Find all relations targeting a specific entity.
 TO-ID is the unique identifier of the target entity.
-TYPE is an optional relation type filter.
+TYPE and KIND are optional relation filters.
 Returns a list of relations.
 Uses the in-memory to-index for O(k) lookup instead of O(N) scan."
-  (supertag-index-find-by-to to-id type))
+  (let ((relations (supertag-index-find-by-to to-id type)))
+    (if kind
+        (cl-remove-if-not
+         (lambda (relation) (supertag-relation-kind-p relation kind))
+         relations)
+      relations)))
 
-(defun supertag-relation-find-between (from-id to-id &optional type)
+(defun supertag-relation-find-between (from-id to-id &optional type kind)
   "Find all relations connecting two specific entities.
 FROM-ID is the unique identifier of the source entity.
 TO-ID is the unique identifier of the target entity.
-TYPE is an optional relation type filter.
+TYPE and KIND are optional relation filters.
 Returns a list of relations.
 Uses the in-memory from-index for O(k) lookup instead of O(N) scan."
-  (supertag-index-find-between from-id to-id type))
+  (let ((relations (supertag-index-find-between from-id to-id type)))
+    (if kind
+        (cl-remove-if-not
+         (lambda (relation) (supertag-relation-kind-p relation kind))
+         relations)
+      relations)))
 
 ;; 5.3 Relation Cleanup Operations
 
 (defun supertag-relation-cleanup-duplicates ()
   "Clean up duplicate relations in the database.
-Keeps the first relation for each unique (from, to, type) combination."
+Keeps the first relation for each owned relation identity."
   (interactive)
   (let ((relations (supertag-store-get-collection :relations))
         (relation-groups (make-hash-table :test 'equal))
         (duplicates-found 0)
         (removed-count 0))
 
-    ;; Group relations by (from, to, type)
+    ;; Projection kinds and Field IDs are distinct facts even with the same
+    ;; endpoints and relation type.
     (when (hash-table-p relations)
       (maphash (lambda (id relation-data)
                  (let* ((from (plist-get relation-data :from))
                         (to (plist-get relation-data :to))
                         (type (plist-get relation-data :type))
-                        (key (format "%s|%s|%s" from to type)))
+                        (kind (supertag-relation-kind relation-data))
+                        (field-id (plist-get relation-data :field-id))
+                        (key (format "%s|%s|%s|%s|%s"
+                                     from to type kind (or field-id ""))))
                    (when (and from to type)
                      (let ((existing-group (gethash key relation-groups)))
                        (if existing-group
@@ -658,7 +701,8 @@ Return the derived value without storing it in a node or tag entity."
              (to-id (plist-get relation :to))
              (rollup-field (plist-get relation :rollup-field))
              (rollup-function (plist-get relation :rollup-function))
-             (related-entities (supertag-relation-find-by-from from-id)))
+             (related-entities
+              (supertag-relation-find-by-from from-id nil :semantic-edge)))
 
         (when (and rollup-field rollup-function)
           ;; Collect values from related entities

@@ -206,9 +206,12 @@
     (supertag-node-create
      '(:id "target" :title "Target" :file "/tmp/target.org"))
     (supertag-store-put-field-value "source" "status" "active")
-    (supertag-relation-create-notion-style
-     '(:type :sync-field :from "source" :to "target"
-       :sync-fields ("status")))
+    (let ((relation
+           (supertag-relation-create-notion-style
+            '(:type :sync-field :from "source" :to "target"
+              :sync-fields ("status")))))
+      (should (eq :semantic-edge (plist-get relation :kind)))
+      (should (eq :semantic (plist-get relation :origin))))
     (should (equal "active"
                    (supertag-store-get-field-value "target" "status")))
     (should-not

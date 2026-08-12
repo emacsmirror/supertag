@@ -43,3 +43,4 @@
 - issue041 [ ] Reindex 把未知 Org Tag Occurrence 静默注册为 Semantic Tag（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_tag_occurrence_semantic_tag_20260812.md）
 - issue042 [ ] Reindex 导入 Document Link 时向目标 Org 写入 reciprocal link（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_document_link_projection_writes_org_20260812.md）
 - issue043 [ ] Org reindex 契约失真且冷重建受文件顺序影响（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_org_reindex_contract_20260812.md）
+- issue044 [ ] Reference relation 混合三个 owner，字段修改会误删 Document Link / Semantic Edge（实现与回归完成，待用户真实 Vault 确认；phase-ownership-separation-20260812/issue_relation_ownership_separation_20260812.md）

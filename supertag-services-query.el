@@ -295,17 +295,19 @@ This reads the global field Store."
 
 ;;; --- Extended Query System for Relations and Databases ---
 
-(defun supertag-query-related (entity-id &optional relation-type direction)
+(defun supertag-query-related (entity-id &optional relation-type direction relation-kind)
   "Query entities related to ENTITY-ID.
-RELATION-TYPE optionally filters by relation type.
+RELATION-TYPE and RELATION-KIND optionally filter relations.
 DIRECTION can be :from, :to, or nil (both directions).
 Returns list of (related-id . related-data) pairs."
   (let ((relations-from (when (or (null direction) (eq direction :from))
                          (require 'supertag-ops-relation)
-                         (supertag-relation-find-by-from entity-id relation-type)))
+                         (supertag-relation-find-by-from
+                          entity-id relation-type relation-kind)))
         (relations-to (when (or (null direction) (eq direction :to))
                        (require 'supertag-ops-relation)
-                       (supertag-relation-find-by-to entity-id relation-type)))
+                       (supertag-relation-find-by-to
+                        entity-id relation-type relation-kind)))
         (results '()))
 
     ;; Collect related entities from outgoing relations
@@ -523,8 +525,11 @@ Returns enriched results with related data."
               (dolist (relation-config relation-configs)
                 (let* ((relation-name (plist-get relation-config :name))
                        (relation-type (plist-get relation-config :type))
+                       (relation-kind (plist-get relation-config :kind))
                        (direction (plist-get relation-config :direction))
-                       (related-entities (supertag-query-related entity-id relation-type direction)))
+                       (related-entities
+                        (supertag-query-related
+                         entity-id relation-type direction relation-kind)))
 
                   ;; Add related entities to the record
                   (setq enriched-data

@@ -62,24 +62,6 @@ Prefer TAG-ID's resolved schema, then the global definition registry."
 
 ;; 4.1 Field Value Operations
 
-(defun supertag-field--sync-node-references (node-id old-value new-value)
-  "Sync :reference relations for a :node-reference field change.
-NODE-ID is the source node. OLD-VALUE and NEW-VALUE are the previous and
-new field values (any shape accepted by
-`supertag-field-normalize-node-reference-list').
-This operation never modifies Org documents."
-  (let* ((old-targets (supertag-field-normalize-node-reference-list old-value))
-         (new-targets (supertag-field-normalize-node-reference-list new-value))
-         (removed (cl-set-difference old-targets new-targets :test #'string=))
-         (added (cl-set-difference new-targets old-targets :test #'string=)))
-    ;; Remove stale relations.
-    (dolist (target removed)
-      (dolist (rel (supertag-relation-find-between node-id target :reference))
-        (supertag-relation-delete (plist-get rel :id))))
-    ;; Add new references via the Store-only relation service.
-    (dolist (target added)
-      (supertag-relation-add-reference node-id target))))
-
 (defun supertag-field-set (node-id tag-id field-name value)
   "Set a global field value for NODE-ID.
 NODE-ID is the unique identifier of the node.
@@ -97,20 +79,23 @@ FIELD-NAME is resolved to the canonical global field id."
       (if (and (not (eq old-raw supertag-field--missing))
                (equal old value))
           old
-        (when (eq (plist-get field-def :type) :node-reference)
-          (supertag-field--sync-node-references node-id old value))
-        (supertag-node-set-global-field node-id fid value)
-        (when (and (boundp 'supertag-automation-sync--enabled)
-                   supertag-automation-sync--enabled)
-          (require 'supertag-automation-sync)
-          (when (fboundp
-                 'supertag-automation-sync--process-global-field-change)
-            (supertag-automation-sync--process-global-field-change
-             node-id fid old value)))
-        (when supertag-debug-log-field-events
-          (message "supertag-field-set node=%s tag=%s field=%s old=%S new=%S"
-                   node-id tag-id fid old value))
-        value))))
+        (supertag-with-transaction
+          ;; The field value is authoritative; its relation is only a
+          ;; rebuildable query projection.
+          (supertag-node-set-global-field node-id fid value)
+          (when (eq (plist-get field-def :type) :node-reference)
+            (supertag-relation-reconcile-field-reference node-id fid))
+          (when (and (boundp 'supertag-automation-sync--enabled)
+                     supertag-automation-sync--enabled)
+            (require 'supertag-automation-sync)
+            (when (fboundp
+                   'supertag-automation-sync--process-global-field-change)
+              (supertag-automation-sync--process-global-field-change
+               node-id fid old value)))
+          (when supertag-debug-log-field-events
+            (message "supertag-field-set node=%s tag=%s field=%s old=%S new=%S"
+                     node-id tag-id fid old value))
+          value)))))
 
 (defun supertag-field-set-many (node-id specs)
   "Set global field SPECS for NODE-ID.
@@ -232,13 +217,17 @@ Uses the global field Store exclusively."
 NODE-ID is the unique identifier of the node.
 TAG-ID supplies schema context.  Return the removed value, or nil."
   (let* ((fid (supertag-field-resolve-id tag-id field-name))
+         (field-def (and fid (supertag-global-field-get fid)))
          (old (and fid (supertag-node-get-global-field
                         node-id fid supertag-field--missing))))
     (unless (or (not fid) (eq old supertag-field--missing))
-      (supertag-store-remove-field-value node-id fid)
-      (when supertag-debug-log-field-events
-        (message "supertag-field-remove %s/%s/%s" node-id tag-id fid))
-      old)))
+      (supertag-with-transaction
+        (supertag-store-remove-field-value node-id fid)
+        (when (eq (plist-get field-def :type) :node-reference)
+          (supertag-relation-reconcile-field-reference node-id fid))
+        (when supertag-debug-log-field-events
+          (message "supertag-field-remove %s/%s/%s" node-id tag-id fid))
+        old))))
 
 ;; 4.2 Field Validation and Normalization
 

@@ -91,10 +91,11 @@
   - 影响范围：field/schema ops、views、automation、migration
   - 完成：2026-08-12；删除生产 field/schema/view/query/capture/automation 的 legacy 分支与事件订阅，废弃且忽略 `supertag-use-global-fields`；真实迁移先保存 live-Store backup，再在单个 Store transaction 写入三个 global collections，失败恢复且 legacy source 不变；field display rename 保留稳定 ID/value，并由 Query/Automation/sync 共用 resolver；定向 ERT 125/125、干净临时 clone 全量 ERT 465/465、20 个修改生产文件 byte compile、`check-parens` 与 `git diff --check` 通过
 
-- task015 [ ] 分开 document-link、field-reference 与 semantic-edge
+- task015 [x] 分开 document-link、field-reference 与 semantic-edge
   - 产出：Document Link 和 field-reference 是 Projection；field value 拥有 reference field；custom/Notion relation 是 Semantic Edge
   - 验证方式：删除并重建前两类不影响 Semantic Edge；field value 改变后 edge projection 收敛
   - 影响范围：relation/field ops、query model、automation
+  - 完成：2026-08-12；同节点对三类 relation 共存、Projection 删除/重建、field-owner 收敛与 Notion Semantic Edge 已由稳定 ERT 覆盖；完整验证结论见 `change_ownership_separation_20260812.md`
 
 - task016 [ ] Stable Semantic Tag ID migration dry-run
   - 产出：old ID → stable ID、canonical name、unique aliases、inheritance/schema/reference mapping；只生成报告与备份计划

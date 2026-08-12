@@ -76,7 +76,9 @@
     (let ((file-hash (field-node-reference-test--file-hash test-file)))
       (supertag-field-set source-id "ref-tag" "ref" target-id)
       (let ((rels (supertag-relation-find-between source-id target-id :reference)))
-        (should (= 1 (length rels))))
+        (should (= 1 (length rels)))
+        (should (eq :field-reference (plist-get (car rels) :kind)))
+        (should (equal "ref" (plist-get (car rels) :field-id))))
       (should (equal '("source-id")
                      (mapcar (lambda (rel) (plist-get rel :from))
                              (supertag-relation-find-by-to target-id :reference))))
@@ -153,6 +155,52 @@
       (should (null (supertag-relation-find-between source-id target-id :reference)))
       (should (string= file-hash
                        (field-node-reference-test--file-hash test-file))))))
+
+(ert-deftest field-reference-projection-is-owned-by-field-value ()
+  "Field and document projections rebuild without touching Semantic Edges."
+  (field-node-reference-test--with-env
+    (field-node-reference-test--tag-with-ref-field)
+    (supertag-node-add-tag source-id "ref-tag")
+    (supertag-store-put-entity
+     :nodes source-id
+     (plist-put (copy-sequence (supertag-node-get source-id))
+                :ref-to (list target-id)))
+    (let* ((document-link
+            (supertag-relation-project-document-link source-id target-id))
+           (semantic-edge
+            (supertag-relation-create
+             (list :type :supports :from source-id :to target-id))))
+      (supertag-field-set source-id "ref-tag" "ref" target-id)
+      (let ((field-reference
+             (car (supertag-relation-find-between
+                   source-id target-id :reference :field-reference))))
+        (should field-reference)
+        (should (equal "ref" (plist-get field-reference :field-id)))
+        (should (eq :field-value (plist-get field-reference :origin)))
+        (should (eq :semantic-edge (plist-get semantic-edge :kind)))
+        (should (= 3 (length (supertag-relation-find-between
+                              source-id target-id))))
+        ;; Projection deletion cannot delete or rewrite its authoritative facts.
+        (supertag-relation-delete (plist-get document-link :id))
+        (supertag-relation-delete (plist-get field-reference :id))
+        (should (equal target-id
+                       (supertag-node-get-global-field source-id "ref")))
+        (should (supertag-relation-get (plist-get semantic-edge :id)))
+        ;; One projection reconciliation restores both rebuildable relation kinds.
+        (supertag-sync--reconcile-all-projected-relations
+         '(:references-created 0 :references-deleted 0))
+        (should (supertag-relation-find-between
+                 source-id target-id :reference :document-link))
+        (should (supertag-relation-find-between
+                 source-id target-id :reference :field-reference))
+        (should (supertag-relation-get (plist-get semantic-edge :id)))
+        ;; Changing the owner converges only its field-reference projection.
+        (supertag-field-set source-id "ref-tag" "ref" nil)
+        (should-not (supertag-relation-find-between
+                     source-id target-id :reference :field-reference))
+        (should (supertag-relation-find-between
+                 source-id target-id :reference :document-link))
+        (should (supertag-relation-get (plist-get semantic-edge :id)))))))
 
 (provide 'test-field-node-reference)
 ;;; test-field-node-reference.el ends here

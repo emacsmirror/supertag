@@ -1760,7 +1760,7 @@ This function is called only when a node is actually being created or updated."
                      (cl-find-if
                       #'identity
                       (supertag-relation-find-between
-                       node-id target-id :reference))))
+                       node-id target-id :reference :document-link))))
                 (when (supertag-relation-project-document-link node-id target-id)
                   (unless existing
                     (setf (plist-get counters :references-created)
@@ -1795,7 +1795,8 @@ COUNTERS receives Document Link creation/deletion totals."
       (supertag--process-node-tags node)
       (supertag--cleanup-orphaned-references
        (plist-get node :id) (plist-get node :ref-to) counters)
-      (supertag--process-node-references node counters))))
+      (supertag--process-node-references node counters))
+    (supertag-relation-reconcile-field-references)))
 
 (defun supertag-sync--rebuild-reference-caches ()
   "Rebuild derived node backlink caches from indexed reference relations."
@@ -1810,7 +1811,8 @@ COUNTERS receives Document Link creation/deletion totals."
                 (sort
                  (delete-dups
                   (mapcar (lambda (relation) (plist-get relation :from))
-                          (supertag-relation-find-by-to id :reference)))
+                          (supertag-relation-find-by-to
+                           id :reference :document-link)))
                  #'string<))
                (count (length incoming)))
           (unless (and (equal incoming (plist-get node :ref-from))

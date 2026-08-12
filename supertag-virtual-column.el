@@ -171,7 +171,8 @@
         (:reference (supertag-virtual-column--compute-reference node-id params))
         (_ (error "Unknown type: %s" type))))))
 
-(declare-function supertag-relation-find-by-from "supertag-ops-relation" (from-id &optional type))
+(declare-function supertag-relation-find-by-from "supertag-ops-relation"
+                  (from-id &optional type kind))
 (declare-function supertag-node-get-global-field "supertag-ops-global-field" (node-id field-id &optional default))
 (declare-function supertag-find-nodes-by-tag "supertag-core-scan" (tag-name))
 
@@ -182,7 +183,8 @@
          (func (plist-get params :function))
          (relations (when (fboundp 'supertag-relation-find-by-from)
                       (supertag-relation-find-by-from
-                       node-id (if (keywordp rel) rel nil))))
+                       node-id (if (keywordp rel) rel nil)
+                       :semantic-edge)))
          (values
           (when relations
             (cl-loop for r in relations
@@ -234,7 +236,8 @@
          (index (or (plist-get params :index) 0))
          (relations (when (fboundp 'supertag-relation-find-by-from)
                       (supertag-relation-find-by-from
-                       node-id (if (keywordp relation-type) relation-type nil))))
+                       node-id (if (keywordp relation-type) relation-type nil)
+                       :semantic-edge)))
          (target-node-id
           (when relations
             (let* ((rel (if (and index (> index 0))

@@ -81,6 +81,21 @@ A reference may be represented by a source Org link, a reciprocal target Org lin
 | sync scan state | none | disposable operational optimization |
 | unresolved sync conflict | operational durable | retain until resolved |
 
+### Relation ownership representation
+
+现有物理 `:relations` collection 暂不拆表；每条新 relation 必须以 `:kind/:origin` 声明 owner：
+
+| kind | origin | authoritative source | identity extension |
+|---|---|---|---|
+| `:document-link` | `:org` | node `:ref-to` parsed from Org | kind |
+| `:field-reference` | `:field-value` | global `:field-values` | kind + stable field-id |
+| `:semantic-edge` | `:semantic` | relation entity itself | relation type（保持既有 identity） |
+| `:tag-membership` | `:org` | resolved Tag Occurrence | relation type（保持既有 identity） |
+
+Relation query interface 接受可选 kind filter；field write interface 先提交 authoritative value，
+再 reconcile 单一 field-id。完全无 owner 的旧 `:reference` 只标记为 `:legacy-reference`，不进入
+Automation semantic traversal，也不由 Projection rebuild 删除。
+
 ## Target Flow
 
 ```text
@@ -145,6 +160,7 @@ Reindex may change only:
 - Document node/location projection
 - Tag Occurrence catalog and membership resolution
 - Document-link projection
+- Field-reference projection（只从 authoritative global field value 重建）
 - derived indexes/caches
 - scan state
 

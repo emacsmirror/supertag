@@ -921,7 +921,8 @@ VALUE is the new value."
   (when supertag-automation--enabled
     ;; Find all relations from this entity
     (let ((relations (when (fboundp 'supertag-relation-find-by-from)
-                       (supertag-relation-find-by-from entity-id))))
+                       (supertag-relation-find-by-from
+                        entity-id nil :semantic-edge))))
       (dolist (relation relations)
         (let* ((sync-fields (plist-get relation :sync-fields))
                (sync-direction (plist-get relation :sync-direction))

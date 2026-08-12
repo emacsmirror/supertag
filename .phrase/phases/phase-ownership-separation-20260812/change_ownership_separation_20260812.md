@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task015 Relation Ownership 分型
+
+- Modify relation identity 与 validation：所有新 relation 明确记录 `:kind/:origin`；Document Link 与 Field Reference 可在同一 endpoints 上共存，后者再按 stable field-id 区分；legacy unowned `:reference` 保留为 `:legacy-reference`，不猜 owner。
+- Reverse Field Reference ownership：global field value 成为唯一 authoritative fact；field set/remove 在同一 Store transaction 中先改值，再只 reconcile 该 field-id 的 Projection；删除 relation 不再回写 field 或修改 document node facts。
+- Modify projection rebuild：batch reconcile 从 node `:ref-to` 重建 Document Link，并从 `:field-values` 的 `:node-reference` definitions 重建 Field Reference；stale/改型 field projection 被删除，Semantic Edge 保留。
+- Modify Semantic Edge consumers：custom/Notion create 默认写入 `:semantic-edge/:semantic`；Query 可按 kind 过滤，Automation sync、relation rollup 与 virtual columns 只遍历 Semantic Edge；Table 删除重复且越权的 relation diff。
+- Add issue044 与 ownership regressions：同一节点对同时保存三类 relation；删除并重建两个 Projection 不改变 Semantic Edge/field value；字段清空只删除自己的 Field Reference；Notion relation owner 明确。
+
+Behavior：Org link、node-reference field 与 custom relation 不再因为 endpoints 相同而互相覆盖或删除。用户修改 reference field 后，global field value 先落盘语义 Store，Field Reference 只作为可重建查询投影收敛；Org reindex 不会删除 Semantic Edge。
+
+Risk：旧版完全无 `:kind/:origin` 的 `:reference` 无法可靠判断来自 Org、field 或 generic semantic reference，因此保留为 `:legacy-reference`；新 Projection 可与它共存，Automation 不消费它。统一 load/rollback cold rebuild 与 legacy cleanup 仍属于 task018/task028，不在本任务新增第二套 index/backend。
+
+Verification：红测先证明旧 query interface 无 kind 且三类 relation 不能共存；实现后 relation/field/query/Table/virtual/add-reference/ownership 定向 ERT 84/84，只含 HEAD + task015 patch 的干净临时树完整 ERT 466/466；7 个修改生产文件 byte compile 成功（仅既有 warning），`check-parens` 与 `git diff --check` 通过。当前工作树完整 runner 的两项额外失败来自用户未提交 dashboard 修改依赖未安装的 `textui`，该文件未进入 task015 patch，干净基线验证已通过。
+
 ## 2026-08-12 — task014 global field 唯一生产读写路径
 
 - Delete field/schema/tag/relation、Table/Node/Kanban/Schema、Query/Capture/Org export 与 Automation 中的 `supertag-use-global-fields` 分支、legacy value/schema fallback 和 `:fields` 事件订阅；生产写入只进入 `:field-definitions`、`:tag-field-associations`、`:field-values`。

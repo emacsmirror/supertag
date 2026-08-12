@@ -1537,26 +1537,9 @@ COORDS is a plist with :entity-id and :col-index."
                                         base-value
                                         (supertag-view-table--get-references entity-id))
                                      base-value))
-                    (new-value (supertag-ui-read-field-value col-def current-value))
-                    (field-type (plist-get col-def :type)))
+                    (new-value (supertag-ui-read-field-value col-def current-value)))
                (when new-value
-                 ;; For :node-reference fields, keep :reference relations in sync.
-                 (when (eq field-type :node-reference)
-                   (let* ((relation-targets (supertag-view-table--get-references entity-id))
-                          (current-targets (if (eq col-key :refs)
-                                               (supertag-field-normalize-node-reference-list relation-targets)
-                                             (supertag-field-normalize-node-reference-list current-value)))
-                          (new-targets (supertag-field-normalize-node-reference-list new-value))
-                          (removed (cl-set-difference current-targets new-targets :test #'string=))
-                          (added (cl-set-difference new-targets current-targets :test #'string=)))
-                     ;; Remove stale references.
-                     (dolist (target removed)
-                       (dolist (rel (supertag-relation-find-between entity-id target :reference))
-                         (supertag-relation-delete (plist-get rel :id))))
-                     ;; Add new references via unified service.
-                     (dolist (target added)
-                       (supertag-relation-add-reference entity-id target))))
-                 ;; Persist field value and refresh view.
+                 ;; Field service owns Field Reference reconciliation.
                  (supertag-field-set entity-id tag-id field-name new-value)
                  (supertag-view-table-refresh)
                  (supertag-view-table--goto-cell coords)))))

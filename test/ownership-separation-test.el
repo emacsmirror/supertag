@@ -211,7 +211,8 @@
             (should (eq :document-link (plist-get relation :kind)))
             (should (eq :org (plist-get relation :origin)))
             (should (= 1 (plist-get counters :references-created)))
-            ;; Fully unowned legacy references are ambiguous and stay intact.
+            ;; The authoritative Org occurrence classifies an unowned legacy
+            ;; reference as a Document Link during reconciliation.
             (supertag-store-put-entity
              :relations (plist-get relation :id)
              (plist-put (plist-put (copy-sequence relation) :kind nil)
@@ -226,9 +227,9 @@
                   (car (supertag-relation-find-between
                         supertag-ownership-test-node-a
                         supertag-ownership-test-node-b :reference)))
-            (should-not (plist-get relation :kind))
-            (should-not (plist-get relation :origin))
-            (should (= 1 (plist-get counters :references-created)))
+            (should (eq :document-link (plist-get relation :kind)))
+            (should (eq :org (plist-get relation :origin)))
+            (should (= 2 (plist-get counters :references-created)))
             (should
              (equal before
                     (mapcar (lambda (file)
@@ -247,6 +248,10 @@
       (supertag-store-put-entity
        :nodes field-target
        (list :id field-target :type :node :title "Field Target"))
+      (supertag-store-put-field-definition
+       "refs" '(:id "refs" :name "Refs" :type :node-reference))
+      (supertag-store-put-field-value
+       supertag-ownership-test-node-a "refs" field-target)
       (supertag-index-rebuild-relations)
       (setq field-reference
             (supertag-relation-create
@@ -254,7 +259,8 @@
                    :from supertag-ownership-test-node-a
                    :to field-target
                    :kind :field-reference
-                   :origin :field-value)))
+                   :origin :field-value
+                   :field-id "refs")))
       (supertag--cleanup-orphaned-references
        supertag-ownership-test-node-a nil counters)
       (should-not
