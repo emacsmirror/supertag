@@ -109,53 +109,58 @@
       (should (equal nested '(or (and (tag "task") (tag "work")) (term "x"))))
       (should (supertag-query--parse-sexp nested)))))
 
-;;; --- 2. Saved-query round trip through a temp custom-file ----------------
+;;; --- 2. Saved-query round trip through the `:queries' Store ---------------
 
-(defmacro supertag-query-library-test--with-temp-custom-file (&rest body)
-  "Run BODY with `custom-file'/`user-init-file' pointed at a fresh temp file.
-`supertag-query-saved' is reset to nil beforehand and restored afterwards,
-and the temp file is removed afterwards.  This never touches the user's
-real init file."
+(defmacro supertag-query-library-test--with-store (&rest body)
+  "Run BODY with an isolated Store and legacy defcustom state.
+This never touches the user's real database or init file."
   (declare (indent 0))
-  `(let* ((tmp-file (make-temp-file "supertag-query-library-test" nil ".el"))
-          (custom-file tmp-file)
-          (user-init-file tmp-file)
-          (saved-backup supertag-query-saved))
-     (with-temp-file tmp-file (insert ";; empty custom-file for tests\n"))
+  `(let* ((tmp (make-temp-file "supertag-query-library-test" t))
+          (supertag-data-directory (expand-file-name "data" tmp))
+          (supertag-db-file (expand-file-name "supertag-db.el"
+                                               supertag-data-directory))
+          (supertag-db-backup-directory (expand-file-name "backups"
+                                                           supertag-data-directory))
+          (custom-file (expand-file-name "custom.el" tmp))
+          (user-init-file custom-file)
+          (supertag--store nil)
+          (supertag-query-saved nil))
      (unwind-protect
-         (progn
-           (setq supertag-query-saved nil)
-           ,@body)
-       (setq supertag-query-saved saved-backup)
-       (ignore-errors (delete-file tmp-file)))))
+         (progn ,@body)
+       (ignore-errors (delete-directory tmp t)))))
 
-(ert-deftest supertag-query-library-test-save-persists-to-custom-file ()
-  "Saving a query updates the alist in-session and writes it to disk."
-  (supertag-query-library-test--with-temp-custom-file
-    (should (supertag-query-library--customize-save-possible-p))
+(ert-deftest supertag-query-library-test-save-persists-to-store ()
+  "Saving a query writes the `:queries' collection and updates in place."
+  (supertag-query-library-test--with-store
     (supertag-query-save "(tag \"project\")" "my-projects")
-    (should (equal (cdr (assoc "my-projects" supertag-query-saved))
-                    "(tag \"project\")"))
-    ;; The value must actually have been written to disk, not just held in
-    ;; the session variable.
-    (let ((on-disk (with-temp-buffer
-                      (insert-file-contents custom-file)
-                      (buffer-string))))
-      (should (string-match-p "my-projects" on-disk))
-      (should (string-match-p "tag \\\\\"project" on-disk)))
+    (should (equal (cdr (assoc "my-projects" (supertag-query-saved-list)))
+                   "(tag \"project\")"))
+    (should (supertag-store-get-entity :queries "my-projects"))
     ;; Saving again under the same name updates rather than duplicates.
     (supertag-query-save "(tag \"projects-v2\")" "my-projects")
-    (should (= 1 (length supertag-query-saved)))
-    (should (equal (cdr (assoc "my-projects" supertag-query-saved))
-                    "(tag \"projects-v2\")"))))
+    (should (= 1 (length (supertag-query-saved-list))))
+    (should (equal (cdr (assoc "my-projects" (supertag-query-saved-list)))
+                   "(tag \"projects-v2\")"))))
 
 (ert-deftest supertag-query-library-test-save-rejects-empty-name-and-bad-query ()
   "Saving validates both the name and that the query actually parses."
-  (supertag-query-library-test--with-temp-custom-file
+  (supertag-query-library-test--with-store
     (should-error (supertag-query-save "(tag \"x\")" ""))
     (should-error (supertag-query-save "(tag \"x\")" "   "))
     (should-error (supertag-query-save "(bogus-operator \"x\")" "broken"))
-    (should (null supertag-query-saved))))
+    (should-not (supertag-query-saved-list))))
+
+(ert-deftest supertag-query-library-test-imports-legacy-defcustom-once ()
+  "The legacy defcustom imports once and only when the Store is empty."
+  (supertag-query-library-test--with-store
+    (setq supertag-query-saved '(("legacy-a" . "(tag \"x\")")))
+    (cl-letf (((symbol-function 'supertag-save-store) (lambda (&rest _) t)))
+      (should (supertag-query-saved--maybe-import-legacy))
+      (should (null supertag-query-saved))
+      (should (equal '("legacy-a")
+                     (mapcar #'car (supertag-query-saved-list))))
+      ;; Second call: Store non-empty, no re-import.
+      (should-not (supertag-query-saved--maybe-import-legacy)))))
 
 ;;; --- 3. Quick-reference buffer --------------------------------------------
 
@@ -198,19 +203,19 @@ real init file."
              (list :id "n2" :title "Buy groceries" :tags '("errand")
                    :link-type "id")
              (supertag-store-get-collection :nodes))
-    (supertag-query-library-test--with-temp-custom-file
-      (supertag-query-save "(tag \"task\")" "my-tasks")
-      (unwind-protect
-          (let ((buf (cl-letf (((symbol-function 'pop-to-buffer) #'identity))
-                       (supertag-query-run-saved "my-tasks")
-                       (get-buffer "*Supertag Saved Query*"))))
-            (should buf)
-            (with-current-buffer buf
-              (let ((text (buffer-string)))
-                (should (string-match-p "Write report" text))
-                (should (string-match-p "task" text))
-                (should-not (string-match-p "Buy groceries" text)))))
-        (ignore-errors (kill-buffer "*Supertag Saved Query*"))))))
+    (cl-letf (((symbol-function 'supertag-save-store) (lambda (&rest _) t)))
+      (supertag-query-save "(tag \"task\")" "my-tasks"))
+    (unwind-protect
+        (let ((buf (cl-letf (((symbol-function 'pop-to-buffer) #'identity))
+                     (supertag-query-run-saved "my-tasks")
+                     (get-buffer "*Supertag Saved Query*"))))
+          (should buf)
+          (with-current-buffer buf
+            (let ((text (buffer-string)))
+              (should (string-match-p "Write report" text))
+              (should (string-match-p "task" text))
+              (should-not (string-match-p "Buy groceries" text)))))
+      (ignore-errors (kill-buffer "*Supertag Saved Query*")))))
 
 (provide 'query-library-test)
 

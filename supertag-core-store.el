@@ -34,6 +34,8 @@ Data is stored in a tree-like structure using nested hash tables.")
     :tag-field-associations     ; tag-id -> ordered list of association plists
     :field-values               ; node-id -> field-id -> value
     :boards                     ; board-id -> board plist (whiteboard layouts)
+    :queries                    ; query-name -> saved query plist
+    :views                      ; view-id -> persisted view config plist
     :automations                ; automation-id -> durable rule plist
     :sync-conflicts             ; conflict-id -> durable unresolved conflict plist
     :meta)

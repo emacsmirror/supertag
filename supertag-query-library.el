@@ -36,15 +36,47 @@
 ;;; --- Saved queries ---------------------------------------------------
 
 (defcustom supertag-query-saved nil
-  "Alist of saved Org-Supertag queries.
-Each element is (NAME . QUERY-STRING).  NAME is a human-readable label
-you choose; QUERY-STRING is the textual S-expression accepted by
-`supertag-query-sexp', e.g. \"(tag \\\"project\\\")\" or
-\"(and (tag \\\"task\\\") (not (field \\\"status\\\" \\\"done\\\")))\".
-See doc/QUERY.md for the full grammar."
+  "Legacy alist of saved Org-Supertag queries, imported once into the
+`:queries' Store collection.  Kept only as the migration source; new
+saves go to the Store via `supertag-query-save'."
   :type '(alist :key-type (string :tag "Name")
                 :value-type (string :tag "Query S-expression"))
   :group 'supertag-query-library)
+
+(defun supertag-query-saved-list ()
+  "Return saved queries as a (NAME . QUERY-STRING) alist."
+  (supertag-query-saved--maybe-import-legacy)
+  (let (result)
+    (maphash
+     (lambda (_id entry)
+       (let ((entry (supertag--ensure-plist entry)))
+         (push (cons (plist-get entry :name) (plist-get entry :query))
+               result)))
+     (supertag-store-get-collection :queries))
+    result))
+
+(defun supertag-query-saved--maybe-import-legacy ()
+  "Import `supertag-query-saved' into the `:queries' collection once.
+Runs only when the Store has no saved queries and the legacy defcustom
+holds entries.  The Store is persisted before the defcustom is cleared,
+so a failed save leaves the legacy value intact."
+  (when (and (boundp 'supertag-query-saved)
+             supertag-query-saved
+             (zerop (hash-table-count
+                     (supertag-store-get-collection :queries))))
+    (supertag-with-transaction
+      (dolist (entry supertag-query-saved)
+        (let ((name (car entry))
+              (query (cdr entry)))
+          (when (and (stringp name) (stringp query))
+            (supertag-store-put-entity
+             :queries name
+             (list :id name :name name :query query :type :query))))))
+    (when (and (fboundp 'supertag-save-store)
+               (supertag-save-store))
+      (customize-save-variable 'supertag-query-saved nil)
+      (setq supertag-query-saved nil)
+      t)))
 
 (defvar supertag-query-library--last-query nil
   "The most recent query string this library ran, inserted, or built.
@@ -99,7 +131,7 @@ Return non-nil only when every saved query is a string containing exactly
 one readable form.  Callers can treat nil conservatively when references
 cannot be determined safely."
   (catch 'invalid
-    (dolist (entry supertag-query-saved)
+    (dolist (entry (supertag-query-saved-list))
       (let ((text (cdr entry)))
         (unless (stringp text)
           (throw 'invalid nil))
@@ -116,23 +148,23 @@ cannot be determined safely."
 
 (defun supertag-query-library--saved-query-string (name)
   "Return the saved query string for NAME, or signal a user-error."
-  (or (cdr (assoc name supertag-query-saved))
+  (or (cdr (assoc name (supertag-query-saved-list)))
       (user-error "No saved query named `%s'" name)))
 
 (defun supertag-query-library--completing-read-saved (prompt)
   "Read a saved query name with PROMPT, annotated with its query text."
-  (unless supertag-query-saved
+  (unless (supertag-query-saved-list)
     (user-error "No saved queries yet -- use `supertag-query-save' first"))
   (let ((collection
          (lambda (str pred action)
            (if (eq action 'metadata)
                '(metadata (annotation-function . supertag-query-library--annotate-saved))
-             (complete-with-action action (mapcar #'car supertag-query-saved) str pred)))))
+             (complete-with-action action (mapcar #'car (supertag-query-saved-list)) str pred)))))
     (completing-read prompt collection nil t)))
 
 (defun supertag-query-library--annotate-saved (name)
   "Return an annotation string showing the query text saved under NAME."
-  (let ((query (cdr (assoc name supertag-query-saved))))
+  (let ((query (cdr (assoc name (supertag-query-saved-list)))))
     (if query (format "  --  %s" query) "")))
 
 (defun supertag-query-library--dynamic-block-command ()
@@ -199,13 +231,10 @@ reimplement parsing or execution."
 
 ;;;###autoload
 (defun supertag-query-save (query name)
-  "Save QUERY (an S-expression string) under NAME in `supertag-query-saved'.
+  "Save QUERY (an S-expression string) under NAME in the `:queries' Store.
 Interactively, QUERY defaults to the active region, or to the last
-query this library ran/inserted/built.  Persists permanently via
-`customize-save-variable' when a writable custom-file/init file is
-available; otherwise the query is kept for this session only and the
-user is told so, mirroring the behaviour of
-`supertag-setup--persist' in supertag-setup.el."
+query this library ran/inserted/built.  Persists with the Store via
+`supertag-save-store'."
   (interactive
    (let* ((default (supertag-query-library--default-query-text))
           (query (read-string "Query S-expression: " default))
@@ -215,20 +244,14 @@ user is told so, mirroring the behaviour of
     (user-error "Query name cannot be empty"))
   ;; Validate before saving so a typo is never persisted silently.
   (supertag-query-library--read-query-sexp query)
-  (let* ((existing (assoc name supertag-query-saved))
-         (updated (if existing
-                      (progn (setcdr existing query) supertag-query-saved)
-                    (append supertag-query-saved (list (cons name query))))))
-    (setq supertag-query-saved updated)
-    (setq supertag-query-library--last-query query)
-    (if (supertag-query-library--customize-save-possible-p)
-        (progn
-          (customize-save-variable 'supertag-query-saved updated)
-          (message "Saved query `%s' permanently to %s"
-                   name (abbreviate-file-name (or custom-file user-init-file))))
-      (message "Saved query `%s' for this session only (no writable custom-file/init file found)."
-               name))
-    updated))
+  (supertag-store-put-entity
+   :queries name
+   (list :id name :name name :query query :type :query) t)
+  (setq supertag-query-library--last-query query)
+  (when (fboundp 'supertag-save-store)
+    (supertag-save-store))
+  (message "Saved query `%s'" name)
+  (supertag-query-saved-list))
 
 ;;;###autoload
 (defun supertag-query-run-saved (name)

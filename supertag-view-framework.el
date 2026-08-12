@@ -23,6 +23,7 @@
 (require 'wid-edit)
 (require 'supertag-services-ui)
 (require 'supertag-view-api)
+(require 'supertag-core-store)
 
 ;; ============================================================================
 ;; Core Registry
@@ -1215,12 +1216,44 @@ Widget definition:
 ;; Initialization
 ;; ============================================================================
 
+(defun supertag-view-config-save-to-store (&optional id)
+  "Persist view configuration(s) into the `:views' Store collection.
+When ID is non-nil, persist only that configuration; otherwise all.
+`:render-fn' is excluded (functions are not serializable)."
+  (interactive)
+  (let ((configs (if id
+                     (let ((config (supertag-view-config-get id)))
+                       (unless config
+                         (error "No configuration found for view: %s" id))
+                       (list config))
+                   (supertag-view-config-list))))
+    (dolist (config configs)
+      (let* ((view-id (plist-get config :id))
+             (serializable
+              (cl-loop for (key value) on config by #'cddr
+                       unless (eq key :render-fn)
+                       append (list key value))))
+        (supertag-store-put-entity
+         :views view-id (plist-put serializable :id view-id))))
+    (when (fboundp 'supertag-save-store)
+      (supertag-save-store))
+    (message "View configs saved to the semantic store")))
+
+(defun supertag-view-config-restore-from-store ()
+  "Restore persisted view configurations from the `:views' collection."
+  (maphash
+   (lambda (id config)
+     (puthash id (supertag--ensure-plist config) supertag--view-configs))
+   (supertag-store-get-collection :views)))
+
 (defun supertag-view-framework-init ()
   "Initialize the view framework.
-Clears registered views and stored configurations."
+Clears registered views and stored configurations, then restores
+persisted configurations from the `:views' Store collection."
   (interactive)
   (clrhash supertag--view-registry)
   (clrhash supertag--view-configs)
+  (supertag-view-config-restore-from-store)
   (message "View framework initialized"))
 
 (provide 'supertag-view-framework)
