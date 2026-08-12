@@ -184,6 +184,24 @@
   
   (message "\n=== Tests Complete ==="))
 
+(ert-deftest test-rollup-apply-shared-reduction-parity ()
+  "The shared rollup reduction agrees across all vocabulary variants."
+  (let ((values '(3 1 2)))
+    (should (= 6 (supertag-rollup-apply :sum values)))
+    (should (= 6 (supertag-rollup-apply 'sum values)))
+    (should (= 3 (supertag-rollup-apply :count values)))
+    (should (= 2 (supertag-rollup-apply :avg values)))
+    (should (= 2 (supertag-rollup-apply 'average values)))
+    (should (= 3 (supertag-rollup-apply :max values)))
+    (should (= 1 (supertag-rollup-apply :min values)))
+    (should (= 3 (supertag-rollup-apply :first values)))
+    (should (= 2 (supertag-rollup-apply :last values))))
+  (should (= 0 (supertag-rollup-apply :sum '())))
+  (should (= 0 (supertag-rollup-apply :count '())))
+  (should (= 0 (supertag-rollup-apply :avg '())))
+  (should-not (supertag-rollup-apply :max '()))
+  (should-not (supertag-rollup-apply :min '())))
+
 (provide 'formula-test)
 
 ;;; formula-test.el ends here

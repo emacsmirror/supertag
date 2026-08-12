@@ -86,6 +86,26 @@ Values are embedded as Emacs Lisp literals."
         (setq expanded (replace-match lit t t expanded))))
     expanded))
 
+(defun supertag-rollup-apply (function-name values)
+  "Reduce VALUES with FUNCTION-NAME.
+FUNCTION-NAME is one of count, sum, avg/average, min, max, first, last,
+unique-count, concat, or a function object applied to VALUES.
+This is the single rollup reduction shared by Table, Virtual Column and
+Automation so identical inputs produce identical results."
+  (pcase function-name
+    ((or 'count :count) (length values))
+    ((or 'sum :sum) (apply #'+ (or values '(0))))
+    ((or 'avg 'average :avg :average)
+     (if values (/ (apply #'+ values) (length values)) 0))
+    ((or 'min :min) (when values (apply #'min values)))
+    ((or 'max :max) (when values (apply #'max values)))
+    ((or 'first :first) (car values))
+    ((or 'last :last) (car (last values)))
+    ('unique-count (length (cl-remove-duplicates values :test #'equal)))
+    ('concat (mapconcat #'identity values ", "))
+    ((pred functionp) (funcall function-name values))
+    (_ (message "Unknown rollup function: %S" function-name))))
+
 (defun supertag-formula-evaluate (formula-string entity-data &optional field-getter)
   "Evaluate FORMULA-STRING for ENTITY-DATA.
 

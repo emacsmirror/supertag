@@ -38,6 +38,7 @@
 (require 'supertag-ops-field)      ; For field operations
 (require 'supertag-service-org)
 (require 'supertag-services-query)
+(require 'supertag-services-formula)
 (require 'org-id)                  ; For ID generation
 (require 'ht)
 
@@ -980,9 +981,6 @@ FORCE bypasses recursion protection when t."
                             source-node-id relation-name from-field rollup-func)))
 
               (when result
-                ;; Update the ':to-field' on the 'one' side node.
-                (when (fboundp 'supertag-node-update-property)
-                  (supertag-node-update-property source-node-id to-field result))
                 (message "Calculated rollup for %s: %s = %s"
                          source-node-id to-field result)
                 result)))
@@ -1010,23 +1008,9 @@ FORCE bypasses recursion protection when t."
     values))
 
 (defun supertag-automation--apply-rollup-function (function-name values)
-  "Apply FUNCTION-NAME to VALUES list.
-Supports built-in functions and custom functions."
-  (pcase function-name
-    ('count (length values))
-    ('sum (cl-reduce #'+ values :initial-value 0))
-    ('average (if values (/ (cl-reduce #'+ values :initial-value 0.0) (length values)) 0))
-    ('min (when values (apply #'min values)))
-    ('max (when values (apply #'max values)))
-    ('first (car values))
-    ('last (car (last values)))
-    ('unique-count (length (cl-remove-duplicates values :test #'equal)))
-    ('concat (mapconcat #'identity values ", "))
-    (_
-     ;; Custom function
-     (if (functionp function-name)
-         (funcall function-name values)
-       (message "Unknown rollup function: %s" function-name)))))
+  "Apply FUNCTION-NAME to VALUES via the shared rollup reduction.
+Supports built-in function names and custom function objects."
+  (supertag-rollup-apply function-name values))
 
 ;;; --- Formula Field Engine ---
 
@@ -1044,26 +1028,13 @@ FORMULA-FIELD is the field configuration with formula."
           result)))))
 
 (defun supertag-automation--evaluate-formula (formula entity-id)
-  "Evaluate FORMULA for ENTITY-ID.
-Supports basic arithmetic and property references."
-  (let* ((entity (or (supertag-query-node entity-id)
-                     (supertag-tag-get entity-id)))
-         (props (plist-get entity :properties)))
-
-    ;; Simple formula evaluation - replace property references
-    (let ((expanded-formula formula))
-      ;; Replace {{property}} references with actual values
-      (while (string-match "{{([^}]+)}}" expanded-formula)
-        (let* ((prop-name (match-string 1 expanded-formula))
-               (prop-value (plist-get props (intern prop-name)))
-               (value-str (if prop-value (format "%s" prop-value) "0")))
-          (setq expanded-formula
-                (replace-match value-str nil nil expanded-formula))))
-
-      ;; Evaluate the formula (basic arithmetic)
-      (condition-case nil
-          (eval (read expanded-formula))
-        (error 0)))))
+  "Evaluate FORMULA for ENTITY-ID via the shared formula service.
+Supports {{...}} placeholders, arithmetic and helper functions."
+  (let ((entity (or (supertag-query-node entity-id)
+                    (supertag-tag-get entity-id))))
+    (condition-case nil
+        (supertag-formula-evaluate formula entity)
+      (error 0))))
 
 ;;; --- Event Integration (Updated for Sync Processing) ---
 

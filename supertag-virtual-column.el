@@ -17,6 +17,7 @@
 (require 'subr-x)
 (require 'supertag-core-store)
 (require 'supertag-core-schema)
+(require 'supertag-services-formula)
 
 (defgroup supertag-virtual-column nil
   "Virtual column settings."
@@ -195,14 +196,7 @@
                                0)
                      into vals
                      finally return vals))))
-    (pcase func
-      (:sum (apply #'+ (or values '(0))))
-      (:count (length values))
-      (:avg (if values (/ (apply #'+ values) (length values)) 0))
-      (:max (if values (apply #'max values) nil))
-      (:min (if values (apply #'min values) nil))
-      (:first (car values))
-      (:last (car (last values))))))
+    (supertag-rollup-apply func values)))
 
 (defun supertag-virtual-column--compute-aggregate (_node-id params)
   "Compute aggregate across all nodes with specified tag."
@@ -220,14 +214,7 @@
                                0)
                      into vals
                      finally return vals))))
-    (pcase func
-      (:sum (apply #'+ (or values '(0))))
-      (:count (length values))
-      (:avg (if values (/ (apply #'+ values) (length values)) 0))
-      (:max (if values (apply #'max values) nil))
-      (:min (if values (apply #'min values) nil))
-      (:first (car values))
-      (:last (car (last values))))))
+    (supertag-rollup-apply func values)))
 
 (defun supertag-virtual-column--compute-reference (node-id params)
   "Compute reference to another node's field."

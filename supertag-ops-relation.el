@@ -14,6 +14,7 @@
 (require 'supertag-core-schema)
 (require 'supertag-core-transform)
 (require 'supertag-core-index)
+(require 'supertag-services-formula)
 (require 'sha1)
 
 (declare-function supertag-node-get "supertag-ops-node" (id))
@@ -717,7 +718,7 @@ Return the derived value without storing it in a node or tag entity."
                 (when value
                   (push value values))))
 
-            (let ((result (funcall rollup-function values)))
+            (let ((result (supertag-rollup-apply rollup-function values)))
               (message "Calculated rollup for %s: %s = %s"
                        to-id rollup-field result)
               result)))))))
