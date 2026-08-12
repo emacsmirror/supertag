@@ -296,3 +296,15 @@ Behavior：Node/Table/Kanban 不再直接调用 field/relation ops getter；默�
 Risk：`supertag-query-field-value` 签名从 3 参扩为 3+1 可选参，向后兼容既有调用。
 
 Verification：view-framework 82/82、view-runtime 22/24（2 个失败为工作树中用户未提交的 TextUI Dashboard 实验，已在 task001 备注中隔离）、view-node/table/kanban/node/query-model/ownership 定向 59/59；干净临时 worktree（HEAD + task021 patch）全量 ERT 489/489；4 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
+
+## 2026-08-13 — task022 Board 与 Graph 迁移
+
+- Modify `supertag-board.el`：`supertag-board--send-node-list`（palette）改为消费 `supertag-query-nodes` 带 stringp/data filter，不再 maphash raw `:nodes`；board-data DTO 保持 task019 的 `supertag-query-board-detail` 路径。
+- Modify `supertag-graph-ui.el`：`supertag-graph-ui--get-nodes` 改走 `supertag-query-nodes`；`supertag-graph-ui--get-links` 改为 `supertag-query-relations-among`（全部节点 ID 诱导子图，语义与原 "both endpoints exist" 过滤等价）；`supertag-graph-ui--get-parent-child-links` 分组改走 `supertag-query-nodes`（file/level/pos 读取不变）；`supertag-graph-ui--jump-to-node` 改走 `supertag-query-node`。
+- Board ops（`supertag-board-ops.el`）是 Board semantic collection 的存储层，保持直读 `:boards`，不经过 query 层（避免层间反转）。
+
+Behavior：Graph/Board 序列化输出格式不变；WS DTO 不变。
+
+Risk：`get-links` 从单次 maphash 改为 per-node outgoing 查索引（同为 O(E)），无性能回归。
+
+Verification：query-model/ownership 定向通过、view-runtime 除隔离 TextUI 实验外全过；干净临时 worktree（HEAD + task022 patch）全量 ERT 489/489；2 个修改文件 byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
