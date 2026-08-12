@@ -159,10 +159,11 @@
   - 影响范围：formula、virtual column、automation、relation ops
   - 完成：2026-08-13；rollup 归约统一到 `supertag-rollup-apply`，Automation formula 委托共享服务；确认 rollup 无 materialization（全部派生，死代码写回分支已删）；{{}} 与表达式两种公式语法服务于不同配置表面，语法统一不在本 task 范围
 
-- task026 [ ] 封住 raw Store read seam
+- task026 [x] 封住 raw Store read seam
   - 产出：私有化/删除 `supertag-view-api-get-collection` 与 generic collection/path query；subscriptions 改为语义失效通知
   - 验证方式：`rg` 证明 UI/View/Completion/Automation 无 raw collection access；全量 parity suite 通过
   - 影响范围：view/query interface、all consumers、plugin guides
+  - 完成：2026-08-13；`supertag-view-api-get-collection` 已删除；rg 审计 UI 层零 raw access（仅 automation ops CRUD 例外）；subscriptions 已用语义事件；干净临时 worktree 全量 ERT 490/490
 
 ## M4 — Durable Config & Cleanup
 
