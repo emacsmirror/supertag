@@ -47,6 +47,17 @@ Each descriptor contains :id, :name, and :display-path."
 When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' children."
   (supertag-index-get-nodes-by-tag tag-name include-descendants))
 
+(defun supertag-query-tag-occurrences ()
+  "Return sorted unique Org Tag Occurrence tokens from projected nodes."
+  (let (occurrences)
+    (maphash
+     (lambda (_node-id node-data)
+       (dolist (token (plist-get node-data :tag-occurrences))
+         (when (stringp token)
+           (push token occurrences))))
+     (supertag-store-get-collection :nodes))
+    (sort (delete-dups occurrences) #'string<)))
+
 (defun supertag-query-resolved-fields (tag-id)
   "Return inherited field definitions resolved for TAG-ID."
   (supertag-tag-get-all-fields tag-id))

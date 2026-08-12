@@ -436,23 +436,24 @@ ID.  When ALLOW-NEW is non-nil, a valid new ID may be returned.  When
 ALLOW-EMPTY is non-nil, empty input returns nil.  ALLOW-NAMESPACE is
 accepted for backward compatibility but no longer creates virtual IDs."
   (ignore allow-namespace)
-  (let* ((known-tags
-          (sort (delete-dups
-                 (copy-sequence
-                  (if tag-ids-supplied-p
-                      tag-ids
-                    (supertag-view-api-list-tag-ids))))
-                #'string<))
-         (candidate-map
-          (mapcar
-           (lambda (id)
-             (cons (propertize
-                    (supertag-sanitize-tag-name
-                     (or (plist-get (supertag-tag-get id) :name) id))
-                               'supertag-tag-id id)
-                   id))
-           known-tags)))
-    (let* ((candidates (mapcar #'car candidate-map))
+  (let* ((paths (supertag-query-tag-paths))
+         (name-by-id (make-hash-table :test 'equal)))
+    (dolist (entry paths)
+      (puthash (plist-get entry :id) (plist-get entry :name) name-by-id))
+    (let* ((known-tags
+            (if tag-ids-supplied-p
+                (sort (delete-dups (copy-sequence tag-ids)) #'string<)
+              (mapcar (lambda (entry) (plist-get entry :id)) paths)))
+           (candidate-map
+            (mapcar
+             (lambda (id)
+               (cons (propertize
+                      (supertag-sanitize-tag-name
+                       (or (gethash id name-by-id) id))
+                      'supertag-tag-id id)
+                     id))
+             known-tags))
+           (candidates (mapcar #'car candidate-map))
            (completion-extra-properties
             '(:affixation-function supertag-tag-affixate-candidates))
            (answer (completing-read

@@ -68,48 +68,21 @@ When non-nil, `global-supertag-ui-completion-mode' will be enabled by default."
 (defun supertag-completion--get-all-tags ()
   "Get all available tag names from the supertag store."
   (condition-case err
-      (let ((tags-ht (and (fboundp 'supertag-store-get-collection)
-                          (supertag-store-get-collection :tags)))
-            (all-tags '()))
-        (if (hash-table-p tags-ht)
-            ;; Primary method: get all tag IDs from :tags collection
-            (progn
-              (maphash (lambda (tag-id _tag-data)
-                         (when (supertag-transform-inline-tag-name-p tag-id)
-                           (push tag-id all-tags)))
-                       tags-ht)
-              (sort all-tags #'string<))
-          ;; Fallback: scan nodes to collect unique tags
-          (let ((nodes-ht (and (fboundp 'supertag-store-get-collection)
-                               (supertag-store-get-collection :nodes))))
-            (when (hash-table-p nodes-ht)
-              (maphash (lambda (_node-id node-data)
-                         (when-let ((tags (plist-get node-data :tags)))
-                           (setq all-tags (append tags all-tags))))
-                       nodes-ht))
-            (sort
-             (cl-remove-if-not #'supertag-transform-inline-tag-name-p
-                               (delete-dups all-tags))
-             #'string<))))
+      (cl-remove-if-not #'supertag-transform-inline-tag-name-p
+                        (mapcar (lambda (entry) (plist-get entry :id))
+                                (supertag-query-tag-paths)))
     (error
      (message "supertag-completion: Failed to get tags: %S" err)
      '())))
 
 (defun supertag-completion--get-node-tags (node-id)
   "Get resolved Semantic Tags currently applied to NODE-ID."
-  (when-let ((node-data (supertag-node-get node-id)))
-    (plist-get node-data :tags)))
+  (supertag-query-node-tags node-id))
 
 (defun supertag-completion--get-all-tag-occurrences ()
   "Return sorted unique Org Tag Occurrences from projected nodes."
-  (let (occurrences)
-    (maphash
-     (lambda (_node-id node-data)
-       (dolist (token (plist-get node-data :tag-occurrences))
-         (when (supertag-transform-inline-tag-name-p token)
-           (push token occurrences))))
-     (supertag-store-get-collection :nodes))
-    (sort (delete-dups occurrences) #'string<)))
+  (cl-remove-if-not #'supertag-transform-inline-tag-name-p
+                    (supertag-query-tag-occurrences)))
 
 (defun supertag-completion--valid-tag-char-p (char)
   "Return non-nil if CHAR should be considered part of a tag name.

@@ -16,6 +16,7 @@
 (require 'supertag-services-query)
 (require 'supertag-services-ui)
 (require 'supertag-view-api)
+(require 'supertag-ui-completion)
 
 (defun supertag-query-model-test--relation-ids (relations)
   "Return sorted IDs from RELATIONS."
@@ -141,6 +142,23 @@
       (should (= 2 (cl-count-if
                     (lambda (edge) (eq t (alist-get 'isGlobal edge)))
                     (append (alist-get 'edges sent-data) nil)))))))
+
+(ert-deftest supertag-query-model-completion-consumes-concrete-reads ()
+  "Completion helpers consume Tag paths and occurrence projections."
+  (supertag-ownership-test-with-vault
+    (should (equal (supertag-completion--get-all-tags)
+                   (cl-remove-if-not
+                    #'supertag-transform-inline-tag-name-p
+                    (mapcar (lambda (entry) (plist-get entry :id))
+                            (supertag-query-tag-paths)))))
+    (should (equal (supertag-completion--get-all-tag-occurrences)
+                   (cl-remove-if-not
+                    #'supertag-transform-inline-tag-name-p
+                    (supertag-query-tag-occurrences))))
+    (should (equal (supertag-completion--get-node-tags
+                    supertag-ownership-test-node-a)
+                   (supertag-query-node-tags
+                    supertag-ownership-test-node-a)))))
 
 (ert-deftest supertag-query-model-executes-node-query-with-compatibility-parity ()
   "The public node-query shape preserves the S-expression entry point."
