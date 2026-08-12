@@ -283,3 +283,16 @@ Behavior：Completion、Tag picker、Stream 不再直读 raw collection；未解
 Risk：`get-all-tags` 顺序由 ID 排序改为 display-path 排序；completion 候选顺序变化但三处既有测试（inline-tag-filter self-check、completion-newtag self-check、tag-path cl-letf/order 断言）全部通过。
 
 Verification：smart-key + tag-path 55/55、view-stream/table/kanban/node 定向回归、ownership 26/26、query-model 7/7 通过；`test-inline-tag-filter.el` 与 `test-completion-newtag.el` 两个 self-check 通过；干净临时 worktree（HEAD + task020 patch）全量 ERT 489/489；4 个修改文件 byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
+
+## 2026-08-13 — task021 Node、Table 与 Kanban 迁移
+
+- Modify `supertag-services-query.el`：`supertag-query-field-value` 增加可选 RAW-P，raw 读取走 `supertag-field-get`（Kanban 分组需要无默认值的存储值）。
+- Modify `supertag-view-node.el`：resolved fields、reference/语义关系从 `supertag-query-resolved-fields` 与 `supertag-query-relations-from/-to` 读取；字段值改走 `supertag-query-field-value`；`supertag-tag-get` 的 valid/deleted 判定保持不变（Tag 实体读取不在本 task 范围）。
+- Modify `supertag-view-table.el`：field default 显示、refs-to/refs-from 与 cell 值改走具体 query 接口。
+- Modify `supertag-view-kanban.el`：分组字段值改走 `supertag-query-field-value` raw 模式（保留 nil → "Uncategorized" 语义）；列定义改走 `supertag-query-resolved-fields`。
+
+Behavior：Node/Table/Kanban 不再直接调用 field/relation ops getter；默认值、公式、引用与过滤/排序路径不变。
+
+Risk：`supertag-query-field-value` 签名从 3 参扩为 3+1 可选参，向后兼容既有调用。
+
+Verification：view-framework 82/82、view-runtime 22/24（2 个失败为工作树中用户未提交的 TextUI Dashboard 实验，已在 task001 备注中隔离）、view-node/table/kanban/node/query-model/ownership 定向 59/59；干净临时 worktree（HEAD + task021 patch）全量 ERT 489/489；4 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
