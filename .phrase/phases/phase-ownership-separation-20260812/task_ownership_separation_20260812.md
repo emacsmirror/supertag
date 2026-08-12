@@ -167,10 +167,11 @@
 
 ## M4 — Durable Config & Cleanup
 
-- task027 [ ] 将 persisted Queries/Views 迁入 semantic store
+- task027 [x] 将 persisted Queries/Views 迁入 semantic store
   - 产出：正式 `:queries/:views` collections；Customize/export file 一次性导入与 delete/update semantics
   - 验证方式：重启、Tag rename、Git merge 后引用不复活、不丢失；迁移可回滚
   - 影响范围：query library、view framework、persistence/merge/migration
+  - 完成：2026-08-13；:queries/:views 成为 durable roots；legacy defcustom 一次性导入（先存 Store 成功再清空，可回滚）；干净临时 worktree 全量 ERT 491/491
 
 - task028 [ ] 删除 legacy roots/interfaces 并完成 phase 验收
   - 产出：删除 legacy `:fields` 生产路径、无效 `:embeds` collection、raw Store interfaces 与误导 rebuild 文案
