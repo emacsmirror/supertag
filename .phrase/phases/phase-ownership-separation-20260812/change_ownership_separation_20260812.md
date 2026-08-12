@@ -377,3 +377,14 @@ Behavior：重启后 saved queries 与 view configs 从 Store 恢复；Tag renam
 Risk：`supertag-query-saved-list` 是带幂等副作用的读取（导入守卫严格：Store 空 + defcustom 非空），ownership fixture 直接引用 defcustom 的测试不受影响（不触发导入）。
 
 Verification：query/query-model 定向 29/29、ownership 26/26；干净临时 worktree（HEAD + task027 patch）全量 ERT 491/491；4 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
+
+## 2026-08-13 — task028 legacy roots/interfaces 清理与 phase 验收
+
+- Modify `supertag-core-store.el`：从 durable roots 与 canonical collections 移除 `:embeds`（审计确认无任何生产读写：embed 操作全部作用于 buffer/文件）；旧库文件的 `:embeds` 行仍由 loader 兼容读入，下次保存不再写出。
+- 审计确认：legacy `:fields` 生产写路径已在 task014 全部删除，现存引用仅在 core-store/core-transform/migration/conflicts 等迁移与冲突恢复 infra（保留以支持老库升级）；raw Store 接口（`supertag-view-api-get-collection`、UI 层 generic query）已在 task026 封死；误导性 rebuild 文案已在 task001 修正，README 现准确区分 reindex-org 与 Semantic Restore。
+
+Behavior：保存的数据库不再包含 `:embeds`；老库加载不受影响。
+
+Risk：极低；`supertag--canonicalize-store-root` 的 legacy 键名归一化保留，仅影响写出。
+
+Verification：embed/ownership/persist/canon 定向 79/79；干净临时 worktree（HEAD + task028 patch）全量 ERT 491/491；修改文件 byte-compile 零新增 warning、`git diff --check` 通过。Phase 关闭待用户确认（Deferred Gate：SQLite 不属本 phase，task028 完成后单独 ADR/phase）。
