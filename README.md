@@ -80,7 +80,7 @@ This setting only affects file-level nodes. Heading nodes continue to use Org ID
 
 Use `auto` when Org-roam and Denote files share a sync directory. Links are generated from each node's own identity: Org-ID nodes use `id:`, while Denote file nodes use `denote:`. A file without the selected persistent identity remains an ordinary Org file; SuperTag does not invent a temporary ID for it.
 
-After changing the setting, run `M-x supertag-sync-full-rescan`.
+After changing the setting, run `M-x supertag-reindex-org`.
 
 ---
 
@@ -225,7 +225,7 @@ Define fields on `#meeting`: `date`, `participants`, `decisions`, `action-items`
 | Highlight concept mentions | `M-x supertag-concept-link-mode` | Shows concept title/alias mentions as amber semantic highlights, not stored links |
 | Act on the object at point | `M-x supertag-smart-key` | Runs the default action for the current tag, node, field, link, button, or table cell |
 | Choose actions for the object at point | `M-x supertag-assist` | Shows only relevant actions, with the complete menu as a fallback |
-| Rescan Org-derived data | `M-x supertag-sync-full-rescan` | Reconciles data in the existing Store; it does not restore non-rebuildable semantic data |
+| Reindex Org documents | `M-x supertag-reindex-org` | Rebuilds Document Projections from one complete snapshot; never restores Semantic Facts |
 
 Beyond single-command lookups, Org-Supertag has a small S-expression query
 language for combining tags, fields, dates, and full-text search, e.g.
@@ -277,7 +277,7 @@ You define `status`, `priority`, `due` for `#task` **one time**. Every `#task` n
 
 ### 3. Sync is automatic and safe
 
-Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). User edits normally reach Org through explicit commands and views. The current legacy reference reconciler can also insert reciprocal links during a scan; the ownership-separation phase removes that dual write. `M-x supertag-sync-full-rescan` reconciles Org-derived data in the existing Store; restore non-rebuildable semantic data from a backup or synced copy instead.
+Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). User edits reach Org only through explicit commands and views; sync and reindex never modify Org files. `M-x supertag-reindex-org` rebuilds Org-derived Document Projections in the existing Store. Restore non-rebuildable Semantic Facts from a database backup or synced copy instead.
 
 ### Compare the effort
 
@@ -321,7 +321,7 @@ Org-SuperTag grows with you. Start simple, add power when you need it:
 
 **Org files own document facts; the database owns semantic facts.** Titles, body text, document topology, Org properties, tag occurrences, and physical Org links belong to the documents. Stable tag identities, schemas, field values, semantic relations, boards, automations, and persisted query/view definitions belong to the database. The current database also contains rebuildable projections of Org content; those copies are not independent owners.
 
-`M-x supertag-sync-full-rescan` currently rescans and reconciles Org-derived nodes, tag occurrences, and links inside the existing Store. It is not a whole-database rebuild or a semantic restore, and it cannot recover non-rebuildable semantic facts. Losing `supertag-db.el` without a backup or synced copy therefore loses non-rebuildable data. See the [data ownership constitution](doc/OWNERSHIP-CONSTITUTION_cn.md) for the authoritative ownership and migration rules.
+`M-x supertag-reindex-org` rebuilds Org-derived nodes, Tag Occurrences, Document Links, and their derived indexes from one complete Org snapshot. It aborts without changing the Store when that snapshot is incomplete. It is not a whole-database reset or Semantic Restore and cannot recover non-rebuildable Semantic Facts. Losing `supertag-db.el` without a backup or synced copy therefore loses non-rebuildable data. See the [data ownership constitution](doc/OWNERSHIP-CONSTITUTION_cn.md) for the authoritative ownership and migration rules.
 
 **6.0 changed the on-disk format of `supertag-db.el` — this is a one-way upgrade.** Since 6.0, the database is written in a deterministic, one-entity-per-line format (what makes git-native sync's field-level merging possible). Older builds (5.9.x and earlier) cannot read entities out of this format — a 5.9.x Emacs pointed at a 6.0+ database will look like it loaded successfully but show an empty store, because the old code only reads the file's first line. Upgrading is safe and automatic (opening an old database with 6.0+ migrates and re-saves it), but **going back to 5.9.x afterward is not** unless you restore a pre-upgrade copy. Two safety nets exist for that: an automatic `backups/supertag-db-premigrate-<old-version>-<timestamp>.el` snapshot the moment an out-of-date database is first loaded, and a `backups/supertag-db-preformat6-<timestamp>.el` snapshot the moment a database still in the old file format is first re-saved (covering the case where the stored version already looked current but the file itself had not been re-saved yet). Neither is ever deleted by the daily-backup cleanup. To downgrade: run `M-x supertag-restore`, pick the pre-upgrade snapshot from the list, preview it, and confirm — then quit Emacs immediately and reopen with the older build. The command keeps the selected file in the old format, refuses to replace a database locked by another Emacs, and first saves the current state (including unsaved changes) as a unique `backups/supertag-db-prerestore-*` recovery point. `M-x supertag-doctor` reports both the current on-disk format and how many of each migration snapshot type exist.
 
@@ -347,7 +347,7 @@ This puts your vault under git: it initializes a repository if there isn't one a
 M-x supertag-git-clone
 ```
 
-Give it the same remote URL and a local directory. It clones, configures the merge driver for *this* machine, and loads the database (or rebuilds it from the cloned org files if the database is missing or unreadable).
+Give it the same remote URL and a local directory. It clones, configures the merge driver for *this* machine, and loads the database. If the database is missing or unreadable, it can only reindex Document Projections from the cloned Org files; restore Semantic Facts from a database backup or synced copy.
 
 **Every clone must run its own setup.** `merge.supertag-db.driver` lives in `.git/config`, which git never syncs between clones — so `supertag-git-clone` configuring the driver on machine 2 isn't optional busywork, it's what makes *that* machine's merges semantic instead of falling back to git's default line-based text merge (see "Conflicts" below for what that fallback looks like).
 
@@ -371,7 +371,7 @@ This matters even if you think you're "just reading" on machine A: the auto-save
 
 **The presence warning.** To give sync-folder users at least a heads-up (not a lock — a sync service's multi-minute propagation delay means it can't physically be one), Org-SuperTag writes a small `supertag-presence.json` file next to the database recording which host last touched it and when. When you load the database and another host's presence looks like it was active in roughly the last 5 minutes (`supertag-presence-stale-seconds`), you'll see a loud warning naming that host and the risk. **What to do when you see it:** if you're sure the other machine is done (Emacs quit there), it's safe to proceed — the warning is one-shot and won't repeat until the other host claims presence again. If you're not sure, go quit Emacs on that other machine first. Run `M-x supertag-doctor` any time to see the current presence file's host, age, and verdict (own / foreign-active / foreign-stale). Set `supertag-presence-enable` to `nil` to turn this off entirely.
 
-**Do not sync `sync-state.el` or `backups/`.** Both live in the same data directory as the database but are local, per-machine bookkeeping (`sync-state.el` tracks file mtimes/hashes for *this machine's* filesystem; `backups/` is disk space you don't need to duplicate across machines). If your sync tool syncs the whole data directory, exclude those two paths where the tool allows it; at worst, having them get overwritten just costs an extra full rescan, it doesn't lose data.
+**Do not sync `sync-state.el` or `backups/`.** Both live in the same data directory as the database but are local, per-machine bookkeeping (`sync-state.el` tracks file mtimes/hashes for *this machine's* filesystem; `backups/` is disk space you don't need to duplicate across machines). If your sync tool syncs the whole data directory, exclude those two paths where the tool allows it; at worst, having them get overwritten just costs an extra Org reindex, it doesn't lose data.
 
 This is a stopgap, not a solution — real multi-machine sync needs something that understands merges, which is exactly what the git-native sync described above does. If concurrent editing across machines is what you're after, use that instead; a sync-folder service only ever gives you the single-writer discipline above.
 
@@ -403,10 +403,10 @@ No migration needed. Add `#tag` to headings, define fields, and start using view
 | Problem | Fix |
 |---|---|
 | Not sure where to start | `M-x supertag-doctor` — an 8-section health check with guided repairs |
-| Database looks wrong | `M-x supertag-sync-cleanup-database` then `M-x supertag-sync-full-rescan` |
+| Org-derived nodes or links look stale | `M-x supertag-reindex-org` |
 | Auto-sync not starting | Check `org-supertag-sync-directories` is set correctly |
 | Specific file not syncing | `M-x supertag-sync-analyze-file` |
-| Field values missing after rescan | Fields are DB-only; they survive rescan unless DB was wiped |
+| Field values are missing | Reindex cannot restore Semantic Facts; restore the database from a backup or synced copy |
 | Sync freezes Emacs | See `doc/SYNC-CONFIGURATION.md` for performance tuning |
 
 ---

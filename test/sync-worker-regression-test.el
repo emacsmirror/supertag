@@ -112,9 +112,9 @@ the old mtime until destructive cleanup is allowed."
             (should (equal (list file) (supertag-get-modified-files)))))
       (ignore-errors (delete-file file)))))
 
-(ert-deftest supertag-sync-full-rescan-parses-unchanged-files ()
-  "A full rescan reparses files even when their content hash is unchanged."
-  (let* ((file (make-temp-file "supertag-full-rescan-" nil ".org" "* Note\n"))
+(ert-deftest supertag-reindex-org-parses-unchanged-files ()
+  "Reindex reparses files even when their content hash is unchanged."
+  (let* ((file (make-temp-file "supertag-reindex-" nil ".org" "* Note\n"))
          (state-table (make-hash-table :test 'equal))
          (supertag-sync--state (list :sync-state state-table))
          (supertag-sync--deferred-files (make-hash-table :test 'equal))
@@ -141,6 +141,82 @@ the old mtime until destructive cleanup is allowed."
              file (list :nodes-created 0 :nodes-updated 0 :nodes-deleted 0)))
           (should parsed))
       (ignore-errors (delete-file file)))))
+
+(ert-deftest supertag-reindex-org-aborts-incomplete-snapshot-without-deletion ()
+  "An incomplete snapshot returns a report without touching projections."
+  (let* ((file (make-temp-file "supertag-reindex-partial-" nil ".org" "* Note\n"))
+         (supertag--store nil)
+         (supertag-sync--state
+          (list :sync-state (make-hash-table :test 'equal)))
+         report legacy-report)
+    (unwind-protect
+        (progn
+          (supertag--ensure-store)
+          (supertag-store-put-entity
+           :nodes "keep" (list :id "keep" :type :node :file file))
+          (cl-letf (((symbol-function 'supertag-sync--ensure-state-source) #'ignore)
+                    ((symbol-function 'supertag-sync--snapshot-build)
+                     (lambda ()
+                       (list :status 'partial :files (list file)
+                             :errors '((:error "unreadable child")))))
+                    ((symbol-function 'supertag-sync--process-single-file)
+                     (lambda (&rest _) (ert-fail "partial snapshot was processed")))
+                    ((symbol-function 'supertag-sync-validate-nodes)
+                     (lambda (&rest _) (ert-fail "partial snapshot validated")))
+                    ((symbol-function 'supertag-sync-garbage-collect-orphaned-nodes)
+                     (lambda () (ert-fail "partial snapshot ran GC")))
+                    ((symbol-function 'supertag-sync-save-state)
+                     (lambda () (ert-fail "partial snapshot saved state"))))
+            (setq report (supertag-reindex-org))
+            (setq legacy-report (supertag-sync-full-rescan)))
+          (should (eq 'aborted (plist-get report :status)))
+          (should (eq 'partial (plist-get report :snapshot-status)))
+          (should (= 0 (plist-get report :files-processed)))
+          (should (equal report legacy-report))
+          (should (supertag-node-get "keep")))
+      (ignore-errors (delete-file file)))))
+
+(ert-deftest supertag-reindex-org-rolls-back-on-processing-error ()
+  "A file failure rolls back earlier projection mutations and skips cleanup."
+  (let* ((first (make-temp-file "supertag-reindex-first-" nil ".org" "* One\n"))
+         (second (make-temp-file "supertag-reindex-second-" nil ".org" "* Two\n"))
+         (supertag--store nil)
+         (supertag-sync--state
+          (list :sync-state (make-hash-table :test 'equal)))
+         (calls 0)
+         report)
+    (unwind-protect
+        (progn
+          (supertag--ensure-store)
+          (supertag-store-put-entity
+           :nodes "keep" (list :id "keep" :type :node :file first))
+          (cl-letf (((symbol-function 'supertag-sync--ensure-state-source) #'ignore)
+                    ((symbol-function 'supertag-sync--snapshot-build)
+                     (lambda ()
+                       (list :status 'complete :files (list first second)
+                             :errors nil)))
+                    ((symbol-function 'supertag-sync--process-single-file)
+                     (lambda (&rest _)
+                       (setq calls (1+ calls))
+                       (if (= calls 1)
+                           (supertag-store-remove-entity :nodes "keep")
+                         (error "deliberate reindex failure"))))
+                    ((symbol-function 'supertag-sync-validate-nodes)
+                     (lambda (&rest _) (ert-fail "failed reindex validated")))
+                    ((symbol-function 'supertag-sync-garbage-collect-orphaned-nodes)
+                     (lambda () (ert-fail "failed reindex ran GC")))
+                    ((symbol-function 'supertag-sync-save-state)
+                     (lambda () (ert-fail "failed reindex saved state"))))
+            (setq report (supertag-reindex-org)))
+          (should (eq 'failed (plist-get report :status)))
+          (should (= 1 (plist-get report :files-processed)))
+          (should (string-match-p
+                   "deliberate reindex failure"
+                   (car (plist-get report :errors))))
+          (should (supertag-node-get "keep"))
+          (should-not (supertag-sync--snapshot-status)))
+      (ignore-errors (delete-file first))
+      (ignore-errors (delete-file second)))))
 
 (ert-deftest supertag-projector-idless-headings-never-get-ephemeral-ids ()
   "Repeated projection skips ID-less headings without inventing identities."

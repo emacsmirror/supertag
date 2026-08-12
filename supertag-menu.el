@@ -100,7 +100,7 @@
 (declare-function supertag-sync-check-now "supertag-ui-commands" ())
 (declare-function supertag-sync-cleanup-database "supertag-ui-commands" ())
 (declare-function supertag-sync-status "supertag-ui-commands" ())
-(declare-function supertag-sync-full-rescan "supertag-services-sync" ())
+(declare-function supertag-reindex-org "supertag-services-sync" ())
 
 ;; supertag-doctor.el (;;;###autoload, but NOT part of org-supertag.el's
 ;; own `require' chain; wrapped for robustness)
@@ -396,7 +396,7 @@ first if needed.")
     ("ct" "Capture with template" supertag-capture-with-template)]]
   [["Sync & Maintenance"
     ("mc" "Check & sync now"  supertag-sync-check-now)
-    ("mr" "Full rescan"       supertag-sync-full-rescan)
+    ("mr" "Reindex Org"       supertag-reindex-org)
     ("mx" "Cleanup database"  supertag-sync-cleanup-database)
     ("ms" "Sync status"       supertag-sync-status)
     ("md" "Doctor"            supertag-menu--doctor)

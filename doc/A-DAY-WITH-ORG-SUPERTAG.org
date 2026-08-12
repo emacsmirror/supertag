@@ -527,12 +527,11 @@ See =doc/VIEW_FRAMEWORK_DEV_GUIDE.md= for the full View Framework API.
 If anything looks off:
 
 #+begin_src emacs-lisp
-  ;; Full validation rebuild from Org files
-  M-x supertag-sync-cleanup-database
-  M-x supertag-sync-full-rescan
+  ;; Rebuild Org projections from a complete snapshot
+  M-x supertag-reindex-org
 
-  ;; This is safe — it only reads your Org files.  Field values in the
-  ;; database are preserved unless the DB file itself was corrupted.
+  ;; This only reads your Org files.  Semantic Facts in the database
+  ;; are preserved; restore them from backup if the DB itself was lost.
 #+end_src
 
 ** Schema Refinement
@@ -651,7 +650,7 @@ README.
 | =M-x supertag-rag-ask=                  | "What did I decide about X?"                   | Weekly    |
 | =M-x supertag-board-open=               | Visual knowledge exploration                   | Weekly    |
 | =M-x supertag-sync-status=              | Health check                                   | Weekly    |
-| =M-x supertag-sync-full-rescan=         | Rebuild database from files                    | Monthly   |
+| =M-x supertag-reindex-org=              | Rebuild Org projections                       | Monthly   |
 | =M-x supertag-sync-cleanup-database=    | Fix inconsistencies                            | As needed |
 
 * Key Bindings I Actually Use

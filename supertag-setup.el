@@ -284,7 +284,7 @@ optionally runs the initial scan, and finishes."
          (new-dirs (supertag-setup--read-directories current-dirs))
          (new-file-id (supertag-setup--read-file-id-source current-file-id)))
     (supertag-setup--persist new-dirs new-file-id)
-    (supertag-setup--run-scan 'supertag-sync-full-initialize "supertag-sync-full-initialize")
+    (supertag-setup--run-scan 'supertag-reindex-org "supertag-reindex-org")
     (supertag-setup--finish)))
 
 (defun supertag-setup--run ()
@@ -297,7 +297,7 @@ optionally runs the initial scan, and finishes."
       (let ((action (supertag-setup--offer-reconfigure-or-rescan)))
         (cond
          ((eq action 'rescan)
-          (supertag-setup--run-scan 'supertag-sync-full-rescan "supertag-sync-full-rescan")
+          (supertag-setup--run-scan 'supertag-reindex-org "supertag-reindex-org")
           (supertag-setup--finish))
          ((eq action 'reconfigure)
           (supertag-setup--run-configure status))

@@ -255,6 +255,74 @@
       (should (supertag-relation-get (plist-get field-reference :id)))
       (should (= 1 (plist-get counters :references-deleted))))))
 
+(ert-deftest supertag-reindex-org-cold-rebuilds-document-projection ()
+  "The public reindex command rebuilds projections, not Semantic Facts."
+  (supertag-ownership-test-with-vault
+    (let* ((before-semantic (supertag-ownership-test-semantic-fingerprint))
+           (before-files
+            (mapcar (lambda (file)
+                      (with-temp-buffer
+                        (insert-file-contents-literally file)
+                        (secure-hash 'sha256 (current-buffer))))
+                    files))
+           (supertag-sync--state
+            (list :sync-state (make-hash-table :test 'equal)))
+           (supertag-sync--deferred-files (make-hash-table :test 'equal))
+           projection-relation-ids report)
+      (maphash
+       (lambda (id relation)
+         (when (or (eq (plist-get relation :type) :node-tag)
+                   (supertag-relation-document-link-p relation))
+           (push id projection-relation-ids)))
+       (supertag-store-get-collection :relations))
+      (dolist (id projection-relation-ids)
+        (supertag-store-remove-entity :relations id))
+      (clrhash (supertag-store-get-collection :nodes))
+      (supertag-index-rebuild-relations)
+      (cl-letf (((symbol-function 'supertag-sync--ensure-state-source) #'ignore)
+                ((symbol-function 'supertag-sync--snapshot-build)
+                 (lambda ()
+                   (list :status 'complete :files files :scope (list vault)
+                         :errors nil :observed-at (current-time))))
+                ((symbol-function 'supertag-scan-sync-directories)
+                 (lambda (&rest _)
+                   (ert-fail "reindex rescanned past its authoritative snapshot")))
+                ((symbol-function 'supertag-sync-save-state) #'ignore))
+        (setq report (supertag-reindex-org)))
+      (should (eq 'complete (plist-get report :status)))
+      (should (eq 'complete (plist-get report :snapshot-status)))
+      (should (= 2 (plist-get report :files-discovered)))
+      (should (= 2 (plist-get report :files-processed)))
+      (should (= 2 (hash-table-count
+                    (supertag-store-get-collection :nodes))))
+      (let ((document-link
+             (car (supertag-relation-find-between
+                   supertag-ownership-test-node-a
+                   supertag-ownership-test-node-b :reference))))
+        (should (supertag-relation-document-link-p document-link)))
+      (should (equal (list supertag-ownership-test-node-b)
+                     (plist-get
+                      (supertag-node-get supertag-ownership-test-node-a)
+                      :ref-to)))
+      (should (equal (list supertag-ownership-test-node-a)
+                     (plist-get
+                      (supertag-node-get supertag-ownership-test-node-b)
+                      :ref-from)))
+      (should (= 1 (plist-get
+                    (supertag-node-get supertag-ownership-test-node-b)
+                    :ref-count)))
+      (should (supertag-relation-get
+               supertag-ownership-test-semantic-edge))
+      (should (equal before-semantic
+                     (supertag-ownership-test-semantic-fingerprint)))
+      (should
+       (equal before-files
+              (mapcar (lambda (file)
+                        (with-temp-buffer
+                          (insert-file-contents-literally file)
+                          (secure-hash 'sha256 (current-buffer))))
+                      files))))))
+
 (provide 'ownership-separation-test)
 
 ;;; ownership-separation-test.el ends here

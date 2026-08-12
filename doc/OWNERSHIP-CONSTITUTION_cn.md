@@ -54,9 +54,11 @@ Store 是当前的物理容器，不是整个系统的单一真相源。一个�
 
 ## 4. Reindex 不是数据库恢复
 
-当前命令 `M-x supertag-sync-full-rescan` 会在现有 Store 内重新扫描并协调
-Org 派生的 node、Tag Occurrence 与 link 数据。它不是 whole-store rebuild，
-也不能恢复 schema、field value、Board、Automation 等不可重建的 Semantic Facts。
+公开命令 `M-x supertag-reindex-org` 会从一个完整 Org 快照重建现有 Store 内
+Org 派生的 node、Tag Occurrence、Document Link 及其派生索引；快照不完整时
+中止且不修改 Store。它不是 whole-store reset，也不能恢复 schema、field value、
+Board、Automation 等不可重建的 Semantic Facts。旧命令
+`M-x supertag-sync-full-rescan` 只作为兼容别名保留；新代码和文档必须使用公开命令。
 
 目标 `Reindex` 契约只允许重建 Document Projection 和 derived indexes。
 `Semantic Restore` 则从备份或同步副本恢复不可重建的 Semantic Facts。两者不得混称。

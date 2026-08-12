@@ -46,10 +46,11 @@
   - 影响范围：sync、relation ops/index、reference tests
   - 完成：2026-08-12；ownership 6/6、relation/field-reference/sync/node 定向回归 39/39；干净临时 clone 全量 ERT 427/427 通过
 
-- task008 [ ] 提供准确的 Org reindex 命令与契约
+- task008 [x] 提供准确的 Org reindex 命令与契约
   - 产出：`supertag-reindex-org`；旧 full-rescan command 作为兼容入口并明确不是 Semantic Restore 或 whole-store reset
   - 验证方式：清空 Document Projection 后可重建；Semantic Fact fingerprint 不变；snapshot incomplete 时无删除
   - 影响范围：sync command、menu/setup/git fallback、README/docs、tests
+  - 完成：2026-08-12；定向 ERT 58/58 与 62/62、干净临时 clone 全量 ERT 429/429 通过；修改文件 byte-compile 成功
 
 - task009 [ ] 新 Reference 改为单一 forward Document Link
   - 依赖：复用并完成 `phase-sync-integrity-20251226/task013` 的旧 reciprocal 审计结论

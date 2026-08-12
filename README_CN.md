@@ -79,7 +79,7 @@ Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库
 
 Org-roam 与 Denote 文件放在同一同步目录时，使用 `auto`。链接由每个节点自己的身份决定：Org-ID 节点使用 `id:`，Denote 文件节点使用 `denote:`。文件没有所选的持久化身份时，它仍是普通 Org 文件；SuperTag 不会为它生成临时 ID。
 
-修改设置后，执行 `M-x supertag-sync-full-rescan`。
+修改设置后，执行 `M-x supertag-reindex-org`。
 
 ---
 
@@ -224,7 +224,7 @@ rating   →  数字（1–5）
 | 高亮概念提及 | `M-x supertag-concept-link-mode` | 将概念 title/alias 的提及显示为琥珀色语义高亮，不落库为链接 |
 | 操作光标下的对象 | `M-x supertag-smart-key` | 执行当前 tag、node、field、link、button 或 table cell 的默认动作 |
 | 选择光标对象的相关动作 | `M-x supertag-assist` | 只显示对象相关动作，并保留完整菜单出口 |
-| 重扫 Org 派生数据 | `M-x supertag-sync-full-rescan` | 在现有 Store 中协调数据；不会恢复不可重建的语义数据 |
+| 重建 Org 索引 | `M-x supertag-reindex-org` | 从一个完整快照重建 Document Projection；绝不恢复 Semantic Facts |
 
 除了单条命令，Org-Supertag 还提供一套小巧的 S-expression 查询语言，可以组合标签、字段、日期和全文搜索，例如
 `(and (tag "task") (not (field "status" "done")))`。可以把它写进 `org-supertag-query-block`
@@ -273,7 +273,7 @@ Org-SuperTag 从三个层面避免这个问题：
 
 ### 3. 同步自动且安全
 
-Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。用户编辑通常通过显式命令和 View 写入 Org；当前 legacy reference reconciler 仍可能在扫描时插入 reciprocal link，ownership-separation phase 会移除这条双写路径。`M-x supertag-sync-full-rescan` 只会在现有 Store 中协调 Org 派生数据；不可重建的语义数据必须从备份或同步副本恢复。
+Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。只有显式命令和 View 才会写入 Org；sync 与 reindex 不修改 Org 文件。`M-x supertag-reindex-org` 只重建现有 Store 中的 Document Projection；不可重建的 Semantic Facts 必须从数据库备份或同步副本恢复。
 
 ### 算一笔账
 
@@ -317,7 +317,7 @@ Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.
 
 **Org 文件拥有文档事实；数据库拥有语义事实。** 标题、正文、文档拓扑、Org properties、Tag Occurrence 和真实 Org link 属于文档；稳定 Tag identity、Schema、field value、Semantic Edge、Board、Automation 以及持久 Query/View 定义属于数据库。当前数据库也保存 Org 内容的可重建 Projection，但这些副本没有独立主权。
 
-`M-x supertag-sync-full-rescan` 当前会在现有 Store 中重扫并协调 Org 派生的 node、Tag Occurrence 和 link。它不是 whole-database rebuild 或 Semantic Restore，也不能恢复不可重建的 Semantic Facts。没有备份或同步副本时丢失 `supertag-db.el`，就会永久丢失不可重建数据。完整规则见[《数据主权宪章》](doc/OWNERSHIP-CONSTITUTION_cn.md)。
+`M-x supertag-reindex-org` 会从一个完整 Org 快照重建 node、Tag Occurrence、Document Link 及其派生索引；快照不完整时，它会中止且不修改 Store。它不是 whole-database reset，也不是 Semantic Restore，无法恢复不可重建的 Semantic Facts。没有备份或同步副本时丢失 `supertag-db.el`，就会永久丢失不可重建数据。完整规则见[《数据主权宪章》](doc/OWNERSHIP-CONSTITUTION_cn.md)。
 
 ---
 
@@ -341,7 +341,7 @@ M-x supertag-git-setup
 M-x supertag-git-clone
 ```
 
-给它同一个远端 URL 和一个本地目录。它会 clone、为*这台机器*配置合并驱动，并加载数据库（如果数据库缺失或无法读取，就从 clone 下来的 org 文件重建）。
+给它同一个远端 URL 和一个本地目录。它会 clone、为*这台机器*配置合并驱动，并加载数据库。如果数据库缺失或无法读取，它只能从 clone 下来的 Org 文件重建 Document Projection；Semantic Facts 必须从数据库备份或同步副本恢复。
 
 **每个 clone 都必须自己跑一遍配置。** `merge.supertag-db.driver` 存在 `.git/config` 里，git 从不同步这个文件——所以机器 2 上 `supertag-git-clone` 配置驱动这一步不是可有可无的杂务，正是它让*这台*机器的合并变成语义合并，而不是退化成 git 默认的按行文本合并（退化后是什么样子见下面"冲突"一节）。
 
@@ -365,7 +365,7 @@ M-x supertag-git-clone
 
 **presence（在场）告警。** 为了至少给同步文件夹的用户一个提醒（这不是锁——同步服务动辄几分钟的传播延迟决定了它在物理上不可能是锁），Org-SuperTag 会在数据库文件旁边写一个很小的 `supertag-presence.json` 文件，记录"最后是哪台主机碰过它、什么时候"。当你加载数据库时，如果发现另一台主机大约在最近 5 分钟内（`supertag-presence-stale-seconds`）还活跃过，就会弹出一条醒目的告警，点名那台主机并说明风险。**看到告警后怎么办：** 如果你确定另一台机器已经退出 Emacs，可以放心继续——这条告警只出现一次，不会重复弹出，直到另一台主机再次声明 presence 为止。如果不确定，先去那台机器上退出 Emacs。随时可以用 `M-x supertag-doctor` 查看当前 presence 文件记录的主机、距今时长和判定结果（本机 / 异机活跃 / 异机过期）。将 `supertag-presence-enable` 设为 `nil` 可以完全关闭这个功能。
 
-**不要同步 `sync-state.el` 和 `backups/`。** 这两者虽然和数据库放在同一个数据目录下，但都是本机专属的记录（`sync-state.el` 追踪的是*这台机器*文件系统的 mtime/hash；`backups/` 只是磁盘占用，没必要在多台机器间重复保留）。如果你的同步工具是整个数据目录一起同步，请在工具允许的范围内把这两个路径排除掉；就算被覆盖了，最坏结果也只是多做一次全量重扫，不会丢数据。
+**不要同步 `sync-state.el` 和 `backups/`。** 这两者虽然和数据库放在同一个数据目录下，但都是本机专属的记录（`sync-state.el` 追踪的是*这台机器*文件系统的 mtime/hash；`backups/` 只是磁盘占用，没必要在多台机器间重复保留）。如果你的同步工具是整个数据目录一起同步，请在工具允许的范围内把这两个路径排除掉；就算被覆盖了，最坏结果也只是多做一次 Org reindex，不会丢数据。
 
 这只是权宜之计，不是最终方案——真正的多机同步需要一个懂"合并"的传输层，而这正是上面的 git 原生同步做的事。如果你要的是多机并发编辑，请直接用它；同步文件夹服务能给你的，永远只是上面的单写者纪律。
 
@@ -397,10 +397,10 @@ M-x supertag-migrate-database-to-new-arch RET
 | 问题 | 解决方法 |
 |---|---|
 | 不知道从哪查起 | `M-x supertag-doctor` —— 8 个板块的健康检查，并引导你逐项修复 |
-| 数据库看起来不对 | `M-x supertag-sync-cleanup-database` 然后 `M-x supertag-sync-full-rescan` |
+| Org 派生节点或链接看起来过期 | `M-x supertag-reindex-org` |
 | 自动同步没启动 | 检查 `org-supertag-sync-directories` 是否正确配置 |
 | 某个文件没同步 | `M-x supertag-sync-analyze-file` |
-| 全量重建后字段值不见了 | 字段值在数据库中，重建后丢失说明数据库被清空过 |
+| 字段值不见了 | reindex 不能恢复 Semantic Facts；请从数据库备份或同步副本恢复 |
 | 同步导致 Emacs 卡顿 | 参见 `doc/SYNC-CONFIGURATION.md` 的性能调优 |
 
 ---

@@ -46,9 +46,9 @@ Org-Supertag operates in one of two sync-trigger modes:
 If you have not set `org-supertag-sync-directories`, auto-sync will **not** run.
 You trigger sync explicitly when you want it:
 
-- `M-x supertag-sync-full-rescan` — re-scan every managed `.org` file.
+- `M-x supertag-reindex-org` — re-scan every managed `.org` file.
 - Open an Org file and save it — the saved file is re-indexed on next tick
-  (if auto-sync is on) or will be picked up by the next manual `full-rescan`.
+  (if auto-sync is on) or will be picked up by the next manual reindex.
 
 This mode is **safe for large repositories** and **recommended for cautious
 users**. You are always in control of when the database is updated.
@@ -64,7 +64,7 @@ auto-sync becomes active by default:
 - Between timer ticks, sync also runs during Emacs idle time (after 
   `supertag-sync-idle-delay` seconds of inactivity).
 
-Auto-sync **does not** run a full rescan on every tick — it only processes
+Auto-sync **does not** reindex the whole vault on every tick — it only processes
 files that changed since the last sync. This keeps the background load minimal.
 
 To **disable** auto-start entirely while keeping your directory configuration:
@@ -195,7 +195,7 @@ For large repositories or cautious users who want full control:
   :ensure nil  ; or :straight, depending on your setup
   :config
   ;; Do NOT set org-supertag-sync-directories — this keeps auto-sync off.
-  ;; When you want to sync, run M-x supertag-sync-full-rescan manually.
+  ;; When you want to sync, run M-x supertag-reindex-org manually.
 
   ;; Optionally disable the auto-start flag (already inert without directories,
   ;; but explicit is better):
@@ -231,7 +231,7 @@ For a moderate-sized Org directory (a few hundred files or fewer):
   ;; Tag style
   (setq supertag-tag-style 'inline)
 
-  ;; First time: run M-x supertag-sync-full-rescan to build the initial database
+  ;; First time: run M-x supertag-reindex-org to build the initial Document Projection
   )
 ```
 
@@ -257,7 +257,7 @@ For separate knowledge domains with independent databases:
   (setq supertag-sync-auto-start t)
 
   ;; First time in each vault: switch to it (M-x supertag-vault-activate),
-  ;; then run M-x supertag-sync-full-rescan to build the initial database.
+  ;; then run M-x supertag-reindex-org to build the initial Document Projection.
   )
 ```
 
@@ -283,7 +283,7 @@ For repositories with thousands of Org files:
         '("~/org/big-repo/archive/"
           "~/org/big-repo/attachments/"))
 
-  ;; First time: run M-x supertag-sync-full-rescan in a dedicated session.
+  ;; First time: run M-x supertag-reindex-org in a dedicated session.
   ;; This may take a while on first run. Progress messages appear in *Messages*.
   )
 ```
@@ -310,10 +310,10 @@ is skipped. Exclusions take priority over included directories.
 
 | Command | Description |
 |---|---|
-| `M-x supertag-sync-full-rescan` | Force a complete re-scan of every managed Org file. Builds or rebuilds the entire database. Displays a summary of nodes created, updated, and deleted. |
+| `M-x supertag-reindex-org` | Rebuild Document Projections and derived indexes from one complete Org snapshot. Aborts without changes if the snapshot is incomplete. Never restores Semantic Facts. |
 | `M-x supertag-sync-start-auto-sync` | Start the periodic auto-sync timer. Use with a prefix argument to override the interval: `C-u 600 M-x supertag-sync-start-auto-sync` (sync every 10 minutes). |
 | `M-x supertag-sync-stop-auto-sync` | Stop the auto-sync timer. Sync stops until you call `start-auto-sync` or restart Emacs. |
-| `M-x supertag-sync-cleanup-database` | Run full database maintenance: validate all nodes against source files (marks missing nodes as orphaned), then garbage-collect orphaned nodes. Safe to run at any time. |
+| `M-x supertag-sync-cleanup-database` | Validate nodes and garbage-collect orphans. This is destructive maintenance: verify every sync directory is available and back up the Semantic Store first. |
 
 ### Vault Management
 
@@ -325,7 +325,7 @@ is skipped. Exclusions take priority over included directories.
 
 | Command | Description |
 |---|---|
-| `M-x supertag-get-modified-files` | Return a list of files that have changed since their last sync. Useful for understanding what `full-rescan` would process. |
+| `M-x supertag-get-modified-files` | Return a list of files that have changed since their last sync. Useful for understanding what incremental sync would process. |
 
 ---
 
@@ -341,10 +341,10 @@ is skipped. Exclusions take priority over included directories.
    ```elisp
    (setq supertag-sync-auto-start nil)
    ```
-   You can still sync manually with `M-x supertag-sync-full-rescan`.
+   You can still sync manually with `M-x supertag-reindex-org`.
 
-2. **Run the first full-rescan in a dedicated session** — disable auto-start, restart
-   Emacs, then run `M-x supertag-sync-full-rescan`. Monitor the `*Messages*` buffer
+2. **Run the first reindex in a dedicated session** — disable auto-start, restart
+   Emacs, then run `M-x supertag-reindex-org`. Monitor the `*Messages*` buffer
    for progress. Once the initial scan is done, re-enable auto-start.
 
 3. **Increase timing intervals** to reduce the background load:
@@ -390,11 +390,12 @@ new headings not found.
 
 **Solutions** (try in order):
 
-1. **Run a full rescan**: `M-x supertag-sync-full-rescan`. This is the most
-   thorough fix — it re-reads every managed file and rebuilds the node index.
+1. **Run an Org reindex**: `M-x supertag-reindex-org`. This re-reads every
+   managed file and rebuilds Document Projections and their derived indexes.
 
-2. **Clean up orphaned nodes**: `M-x supertag-sync-cleanup-database`. This
-   removes database entries whose source files no longer exist.
+2. **Clean up confirmed orphaned nodes**: only after a complete reindex, run
+   `M-x supertag-sync-cleanup-database`. This destructively removes entries
+   whose source files no longer exist; back up the Semantic Store first.
 
 3. **Check your file pattern**: If you use non-standard Org file extensions,
    make sure `supertag-sync-file-pattern` matches them:
@@ -446,7 +447,7 @@ intervene to prevent accidental mass deletion.
 **Solution**:
 
 1. Add the new location to `org-supertag-sync-directories` before moving files.
-2. Run `M-x supertag-sync-full-rescan` — this imports nodes at the new paths.
+2. Run `M-x supertag-reindex-org` — this imports nodes at the new paths.
 3. After confirming everything is correct, run `M-x supertag-sync-cleanup-database`
    to remove nodes still pointing to the old (now non-existent) paths.
 
@@ -455,7 +456,7 @@ intervene to prevent accidental mass deletion.
 If sync timers get into a broken state (repeated errors, unexpected behavior):
 
 1. Stop auto-sync: `M-x supertag-sync-stop-auto-sync`
-2. Run a full rescan to rebuild state: `M-x supertag-sync-full-rescan`
+2. Run an Org reindex to rebuild projection state: `M-x supertag-reindex-org`
 3. Restart auto-sync: `M-x supertag-sync-start-auto-sync`
 
 If problems persist across Emacs restarts, try clearing the sync state file:
@@ -463,7 +464,7 @@ If problems persist across Emacs restarts, try clearing the sync state file:
 1. Quit Emacs.
 2. Delete the sync state file (usually `sync-state.el` in Org-Supertag's data
    directory — check `M-: supertag-sync-state-file` to find the exact path).
-3. Restart Emacs and run `M-x supertag-sync-full-rescan` to rebuild state.
+3. Restart Emacs and run `M-x supertag-reindex-org` to rebuild state.
 
 ---
 
@@ -480,7 +481,7 @@ node becomes "orphaned" (its `:file` property is set to `nil`). The sync engine
 will **not** delete orphaned nodes immediately. It waits
 `supertag-sync-orphan-grace-seconds` (default: 3600 = 1 hour) before garbage
 collection can remove them. During this window, if the file reappears (or a
-full-rescan re-creates the node), the orphan period is reset.
+reindex re-creates the node), the orphan period is reset.
 
 To adjust the grace period:
 

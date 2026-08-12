@@ -1999,7 +1999,7 @@ Useful for diagnosing why nodes aren't loading properly."
                   (princ "1. Data was created with an older version\n")
                   (princ "2. Manual editing of the database file\n")
                   (princ "3. Incomplete migration\n\n")
-                  (princ "Solution: Run M-x supertag-sync-full-rescan to rebuild the database.\n")))))
+                  (princ "Solution: Run M-x supertag-reindex-org to rebuild Org projections; restore Semantic Facts from backup.\n")))))
         (error
          (message "Error reading database file: %s" (error-message-string err))))))))
 

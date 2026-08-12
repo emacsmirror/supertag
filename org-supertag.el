@@ -646,14 +646,14 @@ This may indicate:\n\
 1. Database corruption or format issues\n\
 2. All nodes were deleted or marked as orphaned\n\
 3. Sync directories configuration changed\n\n\
-Consider running: M-x supertag-sync-full-rescan" db-file)
+Consider running: M-x supertag-reindex-org" db-file)
                        :warning))
     
     ;; Suggest initial sync if database is truly empty
     (when (and (= node-count 0)
                org-supertag-sync-directories
                (cl-some #'file-directory-p org-supertag-sync-directories))
-      (message "Database is empty. Consider running: M-x supertag-sync-full-rescan"))))
+      (message "Database is empty. Consider running: M-x supertag-reindex-org"))))
  
 ;; --- Hooks for persistence ---
 (add-hook 'kill-emacs-hook #'supertag-save-store)

@@ -504,8 +504,8 @@ loads it directly (no rebuild) and reports matching node/tag counts."
 
 (supertag-git-sync-test--deftest supertag-git-sync-test-clone-corrupt-db-rebuilds
     "Cloning a remote whose committed `.supertag/supertag-db.el' is corrupt
-\(not a readable store) takes the rebuild path: the existing sync scanner
-\(`supertag-sync-full-rescan') rebuilds nodes from the cloned org files."
+\(not a readable store) takes the projection path: `supertag-reindex-org'
+rebuilds document nodes from the cloned Org files."
   (supertag-git-sync-test--with-temp-dir dir
     (let* ((bare (expand-file-name "bare.git" dir))
            (seed (file-name-as-directory (expand-file-name "seed" dir)))

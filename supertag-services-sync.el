@@ -1773,6 +1773,45 @@ COUNTERS is a plist for tracking relation statistics."
           (setf (plist-get counters :references-deleted)
                 (1+ (or (plist-get counters :references-deleted) 0))))))))
 
+(defun supertag-sync--reconcile-all-projected-relations (counters)
+  "Reconcile relation projections after every document node is available.
+COUNTERS receives Document Link creation/deletion totals."
+  (let (nodes)
+    (supertag-traverse-nodes
+     (lambda (_id node)
+       (when (and (eq (plist-get node :type) :node)
+                  (plist-get node :file))
+         (push node nodes))))
+    (dolist (node nodes)
+      (supertag--process-node-tags node)
+      (supertag--cleanup-orphaned-references
+       (plist-get node :id) (plist-get node :ref-to) counters)
+      (supertag--process-node-references node counters))))
+
+(defun supertag-sync--rebuild-reference-caches ()
+  "Rebuild derived node backlink caches from indexed reference relations."
+  (let (node-ids)
+    (supertag-traverse-nodes
+     (lambda (id node)
+       (when (eq (plist-get node :type) :node)
+         (push id node-ids))))
+    (dolist (id node-ids)
+      (when-let* ((node (supertag-node-get id)))
+        (let* ((incoming
+                (sort
+                 (delete-dups
+                  (mapcar (lambda (relation) (plist-get relation :from))
+                          (supertag-relation-find-by-to id :reference)))
+                 #'string<))
+               (count (length incoming)))
+          (unless (and (equal incoming (plist-get node :ref-from))
+                       (= count (or (plist-get node :ref-count) 0)))
+            (supertag-store-put-entity
+             :nodes id
+             (plist-put
+              (plist-put (copy-sequence node) :ref-from incoming)
+              :ref-count count))))))))
+
 (defun supertag--extract-outline-path (headline)
   "Extract the outline path (olp) for HEADLINE.
 Returns a list of ancestor titles from root to current headline (inclusive).
@@ -2088,67 +2127,99 @@ If INTERVAL is nil, use `supertag-sync-auto-interval`."
   (supertag-async-clear))
 
 ;;;###autoload
-(cl-defun supertag-sync-full-rescan ()
-  "Force a full rescan of every file currently managed by Supertag sync.
-When called interactively, display a summary report and return a plist
-describing the work that was performed."
+(defun supertag-reindex-org ()
+  "Rebuild Document Projections from one complete Org snapshot.
+This command never restores Semantic Facts and never modifies Org files.
+Return a report plist whose :status is `complete', `aborted', or `failed'."
   (interactive)
   (supertag-sync--ensure-state-source)
-  (when supertag-sync-snapshot-guard
-    (let* ((snapshot (supertag-sync--snapshot-build))
-           (status (plist-get snapshot :status)))
-      (supertag-sync--snapshot-set snapshot)
-      (unless (eq status 'complete)
-        (message "Supertag rescan aborted: directories unavailable or incomplete.")
-        (cl-return-from supertag-sync-full-rescan nil))))
-  (let* ((state-table (supertag-sync--get-state-table))
-         (files (cl-delete-duplicates
-                 (append (supertag-scan-sync-directories t)
-                         (let (state-files)
-                           (when (hash-table-p state-table)
-                             (maphash (lambda (file _)
-                                        (push file state-files))
-                                      state-table))
-                           state-files))
-                 :test #'string-equal))
-         (files (cl-remove-if-not
-                 (lambda (file)
-                   (and (stringp file)
-                        (file-regular-p file)
-                        (supertag-sync--in-sync-scope-p file)))
-                 files))
+  (let* ((previous-snapshot (copy-tree (supertag-sync--snapshot-get)))
+         (snapshot (supertag-sync--snapshot-build))
+         (snapshot-status (plist-get snapshot :status))
+         (files (sort (copy-sequence (plist-get snapshot :files)) #'string<))
+         (state-table (supertag-sync--get-state-table))
+         (state-before (copy-hash-table state-table))
+         (deferred-before (copy-hash-table supertag-sync--deferred-files))
          (processed 0)
          (counters '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0
                      :references-created 0 :references-deleted 0))
-         (supertag-sync--is-full-rescan-p t))
-    (supertag-with-transaction
-      (dolist (file files)
+         (supertag-sync--is-full-rescan-p t)
+         gc-count
+         report)
+    (supertag-sync--snapshot-set snapshot)
+    (if (not (eq snapshot-status 'complete))
+        (setq report
+              (list :status 'aborted
+                    :snapshot-status snapshot-status
+                    :files-discovered (length files)
+                    :files-processed 0
+                    :errors (plist-get snapshot :errors)))
+      (progn
         (condition-case err
             (progn
-              (supertag-sync--process-single-file file counters)
-              (cl-incf processed))
+              (supertag-with-transaction
+                (dolist (file files)
+                  (supertag-sync--process-single-file file counters)
+                  (cl-incf processed))
+                ;; File order cannot affect links or derived query state.
+                (supertag-index-rebuild-relations)
+                (supertag-sync--reconcile-all-projected-relations counters)
+                (supertag-index-rebuild-relations)
+                (supertag-sync--rebuild-reference-caches)
+                (supertag-sync-validate-nodes counters)
+                (setq gc-count
+                      (supertag-sync-garbage-collect-orphaned-nodes)))
+              (setq report
+                    (list :status 'complete
+                          :snapshot-status snapshot-status
+                          :files-discovered (length files)
+                          :files-processed processed
+                          :nodes-created (plist-get counters :nodes-created)
+                          :nodes-updated (plist-get counters :nodes-updated)
+                          :nodes-deleted (plist-get counters :nodes-deleted)
+                          :references-created
+                          (plist-get counters :references-created)
+                          :references-deleted
+                          (plist-get counters :references-deleted)
+                          :garbage-collected gc-count)))
           (error
-           (message "Supertag rescan skipped %s: %s" file (error-message-string err)))))
-      (supertag-sync-validate-nodes counters))
-    (supertag-sync-save-state)
-    (let* ((gc-count (supertag-sync-garbage-collect-orphaned-nodes))
-           (result (list :files-processed processed
-                         :nodes-created (plist-get counters :nodes-created)
-                         :nodes-updated (plist-get counters :nodes-updated)
-                         :nodes-deleted (plist-get counters :nodes-deleted)
-                         :references-created (plist-get counters :references-created)
-                         :references-deleted (plist-get counters :references-deleted)
-                         :garbage-collected gc-count)))
-      (when (called-interactively-p 'interactive)
-        (message "Supertag rescan: %d files processed, %d created, %d updated, %d deleted, %d refs created, %d refs deleted, %d GC."
-                 processed
-                 (plist-get counters :nodes-created)
-                 (plist-get counters :nodes-updated)
-                 (plist-get counters :nodes-deleted)
-                 (plist-get counters :references-created)
-                 (plist-get counters :references-deleted)
-                 gc-count))
-      result)))
+           (clrhash state-table)
+           (maphash (lambda (file state)
+                      (puthash file state state-table))
+                    state-before)
+           (setq supertag-sync--deferred-files deferred-before)
+           (supertag-sync--snapshot-set previous-snapshot)
+           (setq report
+                 (list :status 'failed
+                       :snapshot-status snapshot-status
+                       :files-discovered (length files)
+                       :files-processed processed
+                       :errors (list (error-message-string err))))))
+        (when (eq (plist-get report :status) 'complete)
+          (supertag-sync-save-state))))
+    (when (called-interactively-p 'interactive)
+      (pcase (plist-get report :status)
+        ('complete
+         (message
+          "Supertag reindex: %d files, %d created, %d updated, %d deleted, %d refs created, %d refs deleted, %d GC."
+          (plist-get report :files-processed)
+          (plist-get report :nodes-created)
+          (plist-get report :nodes-updated)
+          (plist-get report :nodes-deleted)
+          (plist-get report :references-created)
+          (plist-get report :references-deleted)
+          (plist-get report :garbage-collected)))
+        ('aborted
+         (message "Supertag reindex aborted: snapshot is %s; no changes made."
+                  snapshot-status))
+        ('failed
+         (message "Supertag reindex failed after %d files; Store changes rolled back: %s"
+                  processed (car (plist-get report :errors))))))
+    report))
+
+;;;###autoload
+(defalias 'supertag-sync-full-rescan #'supertag-reindex-org
+  "Compatibility alias for `supertag-reindex-org'.")
 
 ;;;-------------------------------------------------------------------
 ;;; Database Cleanup

@@ -117,7 +117,7 @@
 ;; Everything below genuinely lives in files this file does not require.
 (declare-function supertag-config-guard--capture "org-supertag")
 (declare-function supertag-vault--vault-mode-p "org-supertag")
-(declare-function supertag-sync-full-rescan "supertag-services-sync")
+(declare-function supertag-reindex-org "supertag-services-sync")
 (declare-function supertag-sync-check-now "supertag-services-sync")
 (declare-function supertag-sync--process-single-file "supertag-services-sync")
 (declare-function supertag-sync-save-state "supertag-services-sync")
@@ -1036,17 +1036,13 @@ clone into configuring a nonexistent repository."
         (error "supertag-git-clone: `git clone %s %s' failed: %s"
                remote-url local-dir (string-trim (buffer-string)))))))
 
-(defun supertag-git--rebuild-from-org-files ()
-  "Rebuild the database from the vault's org files via the existing sync
-scanner (`supertag-sync-full-rescan'), used by `supertag-git-clone' when
-the cloned repository's database is missing or fails to parse. Returns
-non-nil (the scanner's own return value, whatever that is) on success, or
-nil when the scanner is not loaded in this session (`supertag-services-sync.el'
-not required -- see this file's Commentary on package independence); the
-caller reports that degraded case to the user rather than silently doing
-nothing."
-  (when (fboundp 'supertag-sync-full-rescan)
-    (funcall #'supertag-sync-full-rescan)))
+(defun supertag-git--reindex-org-files ()
+  "Reindex Org projections after clone and return the successful report.
+This cannot restore Semantic Facts from a missing or unreadable database.
+Return nil when the scanner is unavailable or the reindex is incomplete."
+  (when (fboundp 'supertag-reindex-org)
+    (let ((report (funcall #'supertag-reindex-org)))
+      (and (eq (plist-get report :status) 'complete) report))))
 
 (defun supertag-git--current-node-tag-counts ()
   "Return (NODE-COUNT . TAG-COUNT) from the live in-memory store, or (0 . 0)
@@ -1080,8 +1076,8 @@ Steps:
    (`supertag-git--register-vault-root').
 4. Load the database from `.supertag/supertag-db.el' if it exists and
    parses; otherwise (missing, e.g. a fresh empty remote, or corrupt)
-   rebuild it from the cloned org files via the existing sync scanner
-   (`supertag-git--rebuild-from-org-files').
+   reindex Document Projections from the cloned Org files
+   (`supertag-git--reindex-org-files').  This cannot restore Semantic Facts.
 5. Report the resulting node/tag counts.
 
 Returns a plist: (:repo-root ROOT :db-file FILE :loaded BOOL :rebuilt BOOL
@@ -1112,15 +1108,15 @@ Returns a plist: (:repo-root ROOT :db-file FILE :loaded BOOL :rebuilt BOOL
                 (funcall #'supertag-load-store))
               (setq loaded t)
               (message "supertag-git-clone: database loaded from %s." db-file))
-          (message "supertag-git-clone: database at %s is missing or unreadable; rebuilding from the cloned org files..."
+          (message "supertag-git-clone: database at %s is missing or unreadable; reindexing Org projections (Semantic Facts cannot be restored from Org)..."
                    db-file)
-          (if (supertag-git--rebuild-from-org-files)
+          (if (supertag-git--reindex-org-files)
               (progn
                 (setq rebuilt t)
                 (when (fboundp 'supertag-save-store)
                   (funcall #'supertag-save-store))
-                (message "supertag-git-clone: rebuild complete."))
-            (message "supertag-git-clone: sync scanner not loaded in this session; once org-supertag has fully started, run `M-x supertag-sync-full-rescan' manually to rebuild.")))
+                (message "supertag-git-clone: Org projection reindex complete; restore Semantic Facts from a backup if needed."))
+            (message "supertag-git-clone: Org reindex unavailable or incomplete; once the vault is readable and org-supertag has fully started, run `M-x supertag-reindex-org'.")))
         (let* ((counts (supertag-git--current-node-tag-counts))
                (node-count (car counts))
                (tag-count (cdr counts)))

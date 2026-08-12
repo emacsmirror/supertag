@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task008 准确的 Org Reindex Module
+
+- Add `supertag-reindex-org`：只消费一个 complete Org snapshot，并返回 `complete`、`aborted` 或 `failed` report；snapshot partial/unavailable 时零写入、零删除。
+- Modify batch projection：所有文件导入后统一 reconcile node-tag 与 Document Link，再重建 relation indexes/backlink caches；消除 source-before-target 的冷重建顺序依赖。
+- Modify transaction boundary：file processing、relation join、validation 与 GC 共用一个 Store transaction；失败恢复 sync state、deferred state 与先前 snapshot。
+- Keep `supertag-sync-full-rescan` as a compatibility alias；菜单、setup 与 Git clone fallback 统一调用新公开命令，并修复 setup 对不存在的 `supertag-sync-full-initialize` 的调用。
+- Modify README、sync guide、Ownership Constitution 与 day-in-the-life 文档：Reindex 只重建 Document Projection，绝不等同于 whole-store reset 或 Semantic Restore。
+- Add `issue043` 与三条 public-interface regressions：覆盖冷 Projection 重建、Semantic Fact/Org 文件不变、incomplete snapshot 零处理、legacy alias parity 和处理中途失败回滚。
+
+Behavior：用户现在执行 `M-x supertag-reindex-org`；成功时重建 Org 派生 node、Tag Occurrence、Document Link 及 derived indexes，Semantic Facts 与 Org 文件不变。旧命令仍可用。Git clone 缺失/损坏数据库时只承诺恢复 Document Projection，并明确提示从备份恢复 Semantic Facts。
+
+Risk：reindex 是显式 O(Vault size) 操作，并在批次末尾做一次 O(N+R) relation/cache rebuild；这是消除文件顺序特例的确定性成本。sync-state 保存发生在 Store transaction 成功之后；若本地 state 文件写入失败，重建结果仍有效，下次同步只会保守地重复处理文件。
+
+Verification：新增 public-interface tests 先因 `void-function supertag-reindex-org` 红、实现后转绿；ownership/sync-worker/Git 定向 ERT 58/58，relation/field-reference/tag-path/node 定向 ERT 62/62；`check-parens`、`git diff --check` 通过；干净临时 clone 全量 ERT 429/429 通过；修改文件 byte-compile 成功，仅有既有 warning。
+
 ## 2026-08-12 — task007 Document Link 纯 Projection
 
 - Add `supertag-relation-project-document-link`：scanner 使用只写 Store 的 Document Link 投影入口，不再调用会向 target Org 插入 reciprocal link 的 `supertag-relation-add-reference`。

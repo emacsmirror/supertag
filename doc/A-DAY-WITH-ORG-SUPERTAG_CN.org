@@ -491,12 +491,11 @@ RAG 有三种模式：
 如果有什么不对劲：
 
 #+begin_src emacs-lisp
-  ;; 从 Org 文件全量重建
-  M-x supertag-sync-cleanup-database
-  M-x supertag-sync-full-rescan
+  ;; 从完整快照重建 Org Projection
+  M-x supertag-reindex-org
 
-  ;; 这是安全的——只读你的 Org 文件。数据库中的字段值
-  ;; 会被保留，除非 DB 文件本身损坏了。
+  ;; 该命令只读 Org 文件并保留数据库中的 Semantic Facts；
+  ;; 数据库丢失时必须从备份恢复这些事实。
 #+end_src
 
 ** Schema 优化
@@ -613,7 +612,7 @@ Org-SuperTag 每天自动保存快照（可配置）：
 | =M-x supertag-rag-ask=                  | "关于 X 我做了哪些决定？"        | 每周   |
 | =M-x supertag-board-open=               | 可视化知识探索                   | 每周   |
 | =M-x supertag-sync-status=              | 健康检查                         | 每周   |
-| =M-x supertag-sync-full-rescan=         | 从文件重建数据库                 | 每月   |
+| =M-x supertag-reindex-org=              | 重建 Org Projection             | 每月   |
 | =M-x supertag-sync-cleanup-database=    | 修复不一致                       | 按需   |
 
 * 我实际用的快捷键
