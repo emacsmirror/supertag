@@ -13,6 +13,7 @@
 
 (require 'ownership-fixture)
 (require 'supertag-core-scan)
+(require 'supertag-migration)
 (require 'supertag-services-sync)
 
 (ert-deftest supertag-ownership-test-fixture-is-repeatable-and-complete ()
@@ -322,6 +323,164 @@
                           (insert-file-contents-literally file)
                           (secure-hash 'sha256 (current-buffer))))
                       files))))))
+
+(ert-deftest supertag-global-field-audit-is-repeatable-and-read-only ()
+  "A complete legacy/global mapping is deterministic and never mutates Store."
+  (supertag-ownership-test-with-vault
+    (let* ((legacy-definition
+            '(:name "Status" :type :enum
+              :options ("active" "done") :default "active"))
+           (project (copy-tree (supertag-store-get-entity :tags "project")))
+           (reference (copy-tree (supertag-store-get-entity :tags "reference")))
+           report first-store database-sha)
+      (supertag-store-put-entity
+       :tags "project" (plist-put project :fields (list legacy-definition)))
+      (supertag-store-put-entity
+       :tags "reference" (plist-put reference :extends "project"))
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "project" "Status" "active")
+      ;; Legacy values are stored under the node's selected tag even when the
+      ;; field itself is inherited from that tag's parent.
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-b "reference" "Status" "done")
+      (make-directory (file-name-directory supertag-db-file) t)
+      (with-temp-file supertag-db-file (insert "audit-must-not-write\n"))
+      (setq first-store
+            (supertag--persistence--canonicalize-value supertag--store)
+            database-sha (with-temp-buffer
+                           (insert-file-contents-literally supertag-db-file)
+                           (secure-hash 'sha256 (current-buffer)))
+            report (supertag-migration-audit-global-fields))
+      ;; Reinsert every audited collection in reverse key order.  The report
+      ;; must describe facts, not hash-table insertion order.
+      (dolist (collection supertag-migration--global-field-backup-collections)
+        (let ((replacement (make-hash-table :test 'equal)))
+          (dolist (entry
+                   (reverse
+                    (supertag-migration--sorted-table-entries
+                     (supertag-store-get-collection collection))))
+            (puthash (car entry) (cdr entry) replacement))
+          (puthash collection replacement supertag--store)))
+      (should (equal report (supertag-migration-audit-global-fields)))
+      (should (equal first-store
+                     (supertag--persistence--canonicalize-value supertag--store)))
+      (should (equal database-sha
+                     (with-temp-buffer
+                       (insert-file-contents-literally supertag-db-file)
+                       (secure-hash 'sha256 (current-buffer)))))
+      (should (plist-get report :safe-to-apply))
+      (should-not (plist-get report :conflicts))
+      (should-not (plist-get report :orphans))
+      (should (equal :equal
+                     (plist-get (car (plist-get report :definition-mappings))
+                                :status)))
+      (should (equal :equal
+                     (plist-get (car (plist-get report :association-mappings))
+                                :status)))
+      (should (equal '(:equal :would-create)
+                     (mapcar (lambda (item) (plist-get item :status))
+                             (plist-get report :value-parity))))
+      (should (= 2 (plist-get (plist-get report :coverage)
+                              :legacy-values)))
+      (should (eq :full-database
+                  (plist-get (plist-get report :backup) :scope)))
+      (should (equal supertag--store-collections
+                     (plist-get (plist-get report :backup) :collections)))
+      (should (stringp
+               (plist-get (plist-get report :backup) :store-sha256))))))
+
+(ert-deftest supertag-global-field-audit-conflicts-fail-closed ()
+  "Definition/value mismatches block the existing force-write entry point."
+  (supertag-ownership-test-with-vault
+    (let* ((supertag-use-global-fields t)
+           (project (copy-tree (supertag-store-get-entity :tags "project")))
+           (reference (copy-tree (supertag-store-get-entity :tags "reference")))
+           report before reasons)
+      (supertag-store-put-entity
+       :tags "project"
+       (plist-put project :fields '((:name "Status" :type :string)
+                                    (:name "Priority" :type :string))))
+      (supertag-store-put-entity
+       :tags "reference"
+       (plist-put reference :fields '((:name " priority "))))
+      ;; A malformed target must become a report conflict, not abort audit.
+      (puthash "status" :malformed
+               (supertag-store-get-collection :field-definitions))
+      ;; Matching IDs are not enough to overwrite extra association semantics.
+      (supertag-store-put-tag-field-associations
+       "project" '((:field-id "status" :order 0 :required t)))
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "project" "Status" "legacy")
+      (setq report (supertag-migration-audit-global-fields)
+            before (supertag--persistence--canonicalize-value supertag--store)
+            reasons (mapcar (lambda (item) (plist-get item :reason))
+                            (plist-get report :conflicts)))
+      (should-not (plist-get report :safe-to-apply))
+      (should (memq :definition-target-mismatch reasons))
+      (should (memq :invalid-field-definition reasons))
+      (should (memq :display-name-collision reasons))
+      (should (memq :association-target-mismatch reasons))
+      (should (memq :global-value-mismatch reasons))
+      (should-error (supertag-migration-run-global-fields t)
+                    :type 'user-error)
+      (should (equal before
+                     (supertag--persistence--canonicalize-value supertag--store))))))
+
+(ert-deftest supertag-global-field-audit-allows-clean-existing-migration ()
+  "The audit gate preserves the existing conflict-free apply path."
+  (supertag-ownership-test-with-vault
+    (let* ((supertag-use-global-fields t)
+           (project (copy-tree (supertag-store-get-entity :tags "project"))))
+      (clrhash (supertag-store-get-collection :field-definitions))
+      (clrhash (supertag-store-get-collection :tag-field-associations))
+      (clrhash (supertag-store-get-collection :field-values))
+      (supertag-store-put-entity
+       :tags "project"
+       (plist-put project :fields '((:name "Status" :type :string))))
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "project" "Status" "ready")
+      (should (plist-get (supertag-migration-audit-global-fields)
+                         :safe-to-apply))
+      (supertag-migration-run-global-fields t)
+      (should (eq :string
+                  (plist-get (supertag-store-get-field-definition "status")
+                             :type)))
+      (should (equal '((:field-id "status" :order 0))
+                     (supertag-store-get-tag-field-associations "project")))
+      (should (equal "ready"
+                     (supertag-store-get-field-value
+                      supertag-ownership-test-node-a "status"))))))
+
+(ert-deftest supertag-global-field-audit-reports-orphans ()
+  "Legacy and global values without owners are reported and block migration."
+  (supertag-ownership-test-with-vault
+    (let ((reference
+           (copy-tree (supertag-store-get-entity :tags "reference"))))
+      (supertag-store-put-entity
+       :tags "reference"
+       (plist-put reference :fields '((:name "Ghost" :type :string))))
+      (supertag-store-put-legacy-field
+       supertag-ownership-test-node-a "reference" "Ghost" "stale")
+      (supertag-store-put-legacy-field
+       "missing-node" "missing-tag" "Ghost" "legacy")
+      (supertag-store-put-field-value "missing-node" "missing-field" "global")
+      (supertag-store-put-tag-field-associations
+       "missing-tag" '((:field-id "missing-field" :order 0))))
+    (let* ((report (supertag-migration-audit-global-fields))
+           (orphans (plist-get report :orphans))
+           (kinds (mapcar (lambda (item) (plist-get item :kind)) orphans))
+           (reasons (apply #'append
+                           (mapcar (lambda (item) (plist-get item :reasons))
+                                   orphans))))
+      (should-not (plist-get report :safe-to-apply))
+      (should (memq :legacy-value kinds))
+      (should (memq :global-value kinds))
+      (should (memq :global-association kinds))
+      (should (memq :missing-node reasons))
+      (should (memq :missing-tag reasons))
+      (should (memq :tag-not-on-node reasons))
+      (should (memq :undeclared-field reasons))
+      (should (memq :missing-field-definition reasons)))))
 
 (provide 'ownership-separation-test)
 

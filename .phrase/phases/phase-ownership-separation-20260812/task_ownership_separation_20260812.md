@@ -79,10 +79,11 @@
   - 影响范围：node model、sync、persistence/migration tests
   - 完成：2026-08-12；审计未发现需要新建 `:node-annotations` 的独立权威事实；唯一生产 semantic extension writer（relation field sync）已迁至既有 `:field-values`，rollup 保持纯派生；file/point/full reindex 均删除 legacy unknown key 并保留 field value，定向 ERT 36/36、干净临时 clone 全量 ERT 449/449 通过
 
-- task013 [ ] 对 legacy/global fields 执行正式 dry-run audit
+- task013 [x] 对 legacy/global fields 执行正式 dry-run audit
   - 产出：字段 definition/value mapping、冲突、孤立值、覆盖策略和备份报告；不写数据
   - 验证方式：逐 node/field parity report 可重复，冲突 fail closed
   - 影响范围：migration、field fixtures、docs
+  - 完成：2026-08-12；新增确定性 `supertag-migration-audit-global-fields`，覆盖 definition/association mapping、`:extends` inherited values、逐 node/field parity、global-only preservation、冲突/orphan blocking 与磁盘/完整 Store backup SHA；旧 force-write 入口在任何冲突或 orphan 时零写入；ownership ERT 11/11、field/view/transaction 定向 ERT 71/71、修正 runner 后干净临时 clone 全量 ERT 462/462 通过
 
 - task014 [ ] 将 global field model 设为唯一生产读写路径
   - 产出：新写入仅进入 `:field-definitions/:tag-field-associations/:field-values`；legacy `:fields` 只保留 migration reader

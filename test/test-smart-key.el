@@ -1,5 +1,6 @@
 ;;; test-smart-key.el --- self-checks for semantic activation -*- lexical-binding: t; -*-
-;; Run: emacs --batch -Q --eval '(package-initialize)' -L . -l test/test-smart-key.el
+;; Run: emacs --batch -Q --eval '(package-initialize)' -L . \
+;;      -l test/test-smart-key.el -f ert-run-tests-batch-and-exit
 
 (require 'ert)
 (require 'cl-lib)
@@ -296,9 +297,6 @@
                  (lambda () (interactive) (setq opened t))))
         (supertag-smart-key '(4))
         (should opened)))))
-
-(when noninteractive
-  (ert-run-tests-batch-and-exit))
 
 (provide 'test-smart-key)
 ;;; test-smart-key.el ends here

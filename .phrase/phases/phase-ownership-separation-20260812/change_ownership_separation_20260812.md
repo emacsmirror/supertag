@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task013 legacy/global field 正式 dry-run audit
+
+- Add `supertag-migration-audit-global-fields`：只读生成排序后的 definition、association 与逐 node/field value parity；同一逻辑 Store 不受 hash insertion order 影响。
+- Add ownership mapping：legacy value 可沿 `:extends` 使用父 Tag 字段；同一 sanitized field ID 的定义除 display name/ID 外必须一致，同一 node/field 的多个 legacy source value 也必须一致。
+- Add fail-closed preflight：definition/association/global value 不同、malformed definition/association、同 ID display-name collision、重复 field ID、missing node/tag/definition、Tag 不属于 Node 与 undeclared legacy value 全部进入 conflict/orphan，`:safe-to-apply` 为 nil。
+- Add coverage/backup report：明确 missing→create、equal/global-only→preserve、different/source collision/orphan→block；记录完整数据库备份要求、全部 collection counts、磁盘 SHA-256 与完整内存 Store SHA-256。
+- Modify legacy migration command：默认 dry-run 复用正式 audit；force-write 在任何 conflict/orphan 时于首个 mutation 前报错，不再把不同 global value 计为普通 skipped。
+- Modify migration guide/tests：先 audit、后启用 global model；回归覆盖重复报告、反向重插 hash 表、Store/数据库文件零变化、继承字段、malformed/冲突阻断与三类 orphan；删除 Smart Key 测试文件的提前 batch exit，让正式 runner 首次真正加载后续 embed/ownership suites。
+
+Behavior：用户可直接执行 `M-x supertag-migration-audit-global-fields`，无需先启用 global fields。交互调用在 `*supertag-migration*` 按 section 输出完整报告；只有 `:safe-to-apply t` 才允许旧 apply 入口继续。
+
+Risk：audit 是显式 O(definitions + associations + values) 操作，并为确定性报告做排序；它是一次性迁移 preflight，不进入日常读写路径。实际生产 cutover 与 legacy bucket 停止增长仍属于 task014。
+
+Verification：回归先因 audit 入口不存在、force-write 不阻断而失败；实现后 ownership ERT 11/11，field/view/transaction 定向 ERT 71/71，runner tail suites 25/25；修正 runner 后干净临时 clone 全量 ERT 462/462（旧 449 项结果实际在 Smart Key 后提前退出）；修改文件 byte compile 成功且只有既有 warning，`check-parens`、`git diff --check` 通过。
+
 ## 2026-08-12 — task012 Node Projection 不再保存未知语义 key
 
 - Delete `supertag--merge-node-properties` 与 `standard-keys` 推断：file/point reconcile 在文档变化时直接以最新 Org parse 替换 Document Projection；完整 reindex 即使 hash 未变也执行替换，因此不会遗留未知 key。

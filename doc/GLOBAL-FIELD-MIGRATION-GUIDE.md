@@ -4,25 +4,38 @@ This guide describes how to upgrade an existing Org-Supertag database to the new
 
 > **Important:** Before running any migration, make a fresh backup of your Supertag data directory.
 
-### 1. Enable the Global Field Model
+### 1. Audit Before Enabling the Global Field Model
 
-Add the following to your Emacs configuration before loading `org-supertag`:
-
-```elisp
-(setq supertag-use-global-fields t)
-```
-
-This:
-- Enables the new collections `:field-definitions`, `:tag-field-associations`, and `:field-values`.
-- Makes ops/services/UI use the global field model as the source of truth.
-
-### 2. Run the Migration in Dry-Run Mode
-
-First, run a dry-run to see what would change without writing anything:
+Run the dedicated read-only audit first. It does not require
+`supertag-use-global-fields` to be enabled:
 
 ```elisp
 (require 'org-supertag)
 (require 'supertag-migration)
+(supertag-migration-audit-global-fields)
+```
+
+The command returns a deterministic report and opens `*supertag-migration*` when
+called interactively. It compares:
+
+- every legacy Tag field definition with its global field ID and definition;
+- ordered Tag/field associations;
+- every legacy node/field value with its global value, including inherited fields;
+- global-only values that will be preserved;
+- orphan values/associations and the full-database backup preflight.
+
+Only `:safe-to-apply t` is a clean result. Different or malformed definitions,
+ambiguous display names, different values, multiple legacy values for one
+node/field, malformed associations, Tags absent from their Nodes, and orphan
+owners all fail closed. The report never changes the Store or database file.
+
+### 2. Run the Migration in Dry-Run Mode
+
+The compatibility migration command now delegates its dry-run to the same
+audit. Enable global fields only after the standalone report is clean:
+
+```elisp
+(setq supertag-use-global-fields t)
 
 ;; Ensure dry-run is enabled (default is t)
 (setq supertag-migration-dry-run t)
@@ -31,17 +44,16 @@ First, run a dry-run to see what would change without writing anything:
 (supertag-migration-run-global-fields)
 ```
 
-Check:
-- The minibuffer message for a quick summary.
-- The `*supertag-migration*` buffer for detailed stats and any conflicts:
-  - `fields=... associations=... values=... skipped=... conflicts=...`
-  - `Conflicts: ...` entries indicate field definition collisions (same id, different type/config) or missing definitions.
-
-If there are conflicts, resolve them (e.g., by adjusting field definitions) before proceeding.
+Check the report's definition/association mappings, per-node/per-field parity,
+coverage policy, conflicts, orphans, and backup SHA-256 values. Re-running it on
+unchanged data produces the same report regardless of hash-table insertion
+order.
 
 ### 3. Execute the Real Migration (Writes Enabled)
 
-Once the dry-run output looks good and you have a backup:
+Once the report has `:safe-to-apply t`, save the current database and create a
+fresh full-database backup. Compare its source/store SHA-256 values with the
+audit's `:backup` section before applying:
 
 ```elisp
 (require 'supertag-migration)
@@ -59,6 +71,10 @@ This will:
 - Rewrite node-level values from nested `:fields` into flat `:field-values` (node-id → field-id → value).
 - Log a summary and any conflicts to `*supertag-migration*`.
 
+The write entry point reruns the audit immediately before changing data and
+raises an error if any conflict or orphan exists. It never chooses an overwrite
+winner.
+
 ### 4. Verify and Continue Using Global Fields
 
 After the migration:
@@ -74,4 +90,3 @@ If you see issues, consult:
 - `doc/global-field-migration-plan.md` / `doc/global-field-migration-tasks.md` – phased rollout plan and checklist.
 
 Once you are confident in the new model, you can treat the global field collections as the authoritative storage going forward. Legacy `:fields` storage remains for compatibility and can be retired in a future release once all data has been verified.
-

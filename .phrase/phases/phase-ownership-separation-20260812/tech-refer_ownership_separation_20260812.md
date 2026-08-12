@@ -180,6 +180,32 @@ Dry-run must produce a complete old-ID mapping, alias conflict report and revers
 
 Global field cutover requires per-node/per-field parity. Legacy storage becomes read-only before deletion.
 
+Task013 implements the read-only gate as
+`supertag-migration-audit-global-fields`.  The report has five stable sections:
+
+- legacy definition ID/source mapping and ordered Tag associations;
+- node/field parity, with every legacy Tag source and global-only values shown;
+- definition/value/source-collision conflicts;
+- orphan legacy/global values and global associations;
+- full-database backup preflight with the relevant collection counts, disk SHA-256
+  and in-memory Store SHA-256.
+
+Field identity is the existing sanitized ID.  Definition display names and IDs
+may differ from an existing global target, but every other definition property
+must match; without a target, multiple display names for one ID are ambiguous.
+Definitions require a name and keyword type.  Legacy values may use a field
+inherited through `:extends`, but their Tag must still belong to the Node;
+multiple legacy sources for the same node/field are accepted only when their
+values are equal.  The cutover policy is fixed: missing targets may be created,
+equal targets and global-only values are preserved, and every difference,
+malformed definition/association or orphan blocks apply.
+The report contains no timestamp and sorts every hash-derived section, so the
+same logical Store yields the same result independent of insertion order.
+
+The existing write command reruns this audit and refuses to mutate on a blocked
+report.  Task014, not the audit, makes the global collections the only production
+read/write path and leaves `:fields` as a migration reader.
+
 ### Consumers
 
 Each consumer migrates independently behind its existing public command. Raw interfaces are removed only after repository-wide caller audit.

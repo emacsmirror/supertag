@@ -935,6 +935,520 @@ Compares :type and :config/ :options, ignoring ordering of plist."
        tags))
     (nreverse result)))
 
+(defconst supertag-migration--global-field-backup-collections
+  '(:tags :fields :field-definitions :tag-field-associations :field-values)
+  "Collections that a global field migration can change.")
+
+(defconst supertag-migration--invalid-association
+  (list :supertag-invalid-association)
+  "Sentinel returned for a malformed global field association.")
+
+(defun supertag-migration--stable-value (value)
+  "Return deterministic representation of VALUE for audit output."
+  (supertag--persistence--canonicalize-value value))
+
+(defun supertag-migration--stable-equal-p (left right)
+  "Return non-nil when LEFT and RIGHT have equal canonical contents."
+  (equal (supertag-migration--stable-value left)
+         (supertag-migration--stable-value right)))
+
+(defun supertag-migration--audit-definition-plist (definition)
+  "Return DEFINITION as a plist, or nil when it has no valid mapping shape."
+  (cond
+   ((hash-table-p definition)
+    (let (result)
+      (maphash (lambda (key value)
+                 (setq result (plist-put result key value)))
+               definition)
+      result))
+   ((and (listp definition)
+         (proper-list-p definition)
+         (zerop (% (length definition) 2))
+         (cl-loop for (key _) on definition by #'cddr
+                  always (keywordp key)))
+    definition)))
+
+(defun supertag-migration--audit-field-definition-valid-p (definition)
+  "Return non-nil when DEFINITION has a name and keyword type."
+  (when-let* ((plist
+               (supertag-migration--audit-definition-plist definition)))
+    (and (stringp (plist-get plist :name))
+         (keywordp (plist-get plist :type)))))
+
+(defun supertag-migration--audit-field-defs-equal-p (left right)
+  "Return non-nil when LEFT and RIGHT have equal field semantics.
+`:id' and display `:name' may differ; every other property must match."
+  (cl-labels ((signature (definition)
+                (when-let* ((plist
+                             (supertag-migration--audit-definition-plist
+                              definition)))
+                  (cl-loop for (key value) on plist by #'cddr
+                           unless (memq key '(:id :name))
+                           append (list key value)))))
+    (let ((left-signature (signature left))
+          (right-signature (signature right)))
+      (and (supertag-migration--audit-field-definition-valid-p left)
+           (supertag-migration--audit-field-definition-valid-p right)
+           left-signature right-signature
+           (supertag-migration--stable-equal-p
+            left-signature right-signature)))))
+
+(defun supertag-migration--report-sort-key (value)
+  "Return a stable printed sort key for VALUE."
+  (let ((print-circle t)
+        (print-escape-nonascii t)
+        (print-length nil)
+        (print-level nil))
+    (prin1-to-string (supertag-migration--stable-value value))))
+
+(defun supertag-migration--sort-report-items (items)
+  "Return ITEMS sorted by deterministic printed representation."
+  (sort items
+        (lambda (left right)
+          (string< (supertag-migration--report-sort-key left)
+                   (supertag-migration--report-sort-key right)))))
+
+(defun supertag-migration--sorted-table-entries (data)
+  "Return DATA's key/value entries in deterministic key order.
+Legacy alist and flat key/value shapes are accepted without changing DATA."
+  (let ((table (if (hash-table-p data)
+                   data
+                 (supertag--legacy-field-coerce-table data)))
+        result)
+    (maphash (lambda (key value) (push (cons key value) result)) table)
+    (sort result
+          (lambda (left right)
+            (string< (supertag-migration--report-sort-key (car left))
+                     (supertag-migration--report-sort-key (car right)))))))
+
+(defun supertag-migration--fingerprint (value)
+  "Return a deterministic SHA-256 fingerprint for VALUE."
+  (secure-hash 'sha256 (supertag-migration--report-sort-key value)))
+
+(defun supertag-migration--file-sha256 (file)
+  "Return FILE's SHA-256 digest, or nil when FILE does not exist."
+  (when (and (stringp file) (file-regular-p file))
+    (with-temp-buffer
+      (insert-file-contents-literally file)
+      (secure-hash 'sha256 (current-buffer)))))
+
+(defun supertag-migration--global-field-backup-report ()
+  "Return the read-only backup preflight for global field migration."
+  (let (counts)
+    (dolist (collection supertag--store-collections)
+      (let ((bucket (supertag-store-get-collection collection)))
+        (push (cons collection
+                    (if (hash-table-p bucket) (hash-table-count bucket) 0))
+              counts)))
+    (list :scope :full-database
+          :database-file (and (boundp 'supertag-db-file)
+                              (stringp supertag-db-file)
+                              (expand-file-name supertag-db-file))
+          :database-file-exists
+          (and (boundp 'supertag-db-file) (stringp supertag-db-file)
+               (file-regular-p supertag-db-file))
+          :database-file-sha256
+          (and (boundp 'supertag-db-file) (stringp supertag-db-file)
+               (supertag-migration--file-sha256 supertag-db-file))
+          :store-dirty (and (boundp 'supertag-db--dirty) supertag-db--dirty t)
+          :required-before-apply t
+          :collections supertag--store-collections
+          :migration-collections
+          supertag-migration--global-field-backup-collections
+          :collection-counts (nreverse counts)
+          :store-sha256 (supertag-migration--fingerprint supertag--store))))
+
+(defun supertag-migration--association-field-ids (associations)
+  "Return ordered field IDs from ASSOCIATIONS.
+Return `supertag-migration--invalid-association' when malformed."
+  (cond
+   ((null associations) '())
+   ((and (listp associations)
+         (cl-every #'stringp associations))
+    associations)
+   ((and (listp associations)
+         (cl-every (lambda (entry)
+                     (and (listp entry)
+                          (stringp (plist-get entry :field-id))))
+                   associations))
+    (mapcar (lambda (entry) (plist-get entry :field-id)) associations))
+   (t supertag-migration--invalid-association)))
+
+(defun supertag-migration--legacy-field-declared-p
+    (tags tag-id field-id)
+  "Return non-nil when TAG-ID declares or inherits FIELD-ID in TAGS."
+  (let ((current tag-id)
+        (seen (make-hash-table :test 'equal))
+        found)
+    (while (and (stringp current) (not found) (not (gethash current seen)))
+      (puthash current t seen)
+      (let ((tag (gethash current tags)))
+        (setq found
+              (cl-some
+               (lambda (field)
+                 (and (listp field)
+                      (equal field-id
+                             (supertag-migration--sanitize-field-id
+                              (plist-get field :name)))))
+               (and (listp tag) (plist-get tag :fields))))
+        (setq current (and (listp tag) (plist-get tag :extends)))))
+    found))
+
+(defun supertag-migration--audit-field-definitions ()
+  "Return legacy/global definition and association audit data."
+  (let ((definitions (supertag-store-get-collection :field-definitions))
+        (associations (supertag-store-get-collection :tag-field-associations))
+        (source-groups (make-hash-table :test 'equal))
+        source-records mappings association-mappings conflicts)
+    (dolist (entry (supertag-migration--collect-tag-fields))
+      (let ((tag-id (car entry)))
+        (dolist (field (cdr entry))
+          (let* ((field-plist
+                  (supertag-migration--audit-definition-plist field))
+                 (name (and field-plist (plist-get field-plist :name)))
+                 (field-id (supertag-migration--sanitize-field-id name))
+                 (valid-definition
+                  (supertag-migration--audit-field-definition-valid-p field))
+                 (source
+                  (list :tag-id tag-id :name name :field-id field-id
+                        :definition (supertag-migration--stable-value field))))
+            (push source source-records)
+            (unless valid-definition
+              (push (list :reason :invalid-field-definition :source source)
+                    conflicts))
+            (if field-id
+                (progn
+                  (puthash field-id
+                           (cons source (gethash field-id source-groups))
+                           source-groups))
+              (push (list :reason :invalid-field-name :source source)
+                    conflicts))))))
+    (dolist (pair (supertag-migration--sorted-table-entries source-groups))
+      (let* ((field-id (car pair))
+             (sources (supertag-migration--sort-report-items (cdr pair)))
+             (first-definition
+              (plist-put
+               (copy-tree (plist-get (car sources) :definition))
+               :id field-id))
+             (source-conflict
+              (cl-some
+               (lambda (source)
+                 (not (supertag-migration--audit-field-defs-equal-p
+                       first-definition (plist-get source :definition))))
+               (cdr sources)))
+             (global-present (ht-contains? definitions field-id))
+             (global-definition (and global-present (gethash field-id definitions)))
+             (display-names
+              (delete-dups
+               (delq nil
+                     (mapcar (lambda (source) (plist-get source :name))
+                             sources))))
+             (display-conflict
+              (and (not global-present) (> (length display-names) 1)))
+             (global-conflict
+              (and global-present
+                   (not (supertag-migration--audit-field-defs-equal-p
+                         first-definition global-definition))))
+             (status (cond (source-conflict :conflict)
+                           (display-conflict :conflict)
+                           (global-conflict :conflict)
+                           (global-present :equal)
+                           (t :would-create))))
+        (when source-conflict
+          (push (list :reason :definition-source-mismatch
+                      :field-id field-id :sources sources)
+                conflicts))
+        (when global-conflict
+          (push (list :reason :definition-target-mismatch
+                      :field-id field-id :legacy first-definition
+                      :global (supertag-migration--stable-value global-definition))
+                conflicts))
+        (when display-conflict
+          (push (list :reason :display-name-collision
+                      :field-id field-id :names display-names
+                      :sources sources)
+                conflicts))
+        (push (list :field-id field-id :sources sources
+                    :target (and global-present
+                                 (supertag-migration--stable-value global-definition))
+                    :status status)
+              mappings)))
+    (dolist (entry (supertag-migration--collect-tag-fields))
+      (let* ((tag-id (car entry))
+             (fields (cdr entry))
+             (field-ids
+              (mapcar (lambda (field)
+                        (and (listp field)
+                             (supertag-migration--sanitize-field-id
+                              (plist-get field :name))))
+                      fields)))
+        (when fields
+          (let* ((valid (not (memq nil field-ids)))
+                 (duplicate
+                  (and valid
+                       (/= (length field-ids)
+                           (length (delete-dups (copy-sequence field-ids))))))
+                 (desired
+                  (and valid
+                       (cl-loop for field-id in field-ids
+                                for order from 0
+                                collect (list :field-id field-id :order order))))
+                 (present (ht-contains? associations tag-id))
+                 (current (and present (gethash tag-id associations)))
+                 (current-ids (and present
+                                   (supertag-migration--association-field-ids current)))
+                 (status
+                  (cond ((or (not valid) duplicate) :conflict)
+                        ((not present) :would-create)
+                        ((equal current desired) :equal)
+                        ((and (listp current)
+                              (cl-every #'stringp current)
+                              (equal current-ids field-ids))
+                         :would-normalize)
+                        (t :conflict))))
+            (when (eq status :conflict)
+              (push (list :reason (if duplicate
+                                      :duplicate-legacy-field-id
+                                    :association-target-mismatch)
+                          :tag-id tag-id :legacy-field-ids field-ids
+                          :global (supertag-migration--stable-value current))
+                    conflicts))
+            (push (list :tag-id tag-id :field-ids field-ids
+                        :target (and present
+                                     (supertag-migration--stable-value current))
+                        :status status)
+                  association-mappings)))))
+    (list :source-count (length source-records)
+          :candidate-field-ids
+          (mapcar #'car (supertag-migration--sorted-table-entries source-groups))
+          :definition-mappings (supertag-migration--sort-report-items mappings)
+          :association-mappings
+          (supertag-migration--sort-report-items association-mappings)
+          :conflicts (supertag-migration--sort-report-items conflicts))))
+
+(defun supertag-migration--audit-field-values (definition-audit)
+  "Return legacy/global value parity and orphan audit data.
+DEFINITION-AUDIT is produced by `supertag-migration--audit-field-definitions'."
+  (let ((nodes (supertag-store-get-collection :nodes))
+        (tags (supertag-store-get-collection :tags))
+        (definitions (supertag-store-get-collection :field-definitions))
+        (legacy-root (supertag-store-get-collection :fields))
+        (global-root (supertag-store-get-collection :field-values))
+        (candidate-field-ids (plist-get definition-audit :candidate-field-ids))
+        (legacy-groups (make-hash-table :test 'equal))
+        (global-values (make-hash-table :test 'equal))
+        (legacy-count 0)
+        parity conflicts orphans)
+    (dolist (node-entry (supertag-migration--sorted-table-entries legacy-root))
+      (let ((node-id (car node-entry)))
+        (dolist (tag-entry
+                 (supertag-migration--sorted-table-entries (cdr node-entry)))
+          (let ((tag-id (car tag-entry)))
+            (dolist (field-entry
+                     (supertag-migration--sorted-table-entries (cdr tag-entry)))
+              (cl-incf legacy-count)
+              (let* ((field-name (car field-entry))
+                     (value (cdr field-entry))
+                     (node (gethash node-id nodes))
+                     (field-id (supertag-migration--sanitize-field-id field-name))
+                     (reasons
+                      (delq nil
+                            (list
+                             (unless (ht-contains? nodes node-id) :missing-node)
+                             (unless (ht-contains? tags tag-id) :missing-tag)
+                             (when (and node (ht-contains? tags tag-id)
+                                        (not (member tag-id
+                                                     (plist-get node :tags))))
+                               :tag-not-on-node)
+                             (unless field-id :invalid-field-name)
+                             (unless (and field-id
+                                          (supertag-migration--legacy-field-declared-p
+                                           tags tag-id field-id))
+                               :undeclared-field))))
+                     (source
+                      (list :tag-id tag-id :field-name field-name
+                            :value (supertag-migration--stable-value value))))
+                (if reasons
+                    (push (list :kind :legacy-value :node-id node-id
+                                :tag-id tag-id :field-name field-name
+                                :field-id field-id :reasons reasons
+                                :value (supertag-migration--stable-value value))
+                          orphans)
+                  (let ((key (cons node-id field-id)))
+                    (puthash key (cons source (gethash key legacy-groups))
+                             legacy-groups)))))))))
+    (dolist (node-entry (supertag-migration--sorted-table-entries global-root))
+      (let ((node-id (car node-entry)))
+        (dolist (field-entry
+                 (supertag-migration--sorted-table-entries (cdr node-entry)))
+          (let* ((field-id (car field-entry))
+                 (value (cdr field-entry))
+                 (reasons
+                  (delq nil
+                        (list
+                         (unless (ht-contains? nodes node-id) :missing-node)
+                         (unless (and (stringp field-id)
+                                      (or (ht-contains? definitions field-id)
+                                          (member field-id candidate-field-ids)))
+                           :missing-field-definition)))))
+            (if reasons
+                (push (list :kind :global-value :node-id node-id
+                            :field-id field-id :reasons reasons
+                            :value (supertag-migration--stable-value value))
+                      orphans)
+              (puthash (cons node-id field-id) value global-values))))))
+    (dolist (pair (supertag-migration--sorted-table-entries legacy-groups))
+      (let* ((key (car pair))
+             (node-id (car key))
+             (field-id (cdr key))
+             (sources (supertag-migration--sort-report-items (cdr pair)))
+             (legacy-value (plist-get (car sources) :value))
+             (source-conflict
+              (cl-some
+               (lambda (source)
+                 (not (supertag-migration--stable-equal-p
+                       legacy-value (plist-get source :value))))
+               (cdr sources)))
+             (global-present (ht-contains? global-values key))
+             (global-value (and global-present (gethash key global-values)))
+             (global-conflict
+              (and global-present
+                   (not (supertag-migration--stable-equal-p
+                         legacy-value global-value))))
+             (status (cond (source-conflict :conflict)
+                           (global-conflict :conflict)
+                           (global-present :equal)
+                           (t :would-create))))
+        (when source-conflict
+          (push (list :reason :legacy-value-mismatch
+                      :node-id node-id :field-id field-id :sources sources)
+                conflicts))
+        (when global-conflict
+          (push (list :reason :global-value-mismatch
+                      :node-id node-id :field-id field-id
+                      :legacy legacy-value
+                      :global (supertag-migration--stable-value global-value))
+                conflicts))
+        (push (list :node-id node-id :field-id field-id
+                    :legacy-sources sources :legacy-value legacy-value
+                    :global-value (and global-present
+                                       (supertag-migration--stable-value global-value))
+                    :status status)
+              parity)))
+    (dolist (pair (supertag-migration--sorted-table-entries global-values))
+      (unless (ht-contains? legacy-groups (car pair))
+        (push (list :node-id (caar pair) :field-id (cdar pair)
+                    :legacy-sources nil
+                    :global-value (supertag-migration--stable-value (cdr pair))
+                    :status :global-only)
+              parity)))
+    (list :legacy-count legacy-count
+          :value-parity (supertag-migration--sort-report-items parity)
+          :conflicts (supertag-migration--sort-report-items conflicts)
+          :orphans (supertag-migration--sort-report-items orphans))))
+
+(defun supertag-migration--audit-global-association-orphans (candidate-field-ids)
+  "Return orphan global associations, considering CANDIDATE-FIELD-IDS."
+  (let ((tags (supertag-store-get-collection :tags))
+        (definitions (supertag-store-get-collection :field-definitions))
+        orphans)
+    (dolist (entry
+             (supertag-migration--sorted-table-entries
+              (supertag-store-get-collection :tag-field-associations)))
+      (let* ((tag-id (car entry))
+             (raw (cdr entry))
+             (field-ids (supertag-migration--association-field-ids raw))
+             (reasons
+              (append
+               (unless (ht-contains? tags tag-id) (list :missing-tag))
+               (when (eq field-ids supertag-migration--invalid-association)
+                 (list :invalid-association))
+               (unless (eq field-ids supertag-migration--invalid-association)
+                 (cl-loop for field-id in field-ids
+                          unless (or (ht-contains? definitions field-id)
+                                     (member field-id candidate-field-ids))
+                          collect :missing-field-definition)))))
+        (when reasons
+          (push (list :kind :global-association :tag-id tag-id
+                      :reasons (delete-dups reasons)
+                      :value (supertag-migration--stable-value raw))
+                orphans))))
+    (supertag-migration--sort-report-items orphans)))
+
+(defun supertag-migration--build-global-field-audit ()
+  "Build a deterministic, read-only legacy/global field migration report."
+  (let* ((definition-audit (supertag-migration--audit-field-definitions))
+         (value-audit (supertag-migration--audit-field-values definition-audit))
+         (association-orphans
+          (supertag-migration--audit-global-association-orphans
+           (plist-get definition-audit :candidate-field-ids)))
+         (conflicts
+          (supertag-migration--sort-report-items
+           (append (plist-get definition-audit :conflicts)
+                   (plist-get value-audit :conflicts))))
+         (orphans
+          (supertag-migration--sort-report-items
+           (append (plist-get value-audit :orphans) association-orphans)))
+         (parity (plist-get value-audit :value-parity))
+         (coverage
+          (list :legacy-definitions (plist-get definition-audit :source-count)
+                :definition-mappings
+                (length (plist-get definition-audit :definition-mappings))
+                :associations
+                (length (plist-get definition-audit :association-mappings))
+                :legacy-values (plist-get value-audit :legacy-count)
+                :value-parity (length parity)
+                :equal-values
+                (cl-count :equal parity :key (lambda (item) (plist-get item :status)))
+                :values-to-create
+                (cl-count :would-create parity
+                          :key (lambda (item) (plist-get item :status)))
+                :global-only-values
+                (cl-count :global-only parity
+                          :key (lambda (item) (plist-get item :status)))
+                :blocked (+ (length conflicts) (length orphans))
+                :strategy
+                '(:missing :create :equal :preserve :different :block
+                  :source-collision :block :orphan :block))))
+    (list :safe-to-apply (and (null conflicts) (null orphans))
+          :definition-mappings
+          (plist-get definition-audit :definition-mappings)
+          :association-mappings
+          (plist-get definition-audit :association-mappings)
+          :value-parity parity
+          :conflicts conflicts
+          :orphans orphans
+          :coverage coverage
+          :backup (supertag-migration--global-field-backup-report))))
+
+;;;###autoload
+(defun supertag-migration-audit-global-fields ()
+  "Audit legacy/global field parity without modifying Store or database files.
+Return a deterministic report plist.  Conflicts and orphans set
+`:safe-to-apply' to nil; no overwrite policy is inferred."
+  (interactive)
+  (let ((report (supertag-migration--build-global-field-audit)))
+    (with-current-buffer (get-buffer-create supertag-migration-log-buffer)
+      (erase-buffer))
+    (supertag-migration--log "--- Supertag global field audit ---")
+    (supertag-migration--log "Safe to apply: %s"
+                             (if (plist-get report :safe-to-apply) "yes" "no"))
+    (supertag-migration--log "Coverage: %S" (plist-get report :coverage))
+    (dolist (section '(:definition-mappings :association-mappings
+                        :value-parity :conflicts :orphans))
+      (let ((items (plist-get report section)))
+        (supertag-migration--log "\n%S (%d)" section (length items))
+        (dolist (item items)
+          (supertag-migration--log "  %S" item))))
+    (supertag-migration--log "\n:backup %S" (plist-get report :backup))
+    (message "Supertag field audit: %s; conflicts=%d orphans=%d"
+             (if (plist-get report :safe-to-apply) "safe" "blocked")
+             (length (plist-get report :conflicts))
+             (length (plist-get report :orphans)))
+    (when (called-interactively-p 'interactive)
+      (display-buffer supertag-migration-log-buffer))
+    report))
+
 (defun supertag-migration--migrate-field-definitions (dry-run)
   "Create global field definitions from tag field specs. Respects DRY-RUN.
 Returns a hash-table of field-id -> definition (includes newly collected
@@ -1059,23 +1573,31 @@ DEFS-TABLE is hash of known field definitions (from store plus newly collected).
 With FORCE-WRITE non-nil (or prefix arg), perform writes; otherwise dry-run."
   (interactive "P")
   (supertag-migration--ensure-flag)
-  (supertag-migration--reset-stats)
   (let* ((dry-run (supertag-migration--dry-run-p force-write))
+         (audit (supertag-migration-audit-global-fields))
          (defs-table nil))
-    (with-current-buffer (get-buffer-create supertag-migration-log-buffer)
-      (erase-buffer))
-    (supertag-migration--log "--- Supertag global field migration start (dry-run=%s) ---"
-                             (if dry-run "yes" "no"))
-    (unless dry-run
+    (if dry-run
+        (progn
+          (when (called-interactively-p 'interactive)
+            (display-buffer supertag-migration-log-buffer))
+          audit)
+      (unless (plist-get audit :safe-to-apply)
+        (user-error "Global field migration blocked: %d conflict(s), %d orphan(s)"
+                    (length (plist-get audit :conflicts))
+                    (length (plist-get audit :orphans))))
+      (supertag-migration--reset-stats)
+      (with-current-buffer (get-buffer-create supertag-migration-log-buffer)
+        (erase-buffer))
+      (supertag-migration--log "--- Supertag global field migration start (dry-run=no) ---")
       (supertag-migration--log "Reminder: ensure a fresh backup exists before applying migration.")
-      (message "[supertag] Applying migration (not a dry-run). Consider running `supertag-backup-database-now` first."))
-    (setq defs-table (supertag-migration--migrate-field-definitions dry-run))
-    (supertag-migration--log "Stats after field definitions: %S" supertag-migration--stats)
-    (supertag-migration--migrate-tag-associations dry-run)
-    (supertag-migration--log "Stats after associations: %S" supertag-migration--stats)
-    (supertag-migration--migrate-field-values dry-run defs-table)
-    (supertag-migration--log "Stats after values: %S" supertag-migration--stats)
-    (supertag-migration--report dry-run)))
+      (message "[supertag] Applying migration. Run `supertag-backup-database-now` first.")
+      (setq defs-table (supertag-migration--migrate-field-definitions nil))
+      (supertag-migration--log "Stats after field definitions: %S" supertag-migration--stats)
+      (supertag-migration--migrate-tag-associations nil)
+      (supertag-migration--log "Stats after associations: %S" supertag-migration--stats)
+      (supertag-migration--migrate-field-values nil defs-table)
+      (supertag-migration--log "Stats after values: %S" supertag-migration--stats)
+      (supertag-migration--report nil))))
 
 ;; ------------------------------------------------------------------
 ;; Org Properties → SuperTag Fields Migration (Simplified Version)
