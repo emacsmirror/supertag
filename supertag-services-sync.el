@@ -935,25 +935,12 @@ If OLD-NODE doesn't have a hash value, calculate it on the fly."
          (new-hash (supertag-node-hash projected-new)))
     (not (string= old-hash new-hash))))
 
-(defun supertag--merge-node-properties (new-props old-props)
-  "Merge NEW-PROPS from file with OLD-PROPS from database.
-NEW-PROPS is the source of truth for file-based properties.
-OLD-PROPS is the source of truth for database-only fields."
-  (let ((merged-props (copy-sequence new-props))
-        (standard-keys '(:id :title :raw-value :olp :tags :tag-occurrences
-                         :unresolved-tags :properties :ref-to :file :content
-                         :level :todo :priority :scheduled :deadline :position
-                         :pos :hash :type :parent-id :link-type)))
-    (cl-loop for (key value) on old-props by #'cddr
-             do (unless (member key standard-keys)
-                  (plist-put merged-props key value)))
-    merged-props))
-
 (defun supertag-sync--reconcile-node (new-props &optional counters)
   "Reconcile NEW-PROPS with its current node Projection.
 COUNTERS, when non-nil, receives create/update counts.  Both file and point
-sync use this function so change detection, semantic-key preservation, tag
-membership, and reference reconciliation cannot diverge."
+sync use this function so change detection, tag membership, and reference
+reconciliation cannot diverge.  Org parsing replaces the complete Document
+Projection; Semantic Facts live in their own Store collections."
   (let* ((id (plist-get new-props :id))
          (old-props (and id (supertag-node-get id))))
     (cond
@@ -963,10 +950,10 @@ membership, and reference reconciliation cannot diverge."
         (when counters
           (setf (plist-get counters :nodes-created)
                 (1+ (or (plist-get counters :nodes-created) 0))))))
-     ((supertag-node-changed-p old-props new-props)
+     ((or supertag-sync--is-full-rescan-p
+          (supertag-node-changed-p old-props new-props))
       (prog1
-          (supertag-db-add-with-hash
-           id (supertag--merge-node-properties new-props old-props) counters)
+          (supertag-db-add-with-hash id new-props counters)
         (when counters
           (setf (plist-get counters :nodes-updated)
                 (1+ (or (plist-get counters :nodes-updated) 0))))))

@@ -93,8 +93,6 @@ the old mtime until destructive cleanup is allowed."
                                                 :title "old")))))
                     ((symbol-function 'supertag-node-changed-p)
                      (lambda (&rest _) t))
-                    ((symbol-function 'supertag--merge-node-properties)
-                     (lambda (new _old) new))
                     ((symbol-function 'supertag-db-add-with-hash)
                      (lambda (&rest _) nil))
                     ((symbol-function 'supertag-node-mark-deleted-from-file)
@@ -141,6 +139,24 @@ the old mtime until destructive cleanup is allowed."
              file (list :nodes-created 0 :nodes-updated 0 :nodes-deleted 0)))
           (should parsed))
       (ignore-errors (delete-file file)))))
+
+(ert-deftest supertag-reindex-replaces-unchanged-node-projection ()
+  "A full reindex drops legacy node extensions even when the hash matches."
+  (let* ((supertag--store nil)
+         (supertag-sync--is-full-rescan-p t)
+         (parsed '(:id "node" :type :node :title "Node" :file "/tmp/node.org"
+                   :level 1 :content "Body" :properties nil :tags nil
+                   :ref-to nil))
+         (legacy (plist-put (copy-tree parsed) :semantic-note "legacy")))
+    (supertag--ensure-store)
+    (setq legacy (plist-put legacy :hash (supertag-node-hash parsed)))
+    (supertag-node-create legacy)
+    (supertag-store-put-field-value "node" "semantic-note" "keep")
+    (supertag-sync--reconcile-node parsed)
+    (should-not
+     (plist-member (supertag-store-get-entity :nodes "node") :semantic-note))
+    (should (equal "keep"
+                   (supertag-store-get-field-value "node" "semantic-note")))))
 
 (ert-deftest supertag-reindex-org-aborts-incomplete-snapshot-without-deletion ()
   "An incomplete snapshot returns a report without touching projections."
@@ -280,7 +296,7 @@ the old mtime until destructive cleanup is allowed."
           (list :sync-state (make-hash-table :test 'equal)))
          (supertag-sync--deferred-files (make-hash-table :test 'equal))
          (seed (list :id "child" :type :node :title "Old" :raw-value "Old"
-                     :file nil :level 2 :semantic-note "keep"))
+                     :file nil :level 2 :semantic-note "legacy-node-extension"))
          full-node point-node source-buffer)
     (unwind-protect
         (progn
@@ -293,6 +309,7 @@ the old mtime until destructive cleanup is allowed."
           (setq supertag--store nil)
           (supertag--ensure-store)
           (supertag-node-create (copy-tree seed))
+          (supertag-store-put-field-value "child" "semantic-note" "keep")
           (cl-letf (((symbol-function 'supertag-sync--allow-destructive-p)
                      (lambda () t)))
             (supertag-sync--process-single-file
@@ -305,6 +322,7 @@ the old mtime until destructive cleanup is allowed."
           (setq supertag--store nil)
           (supertag--ensure-store)
           (supertag-node-create (copy-tree seed))
+          (supertag-store-put-field-value "child" "semantic-note" "keep")
           (setq source-buffer (find-file-noselect file))
           (with-current-buffer source-buffer
             (org-mode)
@@ -316,7 +334,10 @@ the old mtime until destructive cleanup is allowed."
                 (supertag-sync-worker-test--without-volatile-node-data
                  (supertag-node-get "child")))
           (should (equal full-node point-node))
-          (should (equal "keep" (plist-get point-node :semantic-note)))
+          (should-not (plist-member point-node :semantic-note))
+          (should (equal "keep"
+                         (supertag-store-get-field-value
+                          "child" "semantic-note")))
           (should (equal '("Parent" "Child") (plist-get point-node :olp)))
           (should (equal "file-id" (plist-get point-node :parent-id))))
       (when (buffer-live-p source-buffer)

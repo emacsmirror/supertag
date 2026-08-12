@@ -1,5 +1,18 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task012 Node Projection 不再保存未知语义 key
+
+- Delete `supertag--merge-node-properties` 与 `standard-keys` 推断：file/point reconcile 在文档变化时直接以最新 Org parse 替换 Document Projection；完整 reindex 即使 hash 未变也执行替换，因此不会遗留未知 key。
+- Modify relation field sync：node 目标值进入既有 global `:field-values`，不再动态扩展 node plist；读取仍兼容旧 source top-level value，正式 legacy/global field dry-run 由 task013 负责。
+- Modify relation rollup：结果只作为派生计算值返回，不再把动态 `:rollup-*` 写入 node/tag；统一 evaluator 与 materialization owner 仍由 task025 收敛。
+- Modify regressions：删除 task005 的虚构 `:semantic-note` 保留契约，改为证明完整 Org replacement 与独立 field value preservation；新增 semantic field sync 和 non-materialized rollup 覆盖。
+
+Behavior：reindex 会移除旧 node plist 中无法由 Org 重建的未知 extension key；真正的 typed semantic value 仍保存在 `:field-values`，不受 reindex 影响。没有新增第二套 `:node-annotations` collection。
+
+Risk：依赖未声明 top-level node key 的第三方代码不再获得隐式持久化；应改用 field API。现存 legacy/global field 数据的批量映射、冲突与回滚不在本任务猜测处理，进入 task013 的只读审计。
+
+Verification：红测先证明 file/point projector 会保留未知 key；实现后 node 15/15、sync-worker 14/14、ownership 7/7 通过；干净临时 clone 全量 ERT 449/449；修改文件 byte compile 成功（仅既有 warning），`check-parens`、`git diff --check` 通过。
+
 ## 2026-08-12 — task011 Tag membership 的 Org-first 写入
 
 - Modify `supertag-service-org.el` / sync：唯一顺序改为 edit Org → save → current-node projection；heading 与 file-node 都从保存后的 `#tag` / `#+FILETAGS` 重建 occurrence、resolved membership 与 `:node-tag` relation。

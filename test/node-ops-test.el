@@ -198,6 +198,38 @@
         (should (string= "/tmp/special.org" (plist-get updated :file)))
         (should (string= "Keep File" (plist-get updated :title)))))))
 
+(ert-deftest node-ops-relation-field-sync-uses-semantic-field-store ()
+  "Relation field sync never extends the Org-owned node plist."
+  (node-ops-test--with-clean-store
+    (supertag-node-create
+     '(:id "source" :title "Source" :file "/tmp/source.org"))
+    (supertag-node-create
+     '(:id "target" :title "Target" :file "/tmp/target.org"))
+    (supertag-store-put-field-value "source" "status" "active")
+    (supertag-relation-create-notion-style
+     '(:type :sync-field :from "source" :to "target"
+       :sync-fields ("status")))
+    (should (equal "active"
+                   (supertag-store-get-field-value "target" "status")))
+    (should-not
+     (plist-member (supertag-store-get-entity :nodes "target") :status))))
+
+(ert-deftest node-ops-relation-rollup-does-not-materialize-in-node ()
+  "A derived rollup result never becomes a node extension key."
+  (node-ops-test--with-clean-store
+    (supertag-node-create '(:id "source" :title "Source"))
+    (supertag-node-create '(:id "target" :title "Target" :effort 3))
+    (let ((relation
+           (supertag-relation-create-notion-style
+            (list :type :rollup :from "source" :to "target"
+                  :rollup-field "effort"
+                  :rollup-function (lambda (values) (apply #'+ values))))))
+      (should (= 3 (supertag-relation-calculate-rollup
+                    (plist-get relation :id))))
+      (should-not
+       (plist-member (supertag-store-get-entity :nodes "target")
+                     :rollup-effort)))))
+
 ;;; --- Node Get (as exists check) Tests ---
 
 (ert-deftest node-ops-get-existing-node ()

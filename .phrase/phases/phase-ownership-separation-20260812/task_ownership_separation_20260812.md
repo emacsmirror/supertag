@@ -73,10 +73,11 @@
 
 ## M2 — Semantic Separation
 
-- task012 [ ] 从 node plist 迁出 Semantic Facts
+- task012 [x] 从 node plist 迁出 Semantic Facts
   - 产出：只迁移实际存在的 DB-only node extension keys；删除 `standard-keys` unknown-key merge
   - 验证方式：Document node 可由 Org parse 完整替换；reindex 不丢 semantic annotations
   - 影响范围：node model、sync、persistence/migration tests
+  - 完成：2026-08-12；审计未发现需要新建 `:node-annotations` 的独立权威事实；唯一生产 semantic extension writer（relation field sync）已迁至既有 `:field-values`，rollup 保持纯派生；file/point/full reindex 均删除 legacy unknown key 并保留 field value，定向 ERT 36/36、干净临时 clone 全量 ERT 449/449 通过
 
 - task013 [ ] 对 legacy/global fields 执行正式 dry-run audit
   - 产出：字段 definition/value mapping、冲突、孤立值、覆盖策略和备份报告；不写数据

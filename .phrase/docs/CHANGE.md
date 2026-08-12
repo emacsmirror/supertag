@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task012 replace node projection; semantic fields stay separate
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task011 Org-first Tag membership writes
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task010 confirmed reciprocal-link migration
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task009 forward-only references + derived backlinks

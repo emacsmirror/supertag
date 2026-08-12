@@ -16,7 +16,6 @@
 (require 'supertag-core-index)
 (require 'sha1)
 
-(declare-function supertag-node-update "supertag-ops-node" (id updater))
 (declare-function supertag-node-get "supertag-ops-node" (id))
 (declare-function supertag-node-format-link "supertag-ops-node" (id &optional title))
 (declare-function supertag-node-link-pattern "supertag-ops-node" (id))
@@ -624,18 +623,20 @@ RELATION-ID is the identifier of the relation defining the sync rules."
         (when (and from-plist (or target-node target-tag) sync-fields)
           (dolist (prop-name sync-fields)
             (let* ((prop-key (supertag-ops-relation--normalize-keyword prop-name))
-                   (prop-value (plist-get from-plist prop-key)))
+                   (field-id (substring (symbol-name prop-key) 1))
+                   (source-fields (and (supertag-store-get-entity :nodes from-id)
+                                       (gethash from-id
+                                                (supertag-store-get-collection
+                                                 :field-values))))
+                   (prop-value
+                    (if (and source-fields (ht-contains? source-fields field-id))
+                        (gethash field-id source-fields)
+                      (plist-get from-plist prop-key))))
               (when prop-value
                 (if target-node
-                    (when (fboundp 'supertag-node-update)
-                      (supertag-node-update
-                       to-id
-                       (lambda (node)
-                         (let* ((plist (supertag-ops-relation--ensure-plist node))
-                                (current (plist-get plist prop-key)))
-                           (if (equal current prop-value)
-                               nil
-                             (plist-put plist prop-key prop-value))))))
+                    (unless (equal (supertag-store-get-field-value to-id field-id)
+                                   prop-value)
+                      (supertag-store-put-field-value to-id field-id prop-value))
                   (when (and target-tag (fboundp 'supertag-tag-update))
                     (supertag-tag-update
                      to-id
@@ -649,7 +650,8 @@ RELATION-ID is the identifier of the relation defining the sync rules."
 
 (defun supertag-relation-calculate-rollup (relation-id)
   "Calculate rollup value for a relation.
-RELATION-ID is the identifier of the rollup relation."
+RELATION-ID is the identifier of the rollup relation.
+Return the derived value without storing it in a node or tag entity."
   (let ((relation (supertag-relation-get relation-id)))
     (when relation
       (let* ((from-id (plist-get relation :from))
@@ -672,37 +674,10 @@ RELATION-ID is the identifier of the rollup relation."
                 (when value
                   (push value values))))
 
-            ;; Calculate rollup result
-              (let ((result (funcall rollup-function values)))
-                ;; Update target entity with rollup result
-                (let* ((field-name (cond
-                                    ((keywordp rollup-field) (substring (symbol-name rollup-field) 1))
-                                    ((symbolp rollup-field) (symbol-name rollup-field))
-                                    ((stringp rollup-field) rollup-field)
-                                    (t (format "%s" rollup-field))))
-                       (rollup-key (intern (concat ":rollup-" field-name))))
-                  (if (supertag-store-get-entity :nodes to-id)
-                      (when (fboundp 'supertag-node-update)
-                        (supertag-node-update
-                         to-id
-                         (lambda (node)
-                           (let* ((plist (supertag-ops-relation--ensure-plist node))
-                                  (current (plist-get plist rollup-key)))
-                             (if (equal current result)
-                                 nil
-                               (plist-put plist rollup-key result))))))
-                    (when (fboundp 'supertag-tag-update)
-                      (supertag-tag-update
-                       to-id
-                       (lambda (tag)
-                         (let* ((plist (supertag-ops-relation--ensure-plist tag))
-                                (current (plist-get plist rollup-key)))
-                           (if (equal current result)
-                               nil
-                             (plist-put plist rollup-key result))))))))
-
-                  (message "Calculated rollup for %s: %s = %s" to-id rollup-field result)
-                  result)))))))
+            (let ((result (funcall rollup-function values)))
+              (message "Calculated rollup for %s: %s = %s"
+                       to-id rollup-field result)
+              result)))))))
 
 (defun supertag-relation-define-database-relation (from-tag to-tag relation-config)
   "Define a Notion-style database relation between two tags.

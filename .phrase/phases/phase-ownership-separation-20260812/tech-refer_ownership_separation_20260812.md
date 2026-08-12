@@ -27,6 +27,15 @@ The Store is a physical container, not a single owner. The ownership seam is cur
 
 `supertag--merge-node-properties` treats a hard-coded key list as Org-owned and every unknown old key as DB-owned. This is field-level ownership inside one plist and makes new extractor keys unsafe by default.
 
+Task012 removes that rule.  The audit found no standalone authoritative
+node-annotation model worth creating: relation field sync is a typed semantic
+value and now writes the existing `:field-values` collection; relation rollup
+output is derived and is no longer materialized into node/tag plists.  Org
+parsing therefore replaces the Document Projection without copying unknown
+keys from its previous version.  Existing lifecycle/orphan timestamps remain
+projection-operational metadata, and backlink caches remain derived pending
+their dedicated cleanup tasks.
+
 ### Tag membership
 
 A single Org token is represented by `node.:tags`, a Tag entity and a `:node-tag` relation. Consumers merge these representations again.
