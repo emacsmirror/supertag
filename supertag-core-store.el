@@ -26,8 +26,8 @@ Data is stored in a tree-like structure using nested hash tables.")
   '(:nodes
     :tags
     :relations
-    :embeds
-    ;; Legacy nested field values (node -> tag -> field)
+    ;; Legacy nested field values (node -> tag -> field); read-only migration
+    ;; source, no production writer remains (task014).
     :fields
     ;; Global field model (new)
     :field-definitions          ; field-id -> field plist
@@ -41,10 +41,13 @@ Data is stored in a tree-like structure using nested hash tables.")
     :meta)
   "Durable root collections maintained in `supertag--store'.
 Every collection written to the database must be declared here so Store
-initialization and save/read verification share one contract.")
+initialization and save/read verification share one contract.
+`:embeds' was removed (2026-08-13, task028): no production code reads or
+writes it, and old files still load their `:embeds' lines via the loader's
+normalization arms; the data is simply not persisted on the next save.")
 
 (defconst supertag--canonical-collections
-  '(:nodes :tags :relations :embeds :field-definitions
+  '(:nodes :tags :relations :field-definitions
     :boards :automations :sync-conflicts)
   "Collections expected to contain entity plists keyed by identifier.")
 
