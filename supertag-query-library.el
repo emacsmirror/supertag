@@ -2,8 +2,8 @@
 
 ;;; Commentary:
 ;; This file makes the Org-Supertag S-expression query language (defined in
-;; `supertag-services-query.el', see `supertag-query--parse-sexp' and
-;; `supertag-query--execute-ast') learnable and reusable, without changing
+;; `supertag-services-query.el', see `supertag-query-node-ids' and
+;; `supertag-query-fields') learnable and reusable, without changing
 ;; the engine or the query-block/dynamic-block UI layer:
 ;;
 ;; - Saved queries: `supertag-query-save', `supertag-query-run-saved',
@@ -15,8 +15,8 @@
 ;; - A quick reference: `supertag-query-describe-syntax'.
 ;;
 ;; This file never reimplements query parsing or execution -- it always
-;; calls into `supertag-query--parse-sexp', `supertag-query--execute-ast',
-;; `supertag-query--get-fields-from-ast', and `supertag-query--get-node-field-value'
+;; calls into `supertag-query-node-ids', `supertag-query-validate',
+;; `supertag-query-fields', and `supertag-query-field-value'
 ;; from `supertag-services-query.el'.
 ;;
 ;; See doc/QUERY.md for the full user-facing grammar reference.
@@ -81,7 +81,7 @@ library ran, inserted, or built."
 
 (defun supertag-query-library--read-query-sexp (query-string)
   "Parse QUERY-STRING into a query S-expression, signaling a clear error.
-Uses the real reader and the real parser (`supertag-query--parse-sexp')
+Uses the real reader and the real parser (`supertag-query-validate')
 so an invalid query is rejected the same way the engine would reject it."
   (let (sexp)
     (condition-case err
@@ -89,7 +89,7 @@ so an invalid query is rejected the same way the engine would reject it."
       (error (user-error "Could not read query `%s': %s"
                           query-string (error-message-string err))))
     (condition-case err
-        (progn (supertag-query--parse-sexp sexp) sexp)
+        (progn (supertag-query-validate sexp) sexp)
       (error (user-error "Invalid query `%s': %s"
                           query-string (error-message-string err))))))
 
@@ -162,9 +162,8 @@ Node titles are shown as Org links, alongside a Tags column and one
 column per field mentioned in QUERY-SEXP.  This reuses the query
 engine's own AST parser/executor/field-extractor; it does not
 reimplement parsing or execution."
-  (let* ((ast (supertag-query--parse-sexp query-sexp))
-         (node-ids (supertag-query--execute-ast ast))
-         (field-keys (supertag-query--get-fields-from-ast ast))
+  (let* ((node-ids (supertag-query-node-ids query-sexp))
+         (field-keys (supertag-query-fields query-sexp))
          (nodes (delq nil (mapcar #'supertag-node-get node-ids)))
          (buf (get-buffer-create "*Supertag Saved Query*")))
     (with-current-buffer buf
@@ -186,7 +185,7 @@ reimplement parsing or execution."
                            (list (supertag-node-format-link id title)
                                  (if (and tags (listp tags)) (mapconcat #'identity tags ", ") ""))
                            (mapcar (lambda (key)
-                                     (let ((val (supertag-query--get-node-field-value id key)))
+                                     (let ((val (supertag-query-field-value id nil key t)))
                                        (if val (format "%s" val) "")))
                                    field-keys))))
                 (insert "| " (mapconcat #'identity row " | ") " |\n")))
@@ -329,7 +328,7 @@ Accepts \"now\", an absolute \"YYYY-MM-DD\" date, or a relative offset
 like \"-7d\", \"+2w\", \"-1m\", \"1y\" (an offset without a sign means
 +, i.e. the future)."
   (let ((s (read-string (format "%s (now / YYYY-MM-DD / -7d / +2w): " prompt))))
-    (unless (supertag-query--resolve-date-string s)
+    (unless (supertag-query-date-valid-p s)
       (user-error "Unrecognized date `%s' -- use now, YYYY-MM-DD, or [+-]Nd/w/m/y" s))
     s))
 
@@ -337,20 +336,20 @@ like \"-7d\", \"+2w\", \"-1m\", \"1y\" (an offset without a sign means
   "Construct and validate a leaf condition sexp for operator OP and ARGS.
 OP is a string or symbol naming one of the leaf operators in
 `supertag-query-library--operators'.  The resulting sexp is passed
-through `supertag-query--parse-sexp' so an arity mistake (e.g. the
+through `supertag-query-validate' so an arity mistake (e.g. the
 wrong number of ARGS) surfaces the same error the query engine itself
 would raise, instead of silently building a bad query.  This is the
 pure assembly step used by both the interactive builder and its
 tests."
   (let ((sexp (cons (if (stringp op) (intern op) op) args)))
-    (supertag-query--parse-sexp sexp)
+    (supertag-query-validate sexp)
     sexp))
 
 (defun supertag-query-library--combine-conditions (combinator expr next)
   "Return the sexp combining EXPR and NEXT with COMBINATOR.
 COMBINATOR is \"and\"/\"or\" (a string) or the symbol `and'/`or'."
   (let ((sexp (list (if (stringp combinator) (intern combinator) combinator) expr next)))
-    (supertag-query--parse-sexp sexp)
+    (supertag-query-validate sexp)
     sexp))
 
 (defun supertag-query-library--build-condition ()

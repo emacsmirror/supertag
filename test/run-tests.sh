@@ -109,7 +109,7 @@ if [ $# -gt 0 ]; then
             *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership all"; exit 1 ;;
         esac
     done
-    TEST_FILES=($FILTER)
+    TEST_FILES=($(printf '%s\n' $FILTER | awk '!seen[$0]++'))
 fi
 
 # Build -l args

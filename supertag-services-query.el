@@ -206,6 +206,21 @@ Returns a list of node IDs matching the query."
   "Compatibility entry point for `supertag-query-node-ids'."
   (supertag-query-node-ids query-sexp))
 
+(defun supertag-query-fields (query-sexp)
+  "Return field keys referenced by QUERY-SEXP, for table headers."
+  (supertag-query--get-fields-from-ast
+   (supertag-query--parse-sexp query-sexp)))
+
+(defun supertag-query-validate (query-sexp)
+  "Validate QUERY-SEXP with the engine's parser, returning it.
+Signals the same error the executor would raise on malformed input."
+  (supertag-query--parse-sexp query-sexp)
+  query-sexp)
+
+(defun supertag-query-date-valid-p (date-str)
+  "Return non-nil when DATE-STR is accepted by the engine's date resolver."
+  (and (supertag-query--resolve-date-string date-str) t))
+
 (defun supertag-query--parse-sexp (query-sexp)
   "Parse a query S-expression into an AST.
 This function is compatible with the old query syntax."

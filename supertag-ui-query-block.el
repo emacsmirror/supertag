@@ -125,7 +125,7 @@ separated string, or nil (meaning \"no override\")."
    ((string= key "title") (plist-get node :title))
    ((string= key "created") (plist-get node :created-at))
    ((string= key "modified") (plist-get node :modified-at))
-   (t (supertag-query--get-node-field-value node-id key))))
+   (t (supertag-query-field-value node-id nil key t))))
 
 (defun supertag-query-block--numeric (value)
   "Return VALUE as a number if it is one, or a numeric-looking string. Else nil."
@@ -174,7 +174,7 @@ Nodes missing the sort key are always placed last, regardless of ORDER."
                       (mapconcat #'identity tags ", ")
                     ""))
             (mapcar (lambda (key)
-                      (let ((val (supertag-query--get-node-field-value id key)))
+                      (let ((val (supertag-query-field-value id nil key t)))
                         (if val (format "%s" val) "")))
                     columns))))
 
@@ -185,9 +185,8 @@ the same semantics documented at the top of this file.
 Returns (HEADERS . ROWS). Signals an error on malformed input; callers
 that must never signal should go through `supertag-query-block--render'."
   (let* ((query-sexp (car (read-from-string (string-trim query-str))))
-         (ast (supertag-query--parse-sexp query-sexp))
-         (node-ids (supertag-query--execute-ast ast))
-         (auto-fields (supertag-query--get-fields-from-ast ast))
+         (node-ids (supertag-query-node-ids query-sexp))
+         (auto-fields (supertag-query-fields query-sexp))
          (columns (or (supertag-query-block--parse-columns (plist-get opts :columns))
                       auto-fields))
          (sort-key (supertag-query-block--normalize-sort-key (plist-get opts :sort)))
