@@ -55,6 +55,7 @@
 4. 系统不向 Org 插入伪装成事实的 reciprocal text。
 5. 字段显示名修改保留稳定 field ID 与已有 node values；消费者通过 resolver 继续命中同一字段。
 6. Semantic Tag rename 只修改 canonical name/alias，稳定 Tag ID、引用集合与 Org token 均保持不变；旧 token 继续通过 alias 解析。
+7. Semantic commit 后，受影响的 Store-derived index 通过 collection revision 失效；下一次读取或统一 cold rebuild 只能看到一个完整 generation。
 
 ### Explicit Tag token migration
 
@@ -94,6 +95,8 @@
 - Reindex 不得把缺失文档解释为“允许删除”，除非 sync snapshot 明确为 complete。
 - `SUPERTAG_ALIASES` 当前是 Org concept property；不能直接充当未来的 Semantic Tag alias registry。
 - Saved query 与 exported view config 在迁入 semantic store 前，必须明确其外部持久化 owner。
+- Derived index rebuild 任一步失败时，relation、Tag、membership、schema 与 rule cache 必须全部为空，不得暴露一半新、一半旧的 generation。
+- UI TTL/SVG cache、schema definition registry 与 virtual-column runtime cache 不属于 Store-derived cold rebuild；不得为了“统一”而混入错误生命周期。
 
 ## Acceptance Criteria
 
@@ -101,6 +104,8 @@
 - Reindex 前后 Semantic Fact fingerprint 完全一致。
 - Reindex 不修改任何 Org buffer 或文件。
 - Document Projection 与 Query Projection 均可清空并冷重建。
+- 一个统一入口可清空并重建 relation from/to、Tag token/display path/descendants、nodes-by-tag、global field lookup/order、resolved schema 与 Automation rule index；前后公开查询结果一致且不修改 Semantic Fact fingerprint。
+- Store 成功/空/失败加载和 transaction rollback 返回后自动建立同一 derived generation；rebuild 失败时全部 cache fail closed。
 - 一个新 reference 只有一个物理 forward Document Link；Backlink 由查询产生。
 - Tag membership 命令必须先保存 Org，再单点 reindex；保存失败时 occurrence/membership Projection 不变，成功时 node change 事件只触发一次。
 - 旧 reciprocal migration 只处理用户明确确认的 occurrence；dry-run/abort 零写入，失败可恢复。

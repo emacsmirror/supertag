@@ -32,7 +32,7 @@
 - global field migration 与 legacy cutover。
 - document-link / field-reference / semantic-edge 分型。
 - Stable Semantic Tag ID、alias resolver 与 rename 语义。
-- task017 已落实稳定 ID cutover、统一 resolver 与显式 Org token migration；M2 完成，下一步由 task018 统一 derived cache rebuild。
+- task017 已落实稳定 ID cutover、统一 resolver 与显式 Org token migration；M2 完成。
 
 ### M3 — task018–task026
 
@@ -41,6 +41,7 @@
 - Completion/Stream、Node/Table/Kanban、Board/Graph、Query、Automation 分批迁移。
 - formula/rollup 语义收敛。
 - raw Store read closure。
+- task018 已完成统一 clear/rebuild generation、load/rollback/reindex lifecycle 与 indexed Tag membership；下一步 task019 固定具体 Query Model interface。
 
 ### M4 — task027–task028
 
@@ -71,7 +72,7 @@ task001 → task002 → task003 → task005
 - 旧 reciprocal backlink 与用户正向链接语法相同，禁止自动删除；依赖既有 `phase-sync-integrity-20251226/task013`。
 - Stable Tag ID 会影响 schema、relations、fields、automations、boards、saved queries 与 completion；必须先 dry-run 和备份。
 - task016 已固定 dry-run gate：只有 deterministic old↔stable、unique alias、完整引用面与 backup fingerprint 均无冲突，task017 才允许进入写入路径。
-- task017 的 runtime resolver 暂为 O(Tag) 单一扫描；不得另加局部 cache，task018 必须把它并入统一 cold rebuild contract。
+- task018 已把 runtime resolver、Tag paths/descendants 与 membership 纳入统一 cold rebuild contract；descendant cold build 暂为 O(T²)，只有实测启动瓶颈时才升级 adjacency walk。
 - Legacy/global field 两套读取语义并存；必须用 parity fixture 证明 cutover。
 - 现有 View Data API 暴露 raw collections；必须逐 consumer 迁移，不能一次删除。
 - Store transaction 只回滚内存 Store；本阶段优先减少跨介质双写，不先造 crash journal。

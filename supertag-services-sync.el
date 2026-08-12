@@ -2175,11 +2175,11 @@ Return a report plist whose :status is `complete', `aborted', or `failed'."
                 ;; File order cannot affect links or derived query state.
                 (supertag-index-rebuild-relations)
                 (supertag-sync--reconcile-all-projected-relations counters)
-                (supertag-index-rebuild-relations)
                 (supertag-sync--rebuild-reference-caches)
                 (supertag-sync-validate-nodes counters)
                 (setq gc-count
-                      (supertag-sync-garbage-collect-orphaned-nodes)))
+                      (supertag-sync-garbage-collect-orphaned-nodes))
+                (supertag-index-rebuild-all))
               (setq report
                     (list :status 'complete
                           :snapshot-status snapshot-status

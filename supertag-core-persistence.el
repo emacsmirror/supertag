@@ -12,7 +12,7 @@
 (require 'parse-time) ; For parse-iso8601-time-string, used by presence
 (require 'supertag-core-notify) ; For supertag-subscribe and supertag-emit-event
 (require 'supertag-core-store) ; For supertag--store
-(require 'supertag-core-index) ; For relation index rebuild after load
+(require 'supertag-core-index) ; For derived index rebuild after load
 (require 'supertag-core-transform) ; For supertag-with-transaction (real per-entity rollback)
 
 ;;; --- Persistence Configuration ---
@@ -1518,6 +1518,7 @@ data corruption is suspected."
                      migrated-count)
             (supertag-mark-dirty)))
 
+        (supertag-index-rebuild-all)
         (message "Database migration and normalization complete.")
         (when (supertag-dirty-p)
           (message "Changes were made. Saving database...")
@@ -1694,7 +1695,6 @@ lock already held for it; this is reserved for the restore critical section."
         (progn
           (supertag--persistence--set-db-file file-to-load)
           (supertag-clear-dirty)
-          (supertag-index-rebuild-relations)
           (supertag--record-store-origin :ok
                                          (list :loaded-from file-to-load
                                                :load-candidates candidates
@@ -1722,6 +1722,7 @@ lock already held for it; this is reserved for the restore critical section."
             (supertag--db-acquire-lock))
           (supertag--presence-check-and-claim)
           (supertag--maybe-auto-migrate)
+          (supertag-index-rebuild-all)
           ;; See `supertag-persistence-after-load-hook''s docstring: this is
           ;; the one seam that fires exactly when a store was just
           ;; successfully loaded, without this file knowing (or requiring)
@@ -1768,9 +1769,7 @@ lock already held for it; this is reserved for the restore critical section."
                    (mapcar #'abbreviate-file-name candidates))
         (message "Initialized empty Org-Supertag store (no readable DB found; candidates=%S)."
                  (mapcar #'abbreviate-file-name candidates))))
-        ;; Rebuild global field caches if the feature is loaded and enabled.
-        (when (fboundp 'supertag--maybe-rebuild-global-field-caches)
-          (supertag--maybe-rebuild-global-field-caches))))
+        (supertag-index-rebuild-all)))
 
 (defun supertag-schedule-save ()
   "Schedule a delayed save.

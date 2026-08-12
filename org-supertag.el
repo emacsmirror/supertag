@@ -548,9 +548,8 @@ This function loads all necessary components and sets up the environment."
     (when (fboundp 'supertag-schema-apply-registrations)
       (supertag-schema-apply-registrations))
 
-    ;; Step 6: Materialize tag schema cache after loading data
-    (supertag-ops-schema-rebuild-cache)
-    
+    ;; Step 6: Store load already cold-rebuilt every derived index.
+
     ;; Step 7: Set up auto-save and daily backup timers
     (supertag-setup-all-timers)
     

@@ -616,10 +616,7 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
 
 (defun supertag-tag-merge--rebuild-derived-state ()
   "Rebuild caches and indexes touched by a tag merge."
-  (supertag-index-rebuild-relations)
-  (supertag-ops-schema-rebuild-cache)
-  (when (fboundp 'supertag-rebuild-rule-index)
-    (supertag-rebuild-rule-index)))
+  (supertag-index-rebuild-all))
 
 (defun supertag-tag-merge--rewrite-files (plan)
   "Rewrite source tag text in PLAN's Org files and return change count."

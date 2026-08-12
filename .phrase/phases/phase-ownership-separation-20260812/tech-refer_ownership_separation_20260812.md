@@ -56,7 +56,10 @@ A reference may be represented by a source Org link, a reciprocal target Org lin
 
 ### Query reads
 
-`supertag-view-api-get-collection` returns raw hash tables. Generic `supertag-query` accepts arbitrary collections/paths. Several `index-*` functions remain O(N) scans.
+`supertag-view-api-get-collection` returns raw hash tables and generic
+`supertag-query` accepts arbitrary collections/paths.  Task018 moved Tag
+membership to a cold-rebuilt index; text/date/file queries and several consumer
+joins still scan raw collections until task019–026.
 
 ### Durable roots
 
@@ -136,6 +139,57 @@ The phase deepens existing modules before creating new ones.
 | Query Model | named domain queries; no arbitrary collection/path access | `supertag-services-query.el`; `supertag-view-api.el` becomes a compatibility caller |
 
 No repository/factory/backend adapter is introduced. A second adapter is required before a backend seam becomes real.
+
+## Unified Cold Rebuild Contract
+
+Task018 keeps each cache in its existing module and centralizes only lifecycle in
+`supertag-core-index.el`:
+
+```text
+supertag-index-clear-all
+  → relation from/to
+  → Tag token / display path / descendants
+  → nodes-by-tag
+  → global field lookup / order
+  → resolved schema
+  → Automation rule index
+
+supertag-index-rebuild-all
+  → clear all
+  → rebuild every loaded Store-derived cache
+  → on any error: clear all again, re-signal
+```
+
+Source tracking is concrete, not a generic cache framework.  Canonical Store
+writes increment per-collection in-memory revisions; each indexed reader records
+the exact Store object plus the revisions of its source collections:
+
+| Derived state | Source collections |
+|---|---|
+| relation from/to | `:relations` |
+| Tag token/path/descendants | `:tags` |
+| nodes-by-tag | `:nodes` |
+| global field lookup/order | `:field-definitions`, `:tag-field-associations` |
+| resolved schema | `:tags`, `:field-definitions`, `:tag-field-associations` |
+| Automation rule index | `:automations` |
+
+Relation operations still update their two hash indexes incrementally.  If a
+caller writes `:relations` through the canonical Store seam instead, revision
+mismatch forces a cold rebuild before the next indexed read.  Tag resolution,
+descendant lookup, membership, resolved schema and rule lookup use the same lazy
+source check.
+
+Successful load, empty/failed load, manual migration, completed Org reindex and
+transaction rollback all call the unified rebuild boundary.  A failed builder
+never leaves a mixed generation.  `supertag-index-clear-all` and rebuild mutate
+no durable fact.
+
+The contract deliberately excludes UI node TTL cache, SVG cache, the static
+schema definition registry and virtual-column runtime caches: none is a direct
+Store-derived query projection.  Virtual formula/rollup lifecycle remains
+task025.  Tag descendant construction is currently a cold-only O(T²) scan;
+replace it with a child adjacency walk only if measured Vault startup time makes
+that ceiling material.
 
 ## Concrete Query Interface
 
@@ -249,8 +303,8 @@ stable ID and every reference.  Org text rewrite is the separate
 `supertag-migration-rewrite-tag-token` command: its default invocation audits a
 complete Vault snapshot; prefix execution snapshots affected files, rewrites
 only exact inline/`#+FILETAGS` occurrences, and reindexes.  Failure restores the
-files and projection.  This resolver intentionally scans Tags until task018
-provides the one cold-rebuild cache contract.
+files and projection.  Task018 now resolves runtime tokens through the unified
+cold-rebuilt Tag token index.
 
 ### Fields
 

@@ -2,8 +2,8 @@
 
 ;;; Commentary:
 ;;
-;; Establishes a reproducible performance baseline for the known O(N) hot
-;; paths in org-supertag, using a synthetic, isolated in-memory dataset.
+;; Establishes a reproducible performance baseline for query, persistence, and
+;; view hot paths in org-supertag, using an isolated in-memory dataset.
 ;; This file never touches the user's real `~/.emacs.d' data.
 ;;
 ;; This is a standalone, batch-runnable benchmark. It is NOT wired into
@@ -14,7 +14,7 @@
 ;;     -l test/perf-benchmark.el -f supertag-perf-benchmark-run
 ;;
 ;; What it measures (see `supertag-perf-benchmark-run'):
-;;   1. `supertag-index-get-nodes-by-tag'  - O(N) full :nodes scan, hot + rare tag
+;;   1. `supertag-index-get-nodes-by-tag'  - indexed hot + rare tag lookup
 ;;   2. `supertag-index-get-nodes-by-word' - O(N) full :nodes scan, substring search
 ;;   3. `supertag-save-store' / `supertag-load-store' - full DB serialize/read,
 ;;      including the atomic-save + verify-after-save path
@@ -193,7 +193,7 @@ notification side effects."
         (supertag-store-put-entity
          :relations rel-id
          (list :id rel-id :type :reference :from from-id :to to-id))))
-    (supertag-index-rebuild-relations)
+    (supertag-index-rebuild-all)
     (list :node-count supertag-perf-benchmark-node-count
           :tag-count (length tag-ids)
           :relation-count supertag-perf-benchmark-relation-count
@@ -343,16 +343,15 @@ operation is already at/above 100ms at N-NOW, or when timing is ~0."
 
       (insert "## Reading the numbers\n\n")
       (insert (format "Dataset size for this baseline: N = %d nodes.\n\n" node-count))
-      (insert "- `supertag-index-get-nodes-by-tag` and `supertag-index-get-nodes-by-word`\n")
-      (insert "  (supertag-core-scan.el:17 and :29) are full `maphash` walks over the\n")
-      (insert "  entire `:nodes` table on every call -- their cost is O(N) in the total\n")
-      (insert "  node count, essentially independent of the tag/word's own hit rate\n")
-      (insert "  (hot vs. rare tag, common vs. rare word should read as roughly the same\n")
-      (insert "  cost above, since every node is still visited).\n")
+      (insert "- `supertag-index-get-nodes-by-tag` reads the cold-rebuilt membership\n")
+      (insert "  index and sorts only matching node IDs: O(k log k) for k hits.\n")
+      (insert "- `supertag-index-get-nodes-by-word` still walks the complete `:nodes`\n")
+      (insert "  table on every call: O(N), regardless of the word's hit rate.\n")
       (insert "- Every table view refresh (supertag-view-table.el, `-refresh` /\n")
-      (insert "  `--build-state`) re-runs one of these O(N) scans via\n")
-      (insert "  `supertag-view-api-list-entity-ids` and then does O(rows * columns)\n")
-      (insert "  work rebuilding the whole grid -- there is no incremental/partial\n")
+      (insert "  `--build-state`) resolves its query via\n")
+      (insert "  `supertag-view-api-list-entity-ids`; Tag queries use the membership\n")
+      (insert "  index, while text queries still scan. Rendering still does\n")
+      (insert "  O(rows * columns) work rebuilding the whole grid -- there is no incremental/partial\n")
       (insert "  re-render path.\n")
       (insert "- `supertag-index-rebuild-relations` (supertag-core-index.el) is O(R) in\n")
       (insert "  the relation count and runs on every store load.\n\n")
@@ -368,7 +367,7 @@ operation is already at/above 100ms at N-NOW, or when timing is ~0."
       (dolist (row results)
         (cl-destructuring-bind (label iterations min-s mean-s) row
           (ignore iterations min-s)
-          (when (string-match-p "get-nodes-by-\\|rebuild-relations" label)
+          (when (string-match-p "get-nodes-by-word\\|rebuild-relations" label)
             (let ((n100 (supertag-perf-benchmark--extrapolate-n-for-100ms node-count mean-s)))
               (insert (format "| %s | %s ms @ N=%d | %s |\n"
                               label (supertag-perf-benchmark--fmt-ms mean-s) node-count

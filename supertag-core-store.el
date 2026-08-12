@@ -13,6 +13,8 @@
 (require 'supertag-core-state) ; For supertag--transaction-record-old-value
 
 (declare-function supertag-mark-dirty "supertag-core-persistence")
+(declare-function supertag-index-note-store-change "supertag-core-index"
+                  (collection))
 
 ;;; --- Core Data Store ---
 
@@ -60,6 +62,8 @@ initialization and save/read verification share one contract.")
     (supertag--transaction-record-old-value
      (list collection id) existed-p (if existed-p existing nil))
     (puthash id canonical bucket)
+    (when (fboundp 'supertag-index-note-store-change)
+      (supertag-index-note-store-change collection))
     (when emit-event-p
       (supertag-emit-event :store-changed (list collection id) nil canonical))
     canonical))
@@ -119,6 +123,8 @@ When EMIT-EVENT-P is non-nil, emit :store-changed notification."
     (when old
       (supertag--transaction-record-old-value (list collection id) t old)
       (remhash id bucket)
+      (when (fboundp 'supertag-index-note-store-change)
+        (supertag-index-note-store-change collection))
       (supertag-emit-event :store-changed (list collection id) old nil))
     old))
 
@@ -244,6 +250,8 @@ Returns the normalized hash table and updates `supertag--store' when DATA is nil
       (supertag--transaction-record-old-value
        (list :field-values node-id field-id) had-value old-value))
     (puthash field-id value node-table)
+    (when (fboundp 'supertag-index-note-store-change)
+      (supertag-index-note-store-change :field-values))
     (when emit-event-p
       (supertag-emit-event :store-changed (list :field-values node-id field-id) nil value))
     value))
@@ -266,6 +274,8 @@ Returns the normalized hash table and updates `supertag--store' when DATA is nil
       (let ((old (gethash field-id node-table)))
         (supertag--transaction-record-old-value (list :field-values node-id field-id) t old)
         (remhash field-id node-table)
+        (when (fboundp 'supertag-index-note-store-change)
+          (supertag-index-note-store-change :field-values))
         (supertag-emit-event :store-changed (list :field-values node-id field-id) old nil)
         old))))
 
@@ -514,6 +524,8 @@ a collection entity (:nodes \"id\")."
            (supertag--transaction-record-old-value
             path (not (eq old-value supertag--not-found)) old)
            (puthash collection normalized supertag--store)
+           (when (fboundp 'supertag-index-note-store-change)
+             (supertag-index-note-store-change collection))
            (supertag--notify-change path old normalized)
            (supertag-emit-event :store-changed path old normalized))
          (if (eq old-value supertag--not-found) nil old-value))))
@@ -545,6 +557,8 @@ a collection entity (:nodes \"id\")."
          (let ((cleared (supertag--normalize-collection-value collection nil)))
            (supertag--transaction-record-old-value path t existing)
            (puthash collection cleared supertag--store)
+           (when (fboundp 'supertag-index-note-store-change)
+             (supertag-index-note-store-change collection))
            (supertag--notify-change path existing nil)
            (supertag-emit-event :store-changed path existing nil)
            existing))))
@@ -561,9 +575,8 @@ a collection entity (:nodes \"id\")."
 This is primarily intended for testing and system resets."
   (interactive)
   (setq supertag--store (ht-create))
-  ;; Clear relation indexes if loaded
-  (when (fboundp 'supertag-index-rebuild-relations)
-    (supertag-index-rebuild-relations))
+  (when (fboundp 'supertag-index-rebuild-all)
+    (supertag-index-rebuild-all))
   (message "Supertag store has been cleared."))
 
 ;;; --- Unified Commit Pipeline ---

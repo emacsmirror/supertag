@@ -19,7 +19,7 @@
 (require 'subr-x)
 (require 'supertag-core-store)
 (require 'supertag-core-notify)
-(require 'supertag-core-scan) ; scan-based queries like nodes-by-tag
+(require 'supertag-core-scan) ; Document Projection queries
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
 (require 'supertag-ops-field)

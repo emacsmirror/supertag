@@ -10,6 +10,7 @@
 (require 'cl-lib)
 (require 'org-id)
 (require 'subr-x)
+(require 'supertag-core-index)
 (require 'supertag-core-store)
 (require 'supertag-core-schema)
 (require 'supertag-core-tag-path)
@@ -114,6 +115,109 @@ This ensures that modifications to the copy do not affect the original."
                      "-" "" (downcase (org-id-uuid))))))
     id))
 
+(defvar supertag-tag--token-index (make-hash-table :test 'equal)
+  "Index: normalized occurrence token -> sorted Semantic Tag IDs.")
+
+(defvar supertag-tag--display-path-index (make-hash-table :test 'equal)
+  "Index: Semantic Tag ID -> canonical display path.")
+
+(defvar supertag-tag--descendants-index (make-hash-table :test 'equal)
+  "Index: Semantic Tag ID -> transitive descendant IDs.")
+
+(defvar supertag-tag--index-source-token nil
+  "Source token represented by the Tag indexes.")
+
+(defun supertag-tag-index-clear ()
+  "Clear every Semantic Tag lookup index."
+  (setq supertag-tag--token-index (make-hash-table :test 'equal)
+        supertag-tag--display-path-index (make-hash-table :test 'equal)
+        supertag-tag--descendants-index (make-hash-table :test 'equal)
+        supertag-tag--index-source-token nil))
+
+(defun supertag-tag--compute-display-path (tag-id tags)
+  "Compute TAG-ID's display path directly from TAGS."
+  (let ((current tag-id)
+        (seen (make-hash-table :test 'equal))
+        parts cycle)
+    (while (and current (not cycle))
+      (if (gethash current seen)
+          (setq cycle t)
+        (puthash current t seen)
+        (let* ((tag (supertag--ensure-plist (gethash current tags)))
+               (parent (plist-get tag :extends)))
+          (push (if tag
+                    (supertag-sanitize-tag-name
+                     (or (plist-get tag :name) current))
+                  current)
+                parts)
+          (setq current parent))))
+    (if cycle tag-id (string-join parts "/"))))
+
+(defun supertag-tag--descendant-p (candidate parent tags)
+  "Return non-nil when CANDIDATE transitively extends PARENT in TAGS."
+  (let ((current candidate)
+        (seen (make-hash-table :test 'equal))
+        found)
+    (while (and current (not found) (not (gethash current seen)))
+      (puthash current t seen)
+      (setq current
+            (plist-get (supertag--ensure-plist (gethash current tags))
+                       :extends))
+      (setq found (equal current parent)))
+    found))
+
+(defun supertag-tag-index-rebuild ()
+  "Cold rebuild token, display-path and descendant indexes from Store."
+  (supertag-tag-index-clear)
+  (condition-case err
+      (let ((tags (supertag-store-get-collection :tags)))
+        (when (hash-table-p tags)
+          (maphash
+           (lambda (tag-id _tag)
+             (puthash tag-id
+                      (supertag-tag--compute-display-path tag-id tags)
+                      supertag-tag--display-path-index))
+           tags)
+          (maphash
+           (lambda (tag-id raw-tag)
+             (dolist (token (supertag-tag--tokens
+                             tag-id (supertag--ensure-plist raw-tag)))
+               (puthash token
+                        (cons tag-id (gethash token supertag-tag--token-index))
+                        supertag-tag--token-index)))
+           tags)
+          (maphash
+           (lambda (token owners)
+             (puthash token (sort (delete-dups owners) #'string<)
+                      supertag-tag--token-index))
+           supertag-tag--token-index)
+          ;; ponytail: O(T²) only during cold rebuild; use a child adjacency
+          ;; walk if measured Vault startup time makes this material.
+          (maphash
+           (lambda (parent-id _parent)
+             (let (descendants)
+               (maphash
+                (lambda (candidate-id _candidate)
+                  (when (and (not (equal candidate-id parent-id))
+                             (supertag-tag--descendant-p
+                              candidate-id parent-id tags))
+                    (push candidate-id descendants)))
+                tags)
+               (puthash parent-id (nreverse descendants)
+                        supertag-tag--descendants-index)))
+           tags))
+        (setq supertag-tag--index-source-token
+              (supertag-index-source-token '(:tags))))
+    (error
+     (supertag-tag-index-clear)
+     (signal (car err) (cdr err)))))
+
+(defun supertag-tag--ensure-index ()
+  "Cold rebuild Semantic Tag indexes when Tag facts changed."
+  (unless (supertag-index-source-current-p
+           supertag-tag--index-source-token '(:tags))
+    (supertag-tag-index-rebuild)))
+
 (defun supertag-tag--normalize-aliases (aliases)
   "Return sorted unique occurrence tokens from ALIASES."
   (sort
@@ -134,23 +238,21 @@ This ensures that modifications to the copy do not affect the original."
   (supertag-tag--normalize-aliases
    (append (list tag-id
                  (plist-get tag :name)
-                 (supertag-tag-display-path tag-id))
+                 (supertag-tag--compute-display-path
+                  tag-id (supertag-store-get-collection :tags)))
            (plist-get tag :aliases))))
 
 (cl-defun supertag-tag--matching-ids
     (token &optional (tag-ids nil tag-ids-supplied-p))
   "Return Tag IDs that claim TOKEN, optionally limited to TAG-IDS."
   (when (and (stringp token) (not (string-empty-p token)))
-    (let ((normalized (supertag-sanitize-tag-name token))
-          matches)
-      (dolist (tag-id
-               (if tag-ids-supplied-p
-                   tag-ids
-                 (hash-table-keys (supertag-store-get-collection :tags))))
-        (when-let* ((tag (supertag--ensure-plist (supertag-tag-get tag-id))))
-          (when (member normalized (supertag-tag--tokens tag-id tag))
-            (push tag-id matches))))
-      (sort (delete-dups matches) #'string<))))
+    (supertag-tag--ensure-index)
+    (let* ((normalized (supertag-sanitize-tag-name token))
+           (owners (copy-sequence
+                    (gethash normalized supertag-tag--token-index))))
+      (if tag-ids-supplied-p
+          (cl-remove-if-not (lambda (tag-id) (member tag-id tag-ids)) owners)
+        owners))))
 
 (defun supertag-tag--assert-tokens-unique (tag-id tokens)
   "Signal when another Tag besides TAG-ID claims one of TOKENS."
@@ -246,22 +348,15 @@ Returns tag data, or nil if it does not exist."
 
 (defun supertag-tag-display-path (tag-id)
   "Return TAG-ID's canonical occurrence path through explicit parents."
-  (let ((current tag-id)
-        (seen (make-hash-table :test 'equal))
-        parts cycle)
-    (while (and current (not cycle))
-      (if (gethash current seen)
-          (setq cycle t)
-        (puthash current t seen)
-        (let* ((tag (supertag--ensure-plist (supertag-tag-get current)))
-               (parent (plist-get tag :extends)))
-          (push (if tag
-                    (supertag-sanitize-tag-name
-                     (or (plist-get tag :name) current))
-                  current)
-                parts)
-          (setq current parent))))
-    (if cycle tag-id (string-join parts "/"))))
+  (supertag-tag--ensure-index)
+  (or (gethash tag-id supertag-tag--display-path-index)
+      (supertag-tag--compute-display-path
+       tag-id (supertag-store-get-collection :tags))))
+
+(defun supertag-tag-descendants (tag-id)
+  "Return cached transitive descendants of Semantic TAG-ID."
+  (supertag-tag--ensure-index)
+  (copy-sequence (gethash tag-id supertag-tag--descendants-index)))
 
 (cl-defun supertag-tag-resolve-display-path
     (path &optional (tag-ids nil tag-ids-supplied-p))
@@ -276,7 +371,6 @@ Limit the search to TAG-IDS when supplied."
   "Return the existing Semantic Tag ID resolved from occurrence TOKEN.
 Return nil when TOKEN has no Semantic Tag.  This function never creates or
 modifies Tag entities."
-  ;; ponytail: O(Tag) until task018 owns the single cold-rebuild cache contract.
   (let ((matches
          (if tag-ids-supplied-p
              (supertag-tag--matching-ids token tag-ids)

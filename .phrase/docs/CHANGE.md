@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task018 unified derived-index cold rebuild contract
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task017 Stable Semantic Tag cutover + resolver
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task016 deterministic Stable Semantic Tag ID dry-run
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task015 relation ownership separation

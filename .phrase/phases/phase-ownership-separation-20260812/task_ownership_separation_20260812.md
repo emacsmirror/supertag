@@ -111,10 +111,11 @@
 
 ## M3 — Query Model
 
-- task018 [ ] 建立统一 cold rebuild contract
+- task018 [x] 建立统一 cold rebuild contract
   - 产出：relation from/to、Tag descendants/display paths、nodes-by-tag、resolved schema、automation rule indexes 统一清空/重建入口
   - 验证方式：clear → cold rebuild 前后查询结果一致；load/rollback 后自动恢复
   - 影响范围：core-index、schema/automation caches、persistence/transaction hooks
+  - 完成：2026-08-12；ownership ERT 26/26、跨模块定向 ERT 158/158、只含 HEAD + task018 patch 的干净临时 worktree 全量 ERT 482/482 通过；14 个修改生产 Elisp 与 performance benchmark byte compile 成功（仅仓库既有 warning），全部修改 Elisp `check-parens` 与 `git diff --check` 通过
 
 - task019 [ ] 在现有 query 模块提供具体、非泛化读取接口
   - 产出：node、Tag paths、nodes-by-tag、resolved fields、field value、relations from/to/among、node detail、board detail、node query 等真实查询

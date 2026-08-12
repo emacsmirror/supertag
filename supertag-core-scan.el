@@ -1,84 +1,38 @@
 ;;; supertag-core-scan.el --- Scan-based query functions for Org-Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file provides simple, internal API query functions that operate by
-;; scanning the core data store. It is the dedicated layer for all
-;; scan-based queries, sitting on top of the pure storage layer
-;; (`supertag-core-store.el`) and below high-level services.
+;; This file provides internal Document Projection queries.  Tag membership
+;; uses rebuildable indexes; residual text/date/file queries still scan the
+;; Store below high-level services.
 
 ;;; Code:
 
 (require 'cl-lib)
+(require 'supertag-core-index)
 (require 'supertag-core-store)
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
 
 
-;;; --- Scan-based Query Functions ---
-
-(defun supertag--tag-parent-id (tag)
-  "Return TAG's explicit parent ID."
-  (if (hash-table-p tag)
-      (gethash :extends tag)
-    (plist-get tag :extends)))
-
-(defun supertag--tag-descendant-p (candidate parent tags)
-  "Return non-nil when CANDIDATE transitively extends PARENT in TAGS."
-  (let ((current candidate)
-        (seen (make-hash-table :test 'equal))
-        found)
-    (while (and current (not found) (not (gethash current seen)))
-      (puthash current t seen)
-      (setq current (supertag--tag-parent-id (gethash current tags)))
-      (setq found (equal current parent)))
-    found))
-
-(defun supertag--node-tags-match-p (tags matching-tags)
-  "Return non-nil when TAGS contain one of MATCHING-TAGS."
-  (cl-some (lambda (tag) (member tag matching-tags)) tags))
-
-(defun supertag-node-tag-query-keys (node-data)
-  "Return Semantic Tag IDs and Org Tag Occurrences from NODE-DATA."
-  (delete-dups
-   (append (copy-sequence (or (plist-get node-data :tags) '()))
-           (copy-sequence (or (plist-get node-data :tag-occurrences) '())))))
+;;; --- Document Projection Queries ---
 
 (defun supertag-find-tag-descendants (tag-name)
   "Return stored tag IDs that transitively extend TAG-NAME."
-  (let ((tag-name (or (and (supertag-tag-get tag-name) tag-name)
-                      (supertag-tag-resolve-occurrence tag-name)
-                      tag-name))
-        (tags-ht (supertag-store-get-collection :tags))
-        results)
-    (when (hash-table-p tags-ht)
-      (maphash
-       (lambda (tag-id _tag-data)
-         (when (and (not (equal tag-id tag-name))
-                    (supertag--tag-descendant-p tag-id tag-name tags-ht))
-           (push tag-id results)))
-       tags-ht))
-    (nreverse results)))
+  (let ((tag-id (or (and (supertag-tag-get tag-name) tag-name)
+                    (supertag-tag-resolve-occurrence tag-name)
+                    tag-name)))
+    (supertag-tag-descendants tag-id)))
 
 (defun supertag-index-get-nodes-by-tag (tag-name &optional include-descendants)
-  "Find all nodes with TAG-NAME by scanning the store.
-This is an O(N) operation.  When INCLUDE-DESCENDANTS is non-nil,
-also match tags that transitively extend TAG-NAME."
+  "Return indexed node IDs for TAG-NAME.
+When INCLUDE-DESCENDANTS is non-nil, include transitive descendants."
   (let* ((resolved (or (and (supertag-tag-get tag-name) tag-name)
                        (supertag-tag-resolve-occurrence tag-name)
                        tag-name))
          (matching-tags (cons resolved
                              (and include-descendants
-                                  (supertag-find-tag-descendants resolved))))
-        (nodes-ht (supertag-store-get-collection :nodes))
-        (results '()))
-    (when (hash-table-p nodes-ht)
-      (maphash (lambda (node-id node-data)
-                 (when (supertag--node-tags-match-p
-                        (supertag-node-tag-query-keys node-data)
-                        matching-tags)
-                   (push node-id results)))
-               nodes-ht))
-    (nreverse results)))
+                                  (supertag-find-tag-descendants resolved)))))
+    (supertag-index-find-node-ids-by-tags matching-tags)))
 
 (defun supertag-index-get-nodes-by-word (word)
   "Find all nodes containing WORD by scanning the store.
@@ -115,8 +69,7 @@ DATE-FIELD can be :created-at or :modified-at (default :created-at)."
     (nreverse matching-nodes)))
 
 (defun supertag-find-nodes-by-tag (tag-name &optional include-descendants)
-  "Find all nodes with TAG-NAME by scanning the store.
-This is an O(N) operation.
+  "Return indexed nodes with TAG-NAME.
 TAG-NAME is the name of the tag to search for.
 When INCLUDE-DESCENDANTS is non-nil, tags that transitively extend
 TAG-NAME also match.
@@ -127,17 +80,12 @@ Returns a list of (node-id . node-data) pairs."
          (matching-tags (cons resolved
                              (and include-descendants
                                   (supertag-find-tag-descendants resolved))))
-        (nodes-ht (supertag-store-get-collection :nodes))
-        (results '()))
-    (when (hash-table-p nodes-ht)
-      (maphash (lambda (node-id node-data)
-                 (when (and node-data
-                            (supertag--node-tags-match-p
-                             (supertag-node-tag-query-keys node-data)
-                             matching-tags))
-                   (push (cons node-id node-data) results)))
-               nodes-ht))
-    (nreverse results)))
+         (nodes-ht (supertag-store-get-collection :nodes))
+         results)
+    (dolist (node-id (supertag-index-find-node-ids-by-tags matching-tags)
+                     (nreverse results))
+      (when-let* ((node (gethash node-id nodes-ht)))
+        (push (cons node-id node) results)))))
 
 (defun supertag-find-nodes-by-file (file-path)
   "Find all nodes located in FILE-PATH.

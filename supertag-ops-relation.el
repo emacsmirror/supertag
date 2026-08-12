@@ -261,8 +261,8 @@ Returns the created relation data."
          :new relation-plist
          :perform (lambda ()
                     (supertag-store-put-entity :relations rel-id relation-plist)
-                    ;; Maintain relation indexes
-                    (supertag-index--on-relation-added rel-id from to)
+                    (supertag-index--on-relation-changed
+                     rel-id nil nil from to)
                     relation-plist))))))
 
 (defun supertag-relation-get (id)
@@ -291,16 +291,13 @@ Returns the updated relation data."
                               (plist-put updated-relation :modified-at
                                          (current-time)))))
                         (supertag--validate-relation-data final-relation)
-                        ;; Update relation indexes if :from or :to changed
                         (let ((old-from (plist-get previous :from))
                               (old-to   (plist-get previous :to))
                               (new-from (plist-get final-relation :from))
                               (new-to   (plist-get final-relation :to)))
-                          (when (or (not (equal old-from new-from))
-                                    (not (equal old-to new-to)))
-                            (supertag-index--on-relation-removed id old-from old-to)
-                            (supertag-index--on-relation-added id new-from new-to)))
-                        (supertag-store-put-entity :relations id final-relation)
+                          (supertag-store-put-entity :relations id final-relation)
+                          (supertag-index--on-relation-changed
+                           id old-from old-to new-from new-to))
                         final-relation))))))))
 
 (defun supertag-relation-delete (id)
@@ -316,10 +313,10 @@ Returns the deleted relation data."
        :previous previous
        :perform (lambda ()
                   (supertag-store-remove-entity :relations id)
-                  ;; Maintain relation indexes
                   (let ((from-id (plist-get previous :from))
                         (to-id (plist-get previous :to)))
-                    (supertag-index--on-relation-removed id from-id to-id))
+                    (supertag-index--on-relation-changed
+                     id from-id to-id nil nil))
                   nil)))))
 
 ;; 5.2 Reference Service
@@ -527,7 +524,7 @@ Keeps the first relation for each owned relation identity."
                    (message "Keeping relation ID: %s" (car keep-relation))
                    (dolist (dup-relation delete-relations)
                      (message "Deleting duplicate relation ID: %s" (car dup-relation))
-                     (supertag-store-remove-entity :relations (car dup-relation))
+                     (supertag-relation-delete (car dup-relation))
                      (cl-incf removed-count)))))
              relation-groups)
 
@@ -539,6 +536,7 @@ Keeps the first relation for each owned relation identity."
   "Delete all relations associated with a specific node.
 NODE-ID is the unique identifier of the node.
 Returns the number of deleted relations."
+  (supertag-index--ensure-relations)
   (let ((count 0)
         ;; Collect relation ids first to avoid modifying indexes while iterating.
         (ids-to-delete '()))
@@ -560,6 +558,7 @@ Returns the number of deleted relations."
   "Delete all relations associated with a specific tag.
 TAG-ID is the unique identifier of the tag.
 Returns the number of deleted relations."
+  (supertag-index--ensure-relations)
   (let ((count 0)
         (ids-to-delete '()))
     ;; Collect from index-based lookups
@@ -799,8 +798,5 @@ This function finds all rollup relations and recalculates their values."
        relations))
     (message "Synced %d field synchronization relations" count)
     count))
-
-(add-hook 'supertag-after-transaction-rollback-hook
-          #'supertag-index-rebuild-relations)
 
 (provide 'supertag-ops-relation)

@@ -9,10 +9,19 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'supertag-core-index)
 (require 'supertag-core-store)
 
 (defvar supertag-ops-schema--resolved-cache (make-hash-table :test 'equal)
   "Materialized tag schema cache keyed by tag id.")
+
+(defvar supertag-ops-schema--source-token nil
+  "Source token represented by the resolved schema cache.")
+
+(defun supertag-ops-schema-clear-cache ()
+  "Clear materialized Tag schemas."
+  (setq supertag-ops-schema--resolved-cache (make-hash-table :test 'equal)
+        supertag-ops-schema--source-token nil))
 
 (defun supertag-ops-schema--ensure-plist (data)
   "Ensure DATA is represented as a plist."
@@ -144,19 +153,23 @@
   (condition-case err
       (progn
         (supertag-ops-schema--materialize-all)
+        (setq supertag-ops-schema--source-token
+              (supertag-index-source-token
+               '(:tags :field-definitions :tag-field-associations)))
         (when (called-interactively-p 'interactive)
           (message "Supertag schema cache rebuilt (%d tags)."
                    (hash-table-count supertag-ops-schema--resolved-cache))))
     (error
-     (clrhash supertag-ops-schema--resolved-cache)
+     (supertag-ops-schema-clear-cache)
      (signal (car err) (cdr err)))))
 
 (defun supertag-ops-schema-get-resolved-tag (tag-id)
   "Return the materialized tag plist for TAG-ID, or nil if not cached."
+  (unless (supertag-index-source-current-p
+           supertag-ops-schema--source-token
+           '(:tags :field-definitions :tag-field-associations))
+    (supertag-ops-schema-rebuild-cache))
   (gethash tag-id supertag-ops-schema--resolved-cache))
-
-(add-hook 'supertag-after-transaction-rollback-hook
-          #'supertag-ops-schema-rebuild-cache)
 
 (provide 'supertag-ops-schema)
 

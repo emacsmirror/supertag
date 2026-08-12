@@ -22,6 +22,157 @@
 (require 'supertag-view-node)
 (require 'supertag-view-table)
 
+(defun supertag-ownership-test--prepare-derived-index-fixture ()
+  "Add inheritance and rule data needed to exercise every derived index."
+  (let ((project (copy-tree (supertag-tag-get "project"))))
+    (supertag-store-put-entity
+     :tags "project"
+     (plist-put project :aliases '("project" "old-project" "Project"))))
+  (supertag-store-put-entity
+   :tags "child"
+   '(:id "child" :type :tag :name "Child" :aliases ("child")
+     :extends "project"))
+  (let ((node (copy-tree (supertag-node-get supertag-ownership-test-node-b))))
+    (supertag-store-put-entity
+     :nodes supertag-ownership-test-node-b
+     (plist-put node :tags '("child"))))
+  (supertag-store-put-entity
+   :automations "derived-rule"
+   '(:id "derived-rule" :name "Derived rule" :trigger :on-change
+     :condition (has-tag "project") :actions nil :enabled t))
+  (supertag-index-rebuild-all))
+
+(defun supertag-ownership-test--derived-index-snapshot ()
+  "Return public query results backed by every task018 derived index."
+  (list
+   :relations-from
+   (sort (mapcar (lambda (relation) (plist-get relation :id))
+                 (supertag-relation-find-by-from
+                  supertag-ownership-test-node-a))
+         #'string<)
+   :relations-to
+   (sort (mapcar (lambda (relation) (plist-get relation :id))
+                 (supertag-relation-find-by-to
+                  supertag-ownership-test-node-a))
+         #'string<)
+   :tag-owner (supertag-tag-resolve-occurrence "old-project")
+   :tag-path (supertag-tag-display-path "child")
+   :tag-descendants (sort (supertag-find-tag-descendants "project") #'string<)
+   :nodes-by-tag
+   (sort (supertag-index-get-nodes-by-tag "project" t) #'string<)
+   :resolved-fields
+   (mapcar (lambda (field) (plist-get field :id))
+           (plist-get (supertag-ops-schema-get-resolved-tag "child") :fields))
+   :rule-ids (sort (copy-sequence (gethash "project" supertag--rule-index))
+                   #'string<)))
+
+(defun supertag-ownership-test--derived-index-counts ()
+  "Return raw counts proving each derived index is materialized."
+  (list
+   (hash-table-count supertag--index-relations-by-from)
+   (hash-table-count supertag--index-relations-by-to)
+   (hash-table-count supertag--index-nodes-by-tag)
+   (hash-table-count supertag-tag--token-index)
+   (hash-table-count supertag-tag--display-path-index)
+   (hash-table-count supertag-tag--descendants-index)
+   (hash-table-count supertag--global-field-cache)
+   (hash-table-count supertag--tag-field-order-cache)
+   (hash-table-count supertag-ops-schema--resolved-cache)
+   (hash-table-count supertag--rule-index)))
+
+(ert-deftest supertag-derived-index-cold-rebuild-has-query-parity ()
+  "One clear/rebuild contract restores every derived query result."
+  (supertag-ownership-test-with-vault
+    (supertag-ownership-test--prepare-derived-index-fixture)
+    (let ((before (supertag-ownership-test--derived-index-snapshot))
+          (semantic-before (supertag-ownership-test-semantic-fingerprint)))
+      (should (cl-every (lambda (count) (> count 0))
+                        (supertag-ownership-test--derived-index-counts)))
+      (supertag-index-clear-all)
+      (should (equal (make-list 10 0)
+                     (supertag-ownership-test--derived-index-counts)))
+      (supertag-index-rebuild-all)
+      (should (equal before
+                     (supertag-ownership-test--derived-index-snapshot)))
+      (should (equal semantic-before
+                     (supertag-ownership-test-semantic-fingerprint))))))
+
+(ert-deftest supertag-derived-relation-index-follows-canonical-store-writes ()
+  "Canonical Store writes invalidate the relation index in place."
+  (supertag-ownership-test-with-vault
+    (supertag-index-rebuild-all)
+    (let ((relation-id "late-relation"))
+      (supertag-store-put-entity
+       :relations relation-id
+       `(:id ,relation-id :type :reference :kind :semantic-edge
+         :from ,supertag-ownership-test-node-b
+         :to ,supertag-ownership-test-node-a))
+      (should (member relation-id
+                      (mapcar (lambda (relation) (plist-get relation :id))
+                              (supertag-relation-find-by-from
+                               supertag-ownership-test-node-b))))
+      (supertag-store-remove-entity :relations relation-id)
+      (should-not (member relation-id
+                          (mapcar (lambda (relation) (plist-get relation :id))
+                                  (supertag-relation-find-by-from
+                                   supertag-ownership-test-node-b)))))))
+
+(ert-deftest supertag-derived-index-rebuild-failure-clears-mixed-generation ()
+  "A failed builder leaves every cache empty, never partly rebuilt."
+  (supertag-ownership-test-with-vault
+    (supertag-ownership-test--prepare-derived-index-fixture)
+    (cl-letf (((symbol-function 'supertag-rebuild-rule-index)
+               (lambda () (error "Injected rule rebuild failure"))))
+      (should-error (supertag-index-rebuild-all))
+      (should (equal (make-list 10 0)
+                     (supertag-ownership-test--derived-index-counts))))))
+
+(ert-deftest supertag-derived-index-load-cold-rebuilds-every-cache ()
+  "A Store load replaces every cache generation before returning."
+  (supertag-ownership-test-with-vault
+    (let ((supertag-db-auto-migrate nil)
+          (supertag-db-lock nil))
+      (supertag-ownership-test--prepare-derived-index-fixture)
+      (let ((before (supertag-ownership-test--derived-index-snapshot))
+            (counts-before (supertag-ownership-test--derived-index-counts)))
+        (make-directory supertag-data-directory t)
+        (supertag--persistence-write-store-atomically supertag-db-file)
+        (supertag-index-clear-all)
+        (supertag-load-store supertag-db-file)
+        (should (equal counts-before
+                       (supertag-ownership-test--derived-index-counts)))
+        (should (equal before
+                       (supertag-ownership-test--derived-index-snapshot)))))))
+
+(ert-deftest supertag-derived-index-rollback-cold-rebuilds-every-cache ()
+  "Rollback restores Store first, then rebuilds all derived indexes once."
+  (supertag-ownership-test-with-vault
+    (supertag-ownership-test--prepare-derived-index-fixture)
+    (let ((before (supertag-ownership-test--derived-index-snapshot)))
+      (should-error
+       (supertag-with-transaction
+         (supertag-store-remove-entity
+          :relations supertag-ownership-test-document-link)
+         (let ((node (copy-tree (supertag-node-get
+                                 supertag-ownership-test-node-a))))
+           (supertag-store-put-entity
+            :nodes supertag-ownership-test-node-a
+            (plist-put node :tags nil)))
+         (let ((child (copy-tree (supertag-tag-get "child"))))
+           (supertag-store-put-entity
+            :tags "child" (plist-put child :extends nil)))
+         (supertag-store-remove-entity :tag-field-associations "project")
+         (let ((rule (copy-tree (supertag-automation-get "derived-rule"))))
+           (supertag-store-put-entity
+            :automations "derived-rule"
+            (plist-put rule :condition '(has-tag "child"))))
+         (supertag-index-rebuild-all)
+         (should-not (equal before
+                            (supertag-ownership-test--derived-index-snapshot)))
+         (error "Injected transaction failure")))
+      (should (equal before
+                     (supertag-ownership-test--derived-index-snapshot))))))
+
 (ert-deftest supertag-ownership-test-fixture-is-repeatable-and-complete ()
   "The two-file fixture recreates the same files and every required fact."
   (supertag-ownership-test-with-vault

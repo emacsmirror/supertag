@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task018 统一 derived index cold rebuild contract
+
+- Add `supertag-index-clear-all` / `supertag-index-rebuild-all`：以一个 generation 清空并重建 relation from/to、Semantic Tag token/display path/descendants、nodes-by-tag、global field lookup/order、resolved schema 与 Automation rule index；任一 builder 失败会再次清空全部派生状态并原样抛错，不暴露混合 generation。
+- Add Store collection revision token：canonical entity/collection/field-value 写入递增 source revision；Tag、node membership、relation、resolved schema 与 rule 查询在 Store identity/revision 变化后 lazy cold rebuild。Relation CRUD 保留 O(1) 增量维护，raw canonical Store relation 写入也不能泄漏旧索引。
+- Modify lifecycle：成功加载、空/失败加载、手动 migration、Org reindex 收尾、Tag merge/migration 与 transaction rollback 统一调用同一 rebuild boundary；删除 schema/relation 各自的 rollback hook 和初始化阶段的重复 schema rebuild。
+- Modify nodes-by-tag：把原 `:nodes` O(N) 查询迁入冷构建 membership index，保留原 Store traversal 顺序；Tag resolver、display path 与 descendants 同样从热路径扫描改为索引查询。
+- Modify Automation Sync、View API 注释和 performance baseline：所有直接 rule-index consumer 先确保 source generation；benchmark 区分 indexed Tag lookup 与仍为 O(N) 的全文扫描。
+
+Behavior：加载、rollback、reindex 或显式 `M-x supertag-index-rebuild-all` 返回后，所有已加载的 Store-derived query cache 属于同一份 Store generation。`supertag-index-clear-all` 只删除可重建内存状态，不修改 Org、Semantic Facts 或 Document Projection。
+
+Risk：Tag descendants 的冷构建当前显式为 O(T²)，只发生在 cold rebuild；只有实测 Vault 启动时间证明它成为瓶颈时才改为 child adjacency walk。UI node TTL、SVG、schema definition registry 与 virtual-column cache 不由 Store 事实直接重建，故不塞进本 contract；virtual-column 生命周期仍由 task025 收敛。
+
+Verification：先写回归并确认缺少统一入口、同 Store relation 写入的 stale index 会失败；实现后 ownership ERT 26/26、transaction/Tag merge/Tag path/persistence/node/query 定向 ERT 158/158；只含 HEAD + task018 patch 的干净临时 worktree 全量 ERT 482/482；14 个修改生产 Elisp 与 performance benchmark byte compile 成功（仅仓库既有 warning）；全部修改 Elisp `check-parens` 与 `git diff --check` 通过。用户未提交的 dashboard/Archive/Board hook/textui 实验未进入 patch 或验证。
+
 ## 2026-08-12 — task017 Stable Semantic Tag cutover 与统一 resolver
 
 - Modify Semantic Tag identity：新建 Tag 使用 UUID-derived `tag-<32hex>` 稳定 ID；canonical name、display path 与 alias 不再承担实体身份，所有 token claim 在 semantic write boundary 全局唯一。

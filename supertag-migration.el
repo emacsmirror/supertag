@@ -2612,7 +2612,7 @@ With FORCE-WRITE non-nil (or prefix arg), perform writes; otherwise dry-run."
         (supertag-migration--log "Stats after associations: %S" supertag-migration--stats)
         (supertag-migration--migrate-field-values nil defs-table)
         (supertag-migration--log "Stats after values: %S" supertag-migration--stats))
-      (supertag-ops-schema-rebuild-cache)
+      (supertag-index-rebuild-all)
       (supertag-migration--report nil))))
 
 ;; ------------------------------------------------------------------

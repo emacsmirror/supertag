@@ -208,6 +208,7 @@ OPS is a list of symbols, e.g. '(property-changed field-changed)."
 (defun supertag-automation-sync--execute-tag-trigger (node-id tag-name op)
   "Execute tag-trigger rules for NODE-ID when TAG-NAME changes.
 OP must be :added or :removed."
+  (supertag-automation--ensure-rule-index)
   (when (and (boundp 'supertag--rule-index) tag-name)
     (when-let ((candidate (gethash tag-name supertag--rule-index)))
       (dolist (rule-id (cl-remove-duplicates candidate :test #'equal))
@@ -343,6 +344,7 @@ OP must be :added or :removed."
 (defun supertag-automation-sync--get-relevant-rules (node-id old-node new-node)
   "Get automation rules relevant to a node change.
 This is an optimized version of the original rule lookup."
+  (supertag-automation--ensure-rule-index)
   (let ((rules '())
         (node-data (or new-node old-node (supertag-node-get node-id))))
     (when node-data
@@ -365,6 +367,7 @@ This is an optimized version of the original rule lookup."
 
 (defun supertag-automation-sync--get-tag-trigger-rules (tag-id operation)
   "Get rules triggered by tag operations."
+  (supertag-automation--ensure-rule-index)
   (when (boundp 'supertag--rule-index)
     (let ((candidate-rules (gethash tag-id supertag--rule-index)))
       (when candidate-rules

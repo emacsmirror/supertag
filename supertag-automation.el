@@ -22,6 +22,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'supertag-core-index)
 (require 'supertag-core-store)     ; For data storage operations
 (require 'supertag-core-schema)    ; For validation functions
 (require 'supertag-core-transform) ; For atomic data updates
@@ -180,6 +181,14 @@ The structure is a hash table where:
   or a tag name like \"Project\").
  - VALUE is a list of rule IDs that are interested in this source.")
 
+(defvar supertag-automation--rule-index-source-token nil
+  "Source token represented by `supertag--rule-index'.")
+
+(defun supertag-automation-clear-rule-index ()
+  "Clear the derived Automation rule index."
+  (setq supertag--rule-index (make-hash-table :test 'equal)
+        supertag-automation--rule-index-source-token nil))
+
 (defun supertag--extract-trigger-sources (condition)
   "Recursively parse a rule CONDITION and extract all trigger sources.
 A trigger source is a specific property or tag that the rule depends on.
@@ -298,16 +307,25 @@ Returns a list of sources, e.g., '(:status :priority \"Project\")."
 This function should be called once on system startup to ensure
 the index is synchronized with the stored rules."
   (interactive)
-  (clrhash supertag--rule-index)
+  (supertag-automation-clear-rule-index)
   (let ((all-rules (supertag-automation-list)))
     (dolist (rule all-rules)
-      (supertag--add-rule-to-index rule))))
+      (supertag--add-rule-to-index rule)))
+  (setq supertag-automation--rule-index-source-token
+        (supertag-index-source-token '(:automations))))
+
+(defun supertag-automation--ensure-rule-index ()
+  "Cold rebuild the rule index when Automation facts changed."
+  (unless (supertag-index-source-current-p
+           supertag-automation--rule-index-source-token '(:automations))
+    (supertag-rebuild-rule-index)))
 
 (defun supertag--get-rules-from-index (event-path)
   "Get a list of relevant rule IDs from the index based on an EVENT-PATH.
 EVENT-PATH is the path from the :store-changed event, e.g.,
 '(:nodes \"node-id\" :properties :status).
 This function uses the pre-built supertag--rule-index for O(1) lookups."
+  (supertag-automation--ensure-rule-index)
   ;; Handle both flat (:nodes "ID") and nested ((:nodes "ID")) paths.
   (let* ((path (if (and (listp (car event-path)) (memq (caar event-path) '(:nodes :tags)))
                  (car event-path)
@@ -1172,6 +1190,7 @@ This is the actual handler that was previously called directly."
 
 (defun supertag-automation--execute-tag-trigger (node-id tag-name op)
   "Execute rules gated by :trigger (:on-tag-added TAG) or (:on-tag-removed TAG)."
+  (supertag-automation--ensure-rule-index)
   (let ((candidate (gethash tag-name supertag--rule-index)))
     (when candidate
       (dolist (rule-id candidate)
@@ -1461,7 +1480,7 @@ Sets up rule indexing and event handlers for the automation engine."
   (interactive)
 
   ;; Clear all state
-  (clrhash supertag--rule-index)
+  (supertag-automation-clear-rule-index)
   (clrhash supertag-automation--sync-cache)
   (clrhash supertag-automation--active-calculations)
   (setq supertag-automation--processing-queue nil)
@@ -1482,7 +1501,7 @@ Sets up rule indexing and event handlers for the automation engine."
   "Cleanup the unified automation system."
   (interactive)
   (setq supertag-automation--enabled nil)
-  (clrhash supertag--rule-index)
+  (supertag-automation-clear-rule-index)
   (clrhash supertag-automation--sync-cache)
   (clrhash supertag-automation--active-calculations)
   (setq supertag-automation--processing-queue nil)

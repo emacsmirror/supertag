@@ -63,7 +63,15 @@ Board、Automation 等不可重建的 Semantic Facts。旧命令
 目标 `Reindex` 契约只允许重建 Document Projection 和 derived indexes。
 `Semantic Restore` 则从备份或同步副本恢复不可重建的 Semantic Facts。两者不得混称。
 
-## 5. 迁移约束
+## 5. Derived Projection 生命周期
+
+- Store-derived runtime index 只允许通过统一 clear/cold-rebuild contract 建立一个完整 generation。
+- Store load、Document reindex 与 transaction rollback 返回前必须重建该 generation。
+- 任一 rebuild 步骤失败时，全部相关 index/cache 保持清空并报告错误，禁止继续读取混合 generation。
+- 清空或重建 derived state 不得修改 Org、Document Projection 或 Semantic Facts。
+- UI-local、presentation 与非 Store-derived runtime cache 使用自己的生命周期，不因物理上都在内存而混入该 contract。
+
+## 6. 迁移约束
 
 - 物理存储暂时沿用现有 Elisp Store；本阶段不引入 SQLite 或假想 backend adapter。
 - 数据迁移必须先 dry-run，输出映射、冲突和逆向恢复信息，再经确认执行。
@@ -74,7 +82,7 @@ Board、Automation 等不可重建的 Semantic Facts。旧命令
 - Consumer 逐个迁移到具体查询 Interface；迁移完成前兼容 wrapper 可以保留，但禁止新增 raw Store caller。
 - 任何完整或部分扫描在输入快照不完整时都不得执行 orphan cleanup。
 
-## 6. 相关文档
+## 7. 相关文档
 
 - 领域术语：`CONTEXT.md`
 - 决策记录：`.phrase/phases/phase-ownership-separation-20260812/adr_ownership_constitution_20260812.md`
