@@ -84,28 +84,22 @@
              do (setq result (plist-put result key val)))
     result))
 
-(defun supertag-ops-schema--get-tag-fields (tag-id raw-tags)
-  "Get fields for TAG-ID, supporting both legacy and global field modes.
-Returns a list of field definition plists."
-  (if (and (boundp 'supertag-use-global-fields) supertag-use-global-fields)
-      ;; Global field mode: read from :tag-field-associations and :field-definitions
-      (let* ((assoc-table (supertag-store-get-collection :tag-field-associations))
-             (defs (supertag-store-get-collection :field-definitions))
-             (raw-entries (and (hash-table-p assoc-table) (gethash tag-id assoc-table)))
-             (order (cond
-                     ;; preferred: list of plists with :field-id
-                     ((and (listp raw-entries) (plistp (car raw-entries)))
-                      (mapcar (lambda (entry) (plist-get entry :field-id)) raw-entries))
-                     ;; fallback: list of field ids
-                     ((listp raw-entries) raw-entries)
-                     (t nil)))
-             (result '()))
-        (dolist (fid order (nreverse result))
-          (let ((def (and fid (hash-table-p defs) (gethash fid defs))))
-            (when def (push (copy-tree def) result)))))
-    ;; Legacy mode: read from tag's :fields property
-    (let ((tag-data (gethash tag-id raw-tags)))
-      (or (plist-get tag-data :fields) '()))))
+(defun supertag-ops-schema--get-tag-fields (tag-id _raw-tags)
+  "Return global field definitions directly associated with TAG-ID."
+  (let* ((assoc-table (supertag-store-get-collection :tag-field-associations))
+         (defs (supertag-store-get-collection :field-definitions))
+         (raw-entries (and (hash-table-p assoc-table)
+                           (gethash tag-id assoc-table)))
+         (order (cond
+                 ((and (listp raw-entries) (plistp (car raw-entries)))
+                  (mapcar (lambda (entry) (plist-get entry :field-id))
+                          raw-entries))
+                 ((listp raw-entries) raw-entries)
+                 (t nil)))
+         result)
+    (dolist (fid order (nreverse result))
+      (when-let* ((def (and fid (hash-table-p defs) (gethash fid defs))))
+        (push (copy-tree def) result)))))
 
 (defun supertag-ops-schema--resolve-fields-for-tag (tag-id parent-map raw-tags)
   "Resolve final fields for TAG-ID using PARENT-MAP and RAW-TAGS."

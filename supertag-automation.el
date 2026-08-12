@@ -130,7 +130,6 @@ EVENT defaults to `supertag-automation--current-event'."
     (cond
      ((plist-member ev :tag-event) :tag-change)
      ((and (listp path) (eq (car path) :field-values)) :global-field-change)
-     ((and (listp path) (eq (car path) :fields)) :field-change)
      ((and (listp path) (eq (car path) :nodes)
            (>= (length path) 4)
            (eq (nth 2 path) :properties))
@@ -153,8 +152,8 @@ do not match (fail closed)."
     (pcase normalized
       ((or 'nil :always) t)
       (:on-change (not (eq event-type :unknown)))
-      (:on-field-change (memq event-type '(:field-change :global-field-change)))
-      (:on-property-change (memq event-type '(:property-change :field-change :global-field-change)))
+      (:on-field-change (eq event-type :global-field-change))
+      (:on-property-change (memq event-type '(:property-change :global-field-change)))
       (:on-schedule nil)
       (:manual nil)
       (`(:on-tag-added ,tag-name)
@@ -202,24 +201,22 @@ Returns a list of sources, e.g., '(:status :priority \"Project\")."
                           (when (stringp key)
                             ;; 1) Legacy keyword key (e.g. :status)
                             (push (intern (concat ":" key)) sources)
-                            ;; 2) Global field id slug when available, so
+                            ;; 2) Stable global field id when available, so
                             ;;    global field value events (:field-values
                             ;;    node-id field-id) can match rules written
                             ;;    with human-readable names.
-                            (when (fboundp 'supertag-sanitize-field-id)
-                              (let ((fid (supertag-sanitize-field-id key)))
-                                (when (and fid (not (string-empty-p fid)))
-                                  (push fid sources)))))))
+                            (let ((fid (supertag-field-resolve-id nil key)))
+                              (when (and fid (not (string-empty-p fid)))
+                                (push fid sources))))))
                        ('field-changed
                         (let ((key (cadr form)))
                           (when (stringp key)
                             ;; Same strategy as field-equals: index by
-                            ;; legacy keyword and by sanitized global id.
+                            ;; compatibility keyword and stable global id.
                             (push (intern (concat ":" key)) sources)
-                            (when (fboundp 'supertag-sanitize-field-id)
-                              (let ((fid (supertag-sanitize-field-id key)))
-                                (when (and fid (not (string-empty-p fid)))
-                                  (push fid sources)))))))
+                            (let ((fid (supertag-field-resolve-id nil key)))
+                              (when (and fid (not (string-empty-p fid)))
+                                (push fid sources))))))
                        ;; Global field conditions (new)
                        ('global-field-equals
                         (let ((key (cadr form)))
@@ -242,22 +239,19 @@ Returns a list of sources, e.g., '(:status :priority \"Project\")."
                            ((stringp key)
                             ;; Legacy keyword key
                             (push (intern (concat ":" key)) sources)
-                            ;; When properties are backed by global fields
-                            ;; (e.g. status), also index by sanitized id.
-                            (when (fboundp 'supertag-sanitize-field-id)
-                              (let ((fid (supertag-sanitize-field-id key)))
-                                (when (and fid (not (string-empty-p fid)))
-                                  (push fid sources))))))))
+                            ;; String properties are backed by global fields.
+                            (let ((fid (supertag-field-resolve-id nil key)))
+                              (when (and fid (not (string-empty-p fid)))
+                                (push fid sources)))))))
                        ('property-test
                         (let ((key (cadr form)))
                           (cond
                            ((keywordp key) (push key sources))
                            ((stringp key)
                             (push (intern (concat ":" key)) sources)
-                            (when (fboundp 'supertag-sanitize-field-id)
-                              (let ((fid (supertag-sanitize-field-id key)))
-                                (when (and fid (not (string-empty-p fid)))
-                                  (push fid sources))))))))
+                            (let ((fid (supertag-field-resolve-id nil key)))
+                              (when (and fid (not (string-empty-p fid)))
+                                (push fid sources)))))))
                        ;; Handle quoted conditions e.g. '(and ...) by unwrapping
                        ('quote
                         (walk (cadr form)))
@@ -323,8 +317,6 @@ This function uses the pre-built supertag--rule-index for O(1) lookups."
          (node-data (cond
                      ((eq entity-type :nodes)
                       (supertag-node-get entity-id))
-                     ((eq entity-type :fields)
-                      (supertag-node-get entity-id))
                      ;; Global field values: (:field-values node-id field-id)
                      ((eq entity-type :field-values)
                       (supertag-node-get entity-id))
@@ -335,9 +327,6 @@ This function uses the pre-built supertag--rule-index for O(1) lookups."
                           ;; Global field value change: (:field-values "node-id" "field-id")
                           ((and (eq (car p) :field-values) (>= (length p) 3) (stringp (caddr p)))
                            (caddr p))  ; Return field-id as string for global fields
-                          ;; Legacy field change event, e.g., '(:fields "node-id" "tag-id" "status")
-                          ((and (eq (car p) :fields) (>= (length p) 4) (stringp (cadddr p)))
-                           (intern (concat ":" (cadddr p))))
                           ;; Node property change event, e.g., '(:nodes "id" :properties :status)
                           ((and (eq (car p) :nodes)
                                 (>= (length p) 4)
@@ -1116,9 +1105,8 @@ This is the actual handler that was previously called directly."
               (push node-id supertag-automation--processing-queue)
               (when (and (listp path) (>= (length path) 2))
                 (cond
-                 ;; Field or generic node changes (exclude explicit tag list change)
-                 ((or (eq entity-type :fields)
-                      (and (eq entity-type :nodes) (not tags-change-under-node)))
+                 ;; Generic node changes (exclude explicit tag list change)
+                 ((and (eq entity-type :nodes) (not tags-change-under-node))
                   (supertag-automation--handle-node-change path old-value new-value))
                  ;; Tag list changes (explicit :tags path or :nodes ... :tags ...)
                  ((or (eq entity-type :tags) tags-change-under-node)
@@ -1195,34 +1183,18 @@ This is the actual handler that was previously called directly."
 
 ;; Helper functions for condition evaluation
 (defun supertag-automation--get-field-value (node-id tags field-name)
-  "Get field value for FIELD-NAME from any tag in TAGS on NODE-ID.
-When `supertag-use-global-fields' is enabled, queries global field storage first."
+  "Get NODE-ID's global FIELD-NAME value.
+TAGS is retained for call compatibility."
+  (ignore tags)
   (when (stringp field-name)
-    ;; Try global field storage first when enabled
-    (if (and (boundp 'supertag-use-global-fields) supertag-use-global-fields)
-        (let* ((field-id (if (fboundp 'supertag-sanitize-field-id)
-                             (supertag-sanitize-field-id field-name)
-                           field-name))
-               (value (when (fboundp 'supertag-node-get-global-field)
-                        (supertag-node-get-global-field node-id field-id))))
-          (or value
-              ;; Fallback to legacy storage
-              (when tags
-                (cl-some (lambda (tag-id)
-                           (supertag-field-get node-id tag-id field-name))
-                         tags))))
-      ;; Legacy mode: search through tags
-      (when tags
-        (cl-some (lambda (tag-id)
-                   (supertag-field-get node-id tag-id field-name))
-                 tags)))))
+    (let ((field-id (supertag-field-resolve-id nil field-name)))
+      (and field-id
+           (supertag-node-get-global-field node-id field-id)))))
 
 (defun supertag-automation--get-global-field-value (node-id field-id)
   "Get global field value for FIELD-ID on NODE-ID.
-Returns nil if global fields are not enabled or field not found."
-  (when (and (boundp 'supertag-use-global-fields) supertag-use-global-fields
-             (fboundp 'supertag-node-get-global-field))
-    (supertag-node-get-global-field node-id field-id)))
+Returns nil when the field is not found."
+  (supertag-node-get-global-field node-id field-id))
 
 (defun supertag-automation--global-field-changed-p (field-id)
   "Check if global field FIELD-ID changed in current event context."
@@ -1246,11 +1218,6 @@ Returns nil if global fields are not enabled or field not found."
                  (eq (car path) :field-values)
                  (>= (length path) 3)
                  (string= (caddr path) name))
-            ;; Legacy field change: (:fields node-id tag-id field-name)
-            (and (stringp name)
-                 (eq (car path) :fields)
-                 (>= (length path) 4)
-                 (string= (cadddr path) name))
             ;; Node property change: (:nodes node-id :properties :prop-name)
             (and (keywordp name)
                  (eq (car path) :nodes)
@@ -1349,23 +1316,14 @@ Returns t if condition passes, nil otherwise."
               (apply test-fn value fn-args)
             nil))))
 
-      ;; Backwards-compatible field change detection. When global fields
-      ;; are enabled, we interpret (field-changed \"name\") as referring
-      ;; to the global field id derived from NAME; otherwise it falls
-      ;; back to legacy tag-scoped field change detection.
+      ;; Resolve the display name to the stable global field id so a rename
+      ;; does not disconnect existing values from field-change rules.
       ('field-changed
        (let ((field-name (car args)))
-         (cond
-          ((not (stringp field-name)) nil)
-          ;; Global field mode: map human-readable name to global id slug.
-          ((and (boundp 'supertag-use-global-fields) supertag-use-global-fields)
-           (let* ((fid (if (fboundp 'supertag-sanitize-field-id)
-                           (supertag-sanitize-field-id field-name)
-                         field-name)))
-             (and fid (supertag-automation--global-field-changed-p fid))))
-          ;; Legacy mode: treat as legacy field name
-          (t
-           (supertag-automation--property-changed-p field-name)))))
+         (when (stringp field-name)
+           (let ((fid (supertag-field-resolve-id nil field-name)))
+             (and fid
+                  (supertag-automation--global-field-changed-p fid))))))
 
       ;; Global field conditions (new)
       ('global-field-equals

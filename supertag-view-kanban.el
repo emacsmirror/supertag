@@ -58,10 +58,8 @@ Returns hash table where keys are field values and values are lists of (id . nod
   (let ((grouped (make-hash-table :test 'equal)))
     (dolist (node-pair nodes)
       (let* ((node-id (car node-pair))
-             (field-value (if supertag-use-global-fields
-                              (let ((fid (supertag-sanitize-field-id group-field)))
-                                (and fid (supertag-node-get-global-field node-id fid)))
-                            (supertag-field-get node-id base-tag group-field)))
+             (field-value
+              (supertag-field-get node-id base-tag group-field))
              (key (or field-value "Uncategorized")))
         (push node-pair (gethash key grouped '()))))
     grouped))
@@ -336,7 +334,7 @@ Returns plist with :node-id, :current-value, and other card info."
    (lambda (path _old-value _new-value)
      (when (and (listp path)
                 (memq (car path)
-                      '(:nodes :fields :field-values :tags
+                      '(:nodes :field-values :tags
                         :field-definitions :tag-field-associations)))
        (funcall refresh)))))
 

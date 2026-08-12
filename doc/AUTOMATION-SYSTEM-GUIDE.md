@@ -282,7 +282,7 @@ The `trigger` field defines "when" to check this rule. A precise trigger is the 
 | :--- | :--- | :--- |
 | **Any Change** | `:on-change` | Triggered on any recognized store change event (broad; use conditions to narrow). |
 | **Property/Field Change** | `:on-property-change` | Triggered on property/field/global-field changes (broad; use `property-changed` / `field-changed` in conditions to narrow). |
-| **Field Change** | `:on-field-change` | Triggered on legacy tag field changes and global field value changes. |
+| **Field Change** | `:on-field-change` | Triggered when a global field value changes. |
 | **Tag Added** | `(:on-tag-added "tag-name")` | Triggered when a node is **first** tagged with the specified tag. |
 | **Tag Removed** | `(:on-tag-removed "tag-name")` | Triggered when a specified tag is removed from a node. |
 | **Scheduled Task** | `:on-schedule` | Time-based trigger, requires `:schedule` property and a running scheduler (see above). |
@@ -303,8 +303,8 @@ The `condition` field defines the "preconditions" that must be met for the rule 
 | **Property Equals** | `(property-equals :prop-name "value")` | Check if a node's property equals a specific value. |
 | **Property Changed**| `(property-changed :prop-name)` | Check if this event was caused by a change in the specified property. |
 | **Property Test**| `(property-test :prop-name #'> 8)` | Use a function to test the property value. |
-| **Field Equals** | `(field-equals "field-name" "value")` | Check a legacy tag-field value by name. |
-| **Field Changed** | `(field-changed "field-name")` | Check if a legacy field or a mapped global field changed (see “Event Context”). |
+| **Field Equals** | `(field-equals "field-name" "value")` | Resolve a field display name or ID and check its global value. |
+| **Field Changed** | `(field-changed "field-name")` | Resolve a field display name or ID and check whether its global value changed. |
 | **Global Field Equals** | `(global-field-equals "field-id" "value")` | Check a global field value (field-id is the global slug/id). |
 | **Global Field Changed** | `(global-field-changed "field-id")` | Check if the current event changed that global field-id. |
 | **Global Field Test** | `(global-field-test "field-id" #'pred ...)` | Test a global field value via a function. |
@@ -342,7 +342,7 @@ Each action is a `plist` in the format `(:action :action-type :params (...))`.
 | **`:remove-tag`** | `(:tag "tag-name")` | Remove a tag from the current node. |
 | **`:call-function`** | `(:function #'your-function :args (...))` | Call an Emacs Lisp function you've defined yourself. This is the "ultimate weapon" for implementing complex logic. The function receives `(node-id context &rest args)`. |
 | **`:create-node`** | `(:title "..." :tags '("...") ...)` | Create a completely new node. |
-| **`:update-field`** | `(:tag "tag-id" :field "field-name" :value v)` | Update a legacy tag field value for a node (tag-scoped field storage). |
+| **`:update-field`** | `(:tag "tag-id" :field "field-name" :value v)` | Resolve the Tag schema field and update its global value for the node. |
 | **`:case`** | `(:on (:field "层级") :branches '((:equals "20" :actions ((:action :update-field ...))) (:default t :actions ((:action :call-function ...)))))` | Resolve a value (`:on`) and execute the first matching branch. Each branch can use `:equals`, `:in`, `:match` (regexp/function), or `:test` to match, and runs its own nested `:actions`. Provide `:default t` for a fallback branch. |
 
 #### Event Context (重要)
@@ -359,7 +359,6 @@ When a rule is executed, it receives a `context` plist describing the current ev
 Common `:path` shapes used by the engine:
 
 - Node property change: `(:nodes NODE-ID :properties :some-prop)`
-- Legacy tag-field change: `(:fields NODE-ID TAG-ID "field-name")`
 - Global field value change: `(:field-values NODE-ID "field-id")`
 
 `(property-changed ...)` relies on `:path` being specific (e.g. `(:nodes NODE-ID :properties :hours)`), so the engine must preserve this precision when routing events.
@@ -474,9 +473,9 @@ Because each branch contains its own `:actions` list, you can chain more logic�
 
 ### Field-Centric Rules (Global Fields)
 
-In the global field model (`supertag-use-global-fields` non-nil), fields are first-class entities and are not scoped to a single tag. The automation DSL supports writing rules that are primarily driven by field changes instead of tags:
+The global field model is always active: fields are first-class entities and are not scoped to a single tag. The automation DSL supports rules driven by field changes instead of tags:
 
-- `field-equals` / `field-changed` – treat the first string argument as a global field id (after `supertag-sanitize-field-id`).
+- `field-equals` / `field-changed` – resolve the first string argument as a stable global field ID or display name.
 - `global-field-equals` / `global-field-changed` – explicit global field variants if you want to be fully explicit.
 
 For example, this rule fires whenever the global `status` field for a node becomes `"done"`, regardless of which tags the node has:
@@ -499,7 +498,7 @@ You can still combine field-centric conditions with tag predicates when you want
                  (field-equals "status" "doing"))
 ```
 
-Under the hood, `field-equals`/`field-changed` are indexed by the normalized global field id, so `:on-field-change` events on `:field-values` are able to trigger matching rules in O(1) time.
+Under the hood, `field-equals`/`field-changed` are indexed by the stable global field ID, so display-name changes do not move stored values or disconnect new rules from `:field-values` events.
 
 ### Example 2: Project-Task Integration
 

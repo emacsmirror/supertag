@@ -1,5 +1,19 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task014 global field 唯一生产读写路径
+
+- Delete field/schema/tag/relation、Table/Node/Kanban/Schema、Query/Capture/Org export 与 Automation 中的 `supertag-use-global-fields` 分支、legacy value/schema fallback 和 `:fields` 事件订阅；生产写入只进入 `:field-definitions`、`:tag-field-associations`、`:field-values`。
+- Modify compatibility option：`supertag-use-global-fields` 保留为 obsolete variable 以避免旧配置报错，但任何值都不会重新打开 legacy 路径；新 Tag 直接携带 `:fields` 会 fail closed。
+- Modify field identity：字段显示名修改只更新共享 global definition，稳定 field ID 与 node value 不移动；公共 resolver 先查 Tag schema，再查 global definition，使 Query、Automation trigger/evaluator 与 relation sync 按同一 ID 工作。
+- Modify migration apply：force-write 在正式 audit 通过后，先把当前 live Store 原子序列化到 `backups/supertag-db-preglobal-fields-*.el`，再用一个 Store transaction 写 definition/association/value；失败回滚 global collections，备份与 legacy source 保留。
+- Modify tests/docs：以同一 fixture 证明 Table/Node/Kanban/Automation cutover parity、legacy bucket 不增长、失败回滚、自动备份与 display rename 稳定 ID；迁移指南和自动化手册删除 opt-in/legacy 生产语义。
+
+Behavior：当前版本无需也不接受字段模式切换。旧数据库先运行 `M-x supertag-migration-audit-global-fields`；只有 `:safe-to-apply t` 才可执行真实迁移。迁移后所有日常字段、schema、view、query、capture 和 automation 立即读取全局集合。
+
+Risk：global field definition 为共享事实，同一 field ID 的显示名/类型修改会影响所有关联 Tag。legacy `:fields` root、持久化/merge/transaction 兼容 seam 暂留到 task028，但生产 API 不再读取或增长它。自动备份不会替代用户对整个 data directory 的外部备份。
+
+Verification：ownership 回归先锁定 global-only 写入、四类 consumer parity、legacy 事件不再触发、rollback/backup 与稳定 ID；field-reference 单测补齐直接 sync dependency 后可独立运行。定向 ERT 125/125；只含 HEAD + task014 staged patch 的干净临时 clone 全量 ERT 465/465；20 个修改生产 Elisp 文件 byte compile 成功（仅既有 warning）；`check-parens`、`git diff --check` 通过。
+
 ## 2026-08-12 — task013 legacy/global field 正式 dry-run audit
 
 - Add `supertag-migration-audit-global-fields`：只读生成排序后的 definition、association 与逐 node/field value parity；同一逻辑 Store 不受 hash insertion order 影响。

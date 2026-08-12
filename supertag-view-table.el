@@ -323,7 +323,7 @@ Only strips keywords if `supertag-view-table-strip-todo-keywords' is non-nil."
      (when (and (listp path)
                 (memq (car path)
                       '(:nodes :databases :automations :behaviors
-                        :fields :field-values :tags :field-definitions
+                        :field-values :tags :field-definitions
                         :tag-field-associations)))
        (funcall refresh)))))
 
@@ -587,19 +587,13 @@ Prompts user to select a tag from available tags."
 (defun supertag-view-table--ensure-refs-field (tag-id)
   "Ensure the Refs node-reference field exists and is associated with TAG-ID."
   (when (and tag-id (stringp tag-id))
-    (if supertag-use-global-fields
-        (progn
-          (unless (supertag-global-field-get supertag-view-table--refs-field-id)
-            (supertag-global-field-create
-             (list :id supertag-view-table--refs-field-id
-                   :name supertag-view-table--refs-field-name
-                   :type :node-reference)))
-          (unless (supertag-tag-get-field tag-id supertag-view-table--refs-field-name)
-            (supertag-tag-associate-field tag-id supertag-view-table--refs-field-id)))
-      (unless (supertag-tag-get-field tag-id supertag-view-table--refs-field-name)
-        (supertag-tag-add-field tag-id
-                                (list :name supertag-view-table--refs-field-name
-                                      :type :node-reference))))))
+    (unless (supertag-global-field-get supertag-view-table--refs-field-id)
+      (supertag-global-field-create
+       (list :id supertag-view-table--refs-field-id
+             :name supertag-view-table--refs-field-name
+             :type :node-reference)))
+    (unless (supertag-tag-get-field tag-id supertag-view-table--refs-field-name)
+      (supertag-tag-associate-field tag-id supertag-view-table--refs-field-id))))
 
 (defun supertag-view-table--get-columns-for-tag (tag-name)
   "Get column configuration for TAG-NAME, including custom fields with type information.
@@ -627,7 +621,7 @@ Automatically detects virtual databases and uses their database fields."
                        for raw-name = (plist-get field-def :name)
                        for fid = (or (plist-get field-def :id) raw-name)
                        for slug = (and fid (supertag-sanitize-field-id fid))
-                       for dedupe-key = (if supertag-use-global-fields slug raw-name)
+                       for dedupe-key = slug
                        unless (or (null dedupe-key)
                                   (and slug (equal slug supertag-view-table--refs-field-id))
                                   (gethash dedupe-key seen))
@@ -955,7 +949,7 @@ Uses improved styling from old version."
 
 (defun supertag-view-table--field-name-for-column (column key)
   "Return the field name string for COLUMN/KEY."
-  (or (and supertag-use-global-fields (plist-get column :field-id))
+  (or (plist-get column :field-id)
       (plist-get column :name)
       (symbol-name key)))
 

@@ -437,14 +437,10 @@ is still used to recognize and clean up older exported properties."
     (if (string-empty-p s) "FIELD" s)))
 
 (defun supertag-export--field-property-name (tag-id field-name)
-  "Build human-friendly Org property name for TAG-ID/FIELD-NAME.
-When `supertag-use-global-fields' is enabled, prefer FIELD-ID (slug) only
-to avoid duplicates across tags that share a field."
-  (let* ((field-part (supertag-export--sanitize-symbol-component field-name)))
-    (if supertag-use-global-fields
-        field-part
-      (let ((tag-part (supertag-export--sanitize-symbol-component tag-id)))
-        (format "%s_%s" tag-part field-part)))))
+  "Build an Org property name for global FIELD-NAME.
+TAG-ID is retained for call-site compatibility."
+  (ignore tag-id)
+  (supertag-export--sanitize-symbol-component field-name))
 
 (defun supertag-export--legacy-field-property-names (_tag-id field-name)
   "Return legacy property names for FIELD-NAME without the tag prefix.
@@ -477,9 +473,10 @@ to support imports from older exports."
 
 (defun supertag-export--field-value-to-string (tag-id field-name value)
   "Convert field VALUE for TAG-ID/FIELD-NAME into a string for properties."
-  (let* ((field-def (if supertag-use-global-fields
-                        (supertag-global-field-get (supertag-sanitize-field-id field-name))
-                      (ignore-errors (supertag-tag-get-field tag-id field-name))))
+  (ignore tag-id)
+  (let* ((field-def
+          (supertag-global-field-get
+           (supertag-sanitize-field-id field-name)))
          (type (plist-get field-def :type)))
     (pcase type
       (:boolean (if value "true" "false"))
@@ -534,63 +531,25 @@ Falls back to any values already stored on the node to avoid data loss."
 
 (defun supertag-export--collect-node-field-properties (node-id)
   "Collect all field values for NODE-ID as an alist of (PROP . STRING)."
-  (if supertag-use-global-fields
-      (let* ((vals (supertag-store-get-collection :field-values))
-             (node-table (and (hash-table-p vals) (gethash node-id vals)))
-             (field-ids (supertag-export--global-field-order node-id)))
-        (when (hash-table-p node-table)
-          (let (result)
-            (dolist (fid field-ids)
-              (let ((value (gethash fid node-table supertag-export--missing)))
-                (unless (eq value supertag-export--missing)
-                  (let ((prop (supertag-export--field-property-name nil fid)))
-                    (push (cons prop (supertag-export--field-value-to-string nil fid value))
-                          result)))))
-            (nreverse result))))
-    ;; legacy path with tag-scoped fields
-    (let* ((fields-root (supertag-store-get-collection :fields))
-           (node-table (and (hash-table-p fields-root)
-                            (gethash node-id fields-root)))
-           (tag-order (or (supertag-service-org--node-tags node-id)
-                          (when (hash-table-p node-table)
-                            (let (ids)
-                              (maphash (lambda (tag-id _value) (push tag-id ids)) node-table)
-                              (sort ids #'string<))))))
-      (when (hash-table-p node-table)
-        (let ((result '()))
-          (dolist (tag-id tag-order)
-            (let ((tag-table (and (hash-table-p node-table) (gethash tag-id node-table))))
-              (when (hash-table-p tag-table)
-                (let* ((field-defs (or (supertag-tag-get-all-fields tag-id) '()))
-                       (seen '())
-                       (missing (make-symbol "supertag-export-missing")))
-                  ;; Export fields in the order defined on the tag.
-                  (dolist (field-def field-defs)
-                    (let ((fname (plist-get field-def :name)))
-                      (when fname
-                        (let ((value (gethash fname tag-table missing)))
-                          (unless (eq value missing)
-                            (push fname seen)
-                            (push (cons (supertag-export--field-property-name tag-id fname)
-                                        (supertag-export--field-value-to-string tag-id fname value))
-                                  result))))))
-                  ;; Include any leftover fields to avoid data loss.
-                  (maphash
-                   (lambda (field-name value)
-                     (unless (member field-name seen)
-                       (push (cons (supertag-export--field-property-name tag-id field-name)
-                                   (supertag-export--field-value-to-string tag-id field-name value))
-                             result)))
-                   tag-table)))))
-          (nreverse result))))))
+  (let* ((values (supertag-store-get-collection :field-values))
+         (node-table (and (hash-table-p values) (gethash node-id values)))
+         (field-ids (supertag-export--global-field-order node-id)))
+    (when (hash-table-p node-table)
+      (let (result)
+        (dolist (field-id field-ids (nreverse result))
+          (let ((value (gethash field-id node-table supertag-export--missing)))
+            (unless (eq value supertag-export--missing)
+              (push
+               (cons (supertag-export--field-property-name nil field-id)
+                     (supertag-export--field-value-to-string
+                      nil field-id value))
+               result))))))))
 
 (defun supertag-export--apply-properties-at-point (props-alist)
   "Apply PROPS-ALIST as ST_* properties at current heading.
 Returns non-nil when any property was changed."
-  (let* ((existing (org-entry-properties nil 'standard))
-         (prefix (if supertag-use-global-fields "" supertag-export-field-property-prefix))
-         (wanted-keys (mapcar #'car props-alist))
-         (changed nil))
+  (let ((existing (org-entry-properties nil 'standard))
+        (changed nil))
     ;; Set or update properties
     (dolist (pair props-alist)
       (let* ((key (car pair))
@@ -599,27 +558,16 @@ Returns non-nil when any property was changed."
         (unless (string= (or old "") new)
           (org-entry-put (point) key new)
           (setq changed t))))
-    ;; Delete obsolete prefixed properties (legacy cleanup). No prefix in global mode.
-    (when (and (not (string-empty-p prefix)) (not supertag-use-global-fields))
-      (dolist (pair existing)
-        (let ((key (car pair)))
-          (when (and (string-prefix-p prefix key)
-                     (not (member key wanted-keys)))
-            (org-entry-delete (point) key)
-            (setq changed t)))))
     changed))
 
 (defun supertag-export-all-fields-to-properties (&optional save-buffers)
   "Export all field values from the database into Org properties.
-This scans the :fields collection, and for each node with field values,
-adds or updates Org properties on its heading using the prefix
-`supertag-export-field-property-prefix'. When SAVE-BUFFERS is non-nil
+This scans the global :field-values collection and updates Org properties
+on each node heading.  When SAVE-BUFFERS is non-nil
 (or when called interactively with a prefix argument), modified buffers
 are saved automatically."
   (interactive "P")
-  (let* ((fields-root (if supertag-use-global-fields
-                          (supertag-store-get-collection :field-values)
-                        (supertag-store-get-collection :fields)))
+  (let* ((fields-root (supertag-store-get-collection :field-values))
          (node-ids (when (hash-table-p fields-root)
                      (let (ids)
                        (maphash (lambda (id _value)
@@ -628,7 +576,7 @@ are saved automatically."
                        (nreverse ids)))))
     (cond
      ((not (hash-table-p fields-root))
-      (message "Supertag export: :fields collection is not initialized."))
+      (message "Supertag export: :field-values collection is not initialized."))
      ((null node-ids)
       (message "Supertag export: no nodes with field values found."))
      (t

@@ -12,9 +12,15 @@
   (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name))))
 
 (require 'ownership-fixture)
+(require 'supertag-automation)
+(require 'supertag-automation-sync)
 (require 'supertag-core-scan)
 (require 'supertag-migration)
+(require 'supertag-services-query)
 (require 'supertag-services-sync)
+(require 'supertag-view-kanban)
+(require 'supertag-view-node)
+(require 'supertag-view-table)
 
 (ert-deftest supertag-ownership-test-fixture-is-repeatable-and-complete ()
   "The two-file fixture recreates the same files and every required fact."
@@ -481,6 +487,218 @@
       (should (memq :tag-not-on-node reasons))
       (should (memq :undeclared-field reasons))
       (should (memq :missing-field-definition reasons)))))
+
+(ert-deftest supertag-global-fields-are-the-only-production-write-path ()
+  "Legacy configuration cannot make production field APIs write legacy data."
+  (supertag-ownership-test-with-vault
+    ;; Existing user configs may still set this obsolete option to nil.  The
+    ;; cutover must ignore it instead of reopening the legacy writer.
+    (let ((supertag-use-global-fields nil))
+      (clrhash (supertag-store-get-collection :field-definitions))
+      (clrhash (supertag-store-get-collection :tag-field-associations))
+      (clrhash (supertag-store-get-collection :field-values))
+      (supertag-tag-add-field
+       "project" '(:name "Status" :type :string))
+      (supertag-tag-add-field
+       "project" '(:name "Priority" :type :integer))
+      (supertag-field-set
+       supertag-ownership-test-node-a "project" "Status" "active")
+      (supertag-field-set-many
+       supertag-ownership-test-node-a
+       '((:tag "project" :field "Status" :value "done")
+         (:tag "project" :field "Priority" :value 2)))
+      (supertag-tag-move-field-up "project" "priority")
+      (should (equal '("priority" "status")
+                     (mapcar #'supertag--assoc-entry-field-id
+                             (supertag-store-get-tag-field-associations
+                              "project"))))
+      (should (= 2 (supertag-field-remove
+                    supertag-ownership-test-node-a
+                    "project" "Priority")))
+      (supertag-tag-remove-field "project" "Priority")
+      (should (supertag-store-get-field-definition "status"))
+      (should (supertag-store-get-field-definition "priority"))
+      (should (equal '("status")
+                     (mapcar #'supertag--assoc-entry-field-id
+                             (supertag-store-get-tag-field-associations
+                              "project"))))
+      (should (equal "done"
+                     (supertag-store-get-field-value
+                      supertag-ownership-test-node-a "status")))
+      (supertag-tag-rename-field "project" "Status" "State")
+      (should (equal "done"
+                     (supertag-field-get
+                      supertag-ownership-test-node-a "project" "State")))
+      (should (equal (list supertag-ownership-test-node-a)
+                     (supertag-query--find-nodes-by-field-indexed
+                      "State" "done")))
+      (should (member "status"
+                      (supertag--extract-trigger-sources
+                       '(field-changed "State"))))
+      (should
+       (eq :unknown
+           (supertag-automation--event-type
+            (list :path
+                  (list :fields supertag-ownership-test-node-a
+                        "project" "Status")))))
+      (should-not
+       (supertag-automation--trigger-match-p
+        :on-field-change
+        (list :path
+              (list :fields supertag-ownership-test-node-a
+                    "project" "Status"))))
+      (let ((supertag-automation--current-event
+             (list :path
+                   (list :field-values
+                         supertag-ownership-test-node-a "status"))))
+        (should
+         (supertag-automation--eval-single-condition
+          '(field-changed "State")
+          (supertag-store-get-entity
+           :nodes supertag-ownership-test-node-a))))
+      (supertag-automation-sync--update-node-field
+       supertag-ownership-test-node-a "State" "synced")
+      (should (equal "synced"
+                     (supertag-store-get-field-value
+                      supertag-ownership-test-node-a "status")))
+      (should (eq :missing
+                  (supertag-store-get-field-value
+                   supertag-ownership-test-node-a "state" :missing)))
+      (should (eq :missing
+                  (supertag-store-get-field-value
+                   supertag-ownership-test-node-a "priority" :missing)))
+      (should-not (plist-get (supertag-store-get-entity :tags "project")
+                             :fields))
+      (should (zerop (hash-table-count
+                      (supertag-store-get-collection :fields)))))))
+
+(ert-deftest supertag-global-field-cutover-preserves-consumer-parity ()
+  "Migration preserves Table/Node/Kanban/Automation output without legacy reads."
+  (supertag-ownership-test-with-vault
+    (let* ((supertag-use-global-fields nil)
+           (node-id supertag-ownership-test-node-a)
+           (tag-id "project")
+           (node (supertag-store-get-entity :nodes node-id))
+           backup-files
+           legacy-snapshot)
+      (clrhash (supertag-store-get-collection :field-definitions))
+      (clrhash (supertag-store-get-collection :tag-field-associations))
+      (clrhash (supertag-store-get-collection :field-values))
+      (supertag-store-put-entity
+       :tags tag-id
+       (plist-put (copy-tree (supertag-store-get-entity :tags tag-id))
+                  :fields '((:name "Status" :type :string))))
+      (supertag-store-put-legacy-field node-id tag-id "Status" "active")
+      (setq legacy-snapshot
+            (supertag--persistence--canonicalize-value
+             (list :definitions
+                   (plist-get (supertag-store-get-entity :tags tag-id) :fields)
+                   :values (supertag-store-get-collection :fields))))
+      (supertag-migration-run-global-fields t)
+      (setq backup-files
+            (directory-files
+             supertag-db-backup-directory t
+             "\\`supertag-db-preglobal-fields-.*\\.el\\'"))
+      (should (= 1 (length backup-files)))
+      (let* ((backup-store
+              (supertag--persistence--try-read-store
+               (car backup-files)))
+             (backup-tag
+              (gethash tag-id (gethash :tags backup-store))))
+        (should
+         (equal legacy-snapshot
+                (supertag--persistence--canonicalize-value
+                 (list :definitions (plist-get backup-tag :fields)
+                       :values (gethash :fields backup-store))))))
+      (supertag-ops-schema-rebuild-cache)
+      (cl-labels
+          ((consumer-snapshot ()
+             (let* ((column '(:name "Status" :key status
+                              :field-id "status" :type :string))
+                    (grouped
+                     (supertag-view-kanban--group-nodes-by-field
+                      (list (cons node-id node)) tag-id "Status")))
+               (list
+                (cl-letf (((symbol-function
+                            'supertag-view-table--get-current-query-obj)
+                           (lambda () '(:type :tag)))
+                          ((symbol-function
+                            'supertag-view-table--get-current-tag-id)
+                           (lambda () tag-id)))
+                  (substring-no-properties
+                   (supertag-view-table--get-cell-value
+                    node 'status column)))
+                (supertag-view-node--count-fields node-id)
+                (length (gethash "active" grouped))
+                (supertag-automation--get-field-value
+                 node-id (list tag-id) "Status")))))
+        (should (equal '("active" 1 1 "active")
+                       (consumer-snapshot)))
+        (supertag-field-set node-id tag-id "Status" "done")
+        (should (equal '("done" 1 0 "done")
+                       (consumer-snapshot))))
+      (should
+       (equal legacy-snapshot
+              (supertag--persistence--canonicalize-value
+               (list :definitions
+                     (plist-get (supertag-store-get-entity :tags tag-id)
+                                :fields)
+                     :values (supertag-store-get-collection :fields))))))))
+
+(ert-deftest supertag-global-field-cutover-rolls-back-on-error ()
+  "A failed cutover restores global collections and retains its backup."
+  (supertag-ownership-test-with-vault
+    (let* ((node-id supertag-ownership-test-node-a)
+           (tag-id "project")
+           before
+           backup-files)
+      (clrhash (supertag-store-get-collection :field-definitions))
+      (clrhash (supertag-store-get-collection :tag-field-associations))
+      (clrhash (supertag-store-get-collection :field-values))
+      (supertag-store-put-entity
+       :tags tag-id
+       (plist-put (copy-tree (supertag-store-get-entity :tags tag-id))
+                  :fields '((:name "Status" :type :string))))
+      (supertag-store-put-legacy-field node-id tag-id "Status" "active")
+      (setq before
+            (supertag--persistence--canonicalize-value
+             (list (supertag-store-get-collection :field-definitions)
+                   (supertag-store-get-collection :tag-field-associations)
+                   (supertag-store-get-collection :field-values))))
+      (cl-letf (((symbol-function
+                  'supertag-migration--migrate-field-values)
+                 (lambda (&rest _)
+                   (error "forced cutover failure"))))
+        (should-error (supertag-migration-run-global-fields t)
+                      :type 'error))
+      (should
+       (equal before
+              (supertag--persistence--canonicalize-value
+               (list (supertag-store-get-collection :field-definitions)
+                     (supertag-store-get-collection
+                      :tag-field-associations)
+                     (supertag-store-get-collection :field-values)))))
+      (setq backup-files
+            (directory-files
+             supertag-db-backup-directory t
+             "\\`supertag-db-preglobal-fields-.*\\.el\\'"))
+      (should (= 1 (length backup-files)))
+      (let ((backup-store
+             (supertag--persistence--try-read-store
+              (car backup-files))))
+        (dolist (collection '(:field-definitions
+                              :tag-field-associations
+                              :field-values))
+          (let ((table (gethash collection backup-store)))
+            (should (zerop (if (hash-table-p table)
+                               (hash-table-count table)
+                             0)))))
+        (should
+         (equal "active"
+                (gethash "Status"
+                         (gethash tag-id
+                                  (gethash node-id
+                                           (gethash :fields backup-store))))))))))
 
 (provide 'ownership-separation-test)
 

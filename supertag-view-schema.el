@@ -168,28 +168,11 @@ For inherited fields, jumps to the parent tag definition."
               (message "Field '%s' is inherited from '%s'. Jumping to definition..." field-name inherited-from)
               (supertag-schema--goto-tag inherited-from))
 
-          ;; Own Field: Use new interactive editor with pre-filled values
-          (if (and supertag-use-global-fields field-id)
-              ;; Global field mode: full editing with pre-filled values
+          (if field-id
               (progn
                 (supertag-global-field-edit-interactive field-id)
                 (supertag-schema-refresh))
-            ;; Legacy mode: simple type/options editing
-            (let ((action (completing-read "Edit Field: " '("Name" "Type/Options") nil t nil nil "Name")))
-              (cond
-               ((string= action "Name")
-                (supertag-schema--rename-field-at-point))
-               ((string= action "Type/Options")
-                (let* ((current-type (plist-get field-def :type))
-                       (type-and-options (supertag-field-read-type-with-options current-type))
-                       (new-type (car type-and-options))
-                       (options (cdr type-and-options))
-                       (new-field-def (plist-put (list :name field-name) :type new-type)))
-                  (when (eq new-type :options)
-                    (setq new-field-def (plist-put new-field-def :options options)))
-                  (supertag-tag-add-field tag-id new-field-def)
-                  (message "Field '%s' updated. Refreshing..." field-name)
-                  (supertag-schema-refresh)))))))))))
+            (message "Field '%s' has no global definition." field-name)))))))
 
 ;;; --- Rendering ---
 
@@ -213,23 +196,24 @@ For inherited fields, jumps to the parent tag definition."
 
 (defun supertag-schema--get-own-fields (tag-id)
   "Get only the fields directly defined on TAG-ID, not inherited ones.
-This function handles both legacy and global field modes."
-  (if supertag-use-global-fields
-      ;; Global field mode: get fields from tag-field-associations
-      (let* ((assoc-table (supertag-view-api-get-collection :tag-field-associations))
-             (entries (and (hash-table-p assoc-table) (gethash tag-id assoc-table)))
-             (defs (supertag-view-api-get-collection :field-definitions))
-             (result '()))
-        (when (and entries (hash-table-p defs))
-          (dolist (entry entries)
-            (let* ((fid (if (plistp entry) (plist-get entry :field-id) entry))
-                   (def (and fid (gethash fid defs))))
-              (when def (push def result)))))
-        (nreverse result))
-    ;; Legacy mode: get fields directly from tag's :fields property
-    (let* ((tag-data (supertag-tag-get tag-id))
-           (plist-data (and tag-data (supertag-schema--ensure-plist tag-data))))
-      (plist-get plist-data :fields))))
+Reads global associations and definitions."
+  (let* ((assoc-table
+          (supertag-view-api-get-collection :tag-field-associations))
+         (entries (and (hash-table-p assoc-table)
+                       (gethash tag-id assoc-table)))
+         (definitions
+          (supertag-view-api-get-collection :field-definitions))
+         result)
+    (when (and entries (hash-table-p definitions))
+      (dolist (entry entries)
+        (let* ((field-id (if (plistp entry)
+                             (plist-get entry :field-id)
+                           entry))
+               (definition (and field-id
+                                (gethash field-id definitions))))
+          (when definition
+            (push definition result)))))
+    (nreverse result)))
 
 (defun supertag-schema--render-tag-node (tag-node &optional level)
   "Recursively render a tag node and its children into the buffer."
@@ -315,7 +299,7 @@ This function handles both legacy and global field modes."
          (type (plist-get field-def :type))
          (options (plist-get field-def :options))
          (type-str (if type (format "(type: %s)" (substring (symbol-name type) 1)) "(type: string)")))
-    (let ((label (if (and supertag-use-global-fields id)
+    (let ((label (if id
                      (format "%s [%s]" name id)
                    name)))
       (if (and (eq type :options) options)
@@ -525,10 +509,10 @@ Offers choice between creating a new tag or selecting an existing tag."
                (field-def (supertag-ui-create-field-definition)))
           (if (not field-def)
               (message "Field creation cancelled.")
-            (if (and supertag-use-global-fields
-                     (let* ((fid (or (plist-get field-def :id)
-                                     (supertag-sanitize-field-id (plist-get field-def :name)))))
-                       (and fid (supertag-global-field-get fid))))
+            (if (let* ((fid (or (plist-get field-def :id)
+                                (supertag-sanitize-field-id
+                                 (plist-get field-def :name)))))
+                  (and fid (supertag-global-field-get fid)))
                 ;; Conflict: existing global field with same slug
                 (let* ((fid (or (plist-get field-def :id)
                                 (supertag-sanitize-field-id (plist-get field-def :name))))
@@ -560,8 +544,6 @@ Offers choice between creating a new tag or selecting an existing tag."
 (defun supertag-schema--bind-existing-field-at-point ()
   "Bind an existing global field to the tag at point (append order)."
   (interactive)
-  (unless supertag-use-global-fields
-    (user-error "Global fields are disabled; set `supertag-use-global-fields` to t"))
   (let ((context (supertag-schema--get-context-at-point)))
     (if (and context (eq (plist-get context :type) :tag))
         (let* ((tag-id (plist-get context :tag-id))
@@ -612,7 +594,8 @@ Dispatches to the correct deletion logic based on context."
          (if inherited-from
              (message "Cannot delete: Field '%s' is inherited from '%s'. Delete it from the parent tag." field-name inherited-from)
            (when (yes-or-no-p (format "Really delete field '%s' from tag '%s'?" field-name tag-id))
-             (if (and supertag-use-global-fields field-id (stringp field-id) (not (string-empty-p field-id)))
+             (if (and field-id (stringp field-id)
+                      (not (string-empty-p field-id)))
                  (supertag-tag-disassociate-field tag-id field-id)
                (supertag-tag-remove-field tag-id field-name))
              (message "Field '%s' deleted. Refreshing view..." field-name)
@@ -949,8 +932,6 @@ Submitting an empty selection retains every available source field."
 This cleans up redundant associations where a field is defined on both
 a parent tag and a child tag."
   (interactive "sTag ID: ")
-  (unless supertag-use-global-fields
-    (user-error "This function only works in global field mode"))
   (let* ((tag-data (supertag-tag-get tag-id))
          (plist-data (and tag-data (supertag-schema--ensure-plist tag-data)))
          (parent-id (plist-get plist-data :extends)))
@@ -987,8 +968,6 @@ a parent tag and a child tag."
 (defun supertag-schema--cleanup-all-inherited-associations ()
   "Clean up inherited field associations from all child tags."
   (interactive)
-  (unless supertag-use-global-fields
-    (user-error "This function only works in global field mode"))
   (let ((all-tags (supertag-query :tags))
         (total-removed 0))
     (dolist (tag-pair all-tags)
@@ -1010,18 +989,14 @@ a parent tag and a child tag."
   (interactive "sTag ID: ")
   (let* ((tag-data (supertag-tag-get tag-id))
          (plist-data (and tag-data (supertag-schema--ensure-plist tag-data)))
-         (own-fields-legacy (plist-get plist-data :fields))
          (assoc-table (supertag-view-api-get-collection :tag-field-associations))
          (own-fields-global (and (hash-table-p assoc-table) (gethash tag-id assoc-table)))
          (resolved (ignore-errors (supertag-ops-schema-get-resolved-tag tag-id))))
     (with-current-buffer (get-buffer-create "*Supertag Debug*")
       (erase-buffer)
       (insert (format "=== Debug Info for Tag: %s ===\n\n" tag-id))
-      (insert (format "supertag-use-global-fields: %s\n\n" supertag-use-global-fields))
       (insert "--- Raw Tag Data ---\n")
       (insert (format "%S\n\n" plist-data))
-      (insert "--- Legacy :fields property ---\n")
-      (insert (format "%S\n\n" own-fields-legacy))
       (insert "--- Global field associations (from :tag-field-associations) ---\n")
       (insert (format "%S\n\n" own-fields-global))
       (insert "--- Resolved schema (from supertag-ops-schema-get-resolved-tag) ---\n")

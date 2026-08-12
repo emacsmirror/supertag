@@ -179,7 +179,7 @@ file-level before any heading."
                 (dolist (f fields (nreverse names))
                   (let* ((fid (or (plist-get f :id) (plist-get f :name)))
                          (slug (and fid (supertag-sanitize-field-id fid)))
-                         (dedupe (if supertag-use-global-fields slug (plist-get f :name))))
+                         (dedupe slug))
                     (when (and dedupe (not (gethash dedupe seen)))
                       (puthash dedupe t seen)
                       (push (plist-get f :name) names)))))))

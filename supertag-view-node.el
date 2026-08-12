@@ -122,7 +122,7 @@ Point must be at an Org heading. when invoked from other modes."
            (lambda (path _old-value _new-value)
              (when (and (listp path)
                         (memq (car path)
-                              '(:nodes :relations :fields :field-values)))
+                              '(:nodes :relations :field-values)))
                (funcall refresh)))))
          (follow-local-p
           (and (buffer-live-p origin) (not supertag-view-node-auto-show))))
@@ -361,7 +361,7 @@ Key Bindings:
         (dolist (field (supertag-tag-get-all-fields tag-id))
           (let* ((fid (or (plist-get field :id) (plist-get field :name)))
                  (slug (and fid (supertag-sanitize-field-id fid)))
-                 (dedupe (if supertag-use-global-fields slug (plist-get field :name))))
+                 (dedupe slug))
             (when (and dedupe (not (gethash dedupe seen)))
               (puthash dedupe t seen)
               (cl-incf count)))))
@@ -458,7 +458,7 @@ Only strips keywords if `supertag-view-node-strip-todo-keywords' is non-nil."
                  (filtered (cl-loop for f in (or fields '())
                                     for fid = (or (plist-get f :id) (plist-get f :name))
                                     for slug = (and fid (supertag-sanitize-field-id fid))
-                                    for dedupe = (if supertag-use-global-fields slug (plist-get f :name))
+                                    for dedupe = slug
                                     unless (and dedupe (gethash dedupe seen))
                                     do (when dedupe (puthash dedupe t seen))
                                     and collect f)))

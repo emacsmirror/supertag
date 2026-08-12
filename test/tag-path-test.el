@@ -940,7 +940,7 @@
        (equal '("Apple/Shortcut/\u8bed\u8a00" "diary/work")
               seen)))))
 
-(ert-deftest nested-tag-legacy-slash-rename-migrates-complete-identity ()
+(ert-deftest nested-tag-legacy-slash-rename-preserves-migration-source ()
   (tag-path-test--with-clean-store
     (let ((file (make-temp-file "supertag-tag-path" nil ".org"
                                 "* P #emacs/package\n"))
@@ -999,15 +999,18 @@
                                   "node" :node-tag))))
             (should (supertag-store-get-tag-field-associations
                      "package"))
+            ;; Production rename never writes the migration-only bucket.
+            (should-not (supertag-get
+                         '(:fields "node" "package" "tier")))
             (should (equal "core"
                            (supertag-get
-                            '(:fields "node" "package" "tier"))))
-            (should (equal "package"
-                           (supertag-get
-                            '(:fields "node" "package" "related"))))
+                            '(:fields "node" "emacs/package" "tier"))))
             (should (equal "emacs/package"
                            (supertag-get
-                            '(:fields "node" "package" "plain-text"))))
+                            '(:fields "node" "emacs/package" "related"))))
+            (should (equal "emacs/package"
+                           (supertag-get
+                            '(:fields "node" "emacs/package" "plain-text"))))
             (should (equal '("package")
                            (supertag-store-get-field-value
                             "node" "related-tags")))

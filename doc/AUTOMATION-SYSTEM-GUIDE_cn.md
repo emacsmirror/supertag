@@ -283,7 +283,7 @@ graph LR
 | :--- | :--- | :--- |
 | **任意变化** | `:on-change` | 当系统识别到 store 变化事件时触发（很宽；建议用条件缩小范围）。 |
 | **属性/字段变化** | `:on-property-change` | 当 property/field/global-field 变化时触发（很宽；建议用 `property-changed` / `field-changed` 缩小范围）。 |
-| **字段变化** | `:on-field-change` | 当遗留 tag-field 或全局字段值变化时触发。 |
+| **字段变化** | `:on-field-change` | 当全局字段值变化时触发。 |
 | **标签添加时** | `(:on-tag-added "tag-name")` | 当一个节点被**首次**添加指定标签时触发。 |
 | **标签移除时** | `(:on-tag-removed "tag-name")` | 当一个节点的指定标签被移除时触发。 |
 | **计划任务** | `:on-schedule` | 基于时间的触发器，需要提供 `:schedule` 属性并启动调度器。 |
@@ -304,8 +304,8 @@ graph LR
 | **属性等于** | `(property-equals :prop-name "value")` | 检查节点的某个属性是否等于一个特定的值。 |
 | **属性已改变**| `(property-changed :prop-name)` | 检查本次事件是否是由指定属性的变化引起的。 |
 | **属性测试**| `(property-test :prop-name #'> 8)` | 使用一个函数来对属性值进行测试。 |
-| **字段等于** | `(field-equals "field-name" "value")` | 检查遗留 tag-field（按名称）是否等于指定值。 |
-| **字段发生变化** | `(field-changed "field-name")` | 检查遗留字段或映射到全局字段的字段是否发生变化（见下方“事件上下文”）。 |
+| **字段等于** | `(field-equals "field-name" "value")` | 把显示名或 ID 解析到稳定全局字段，再检查字段值。 |
+| **字段发生变化** | `(field-changed "field-name")` | 把显示名或 ID 解析到稳定全局字段，再检查本次是否改变了它。 |
 | **全局字段等于** | `(global-field-equals "field-id" "value")` | 检查全局字段值（field-id 为全局字段的 slug/id）。 |
 | **全局字段发生变化** | `(global-field-changed "field-id")` | 检查本次事件是否改变了该全局字段。 |
 | **全局字段测试** | `(global-field-test "field-id" #'pred ...)` | 使用函数测试全局字段值。 |
@@ -343,7 +343,7 @@ graph LR
 | **`:remove-tag`** | `(:tag "tag-name")` | 从当前节点移除一个标签。 |
 | **`:call-function`** | `(:function #'your-function :args (...))` | 调用一个您自己定义的 Emacs Lisp 函数。这是实现复杂逻辑的“终极武器”。函数会接收 `(node-id context &rest args)` 参数。 |
 | **`:create-node`** | `(:title "..." :tags '("...") ...)` | 创建一个全新的节点。 |
-| **`:update-field`** | `(:tag "tag-id" :field "field-name" :value v)` | 更新遗留 tag-field（按 tag 作用域存储的字段值）。 |
+| **`:update-field`** | `(:tag "tag-id" :field "field-name" :value v)` | 通过 Tag schema 解析字段，并更新该 node 的全局字段值。 |
 | **`:case`** | `(:on (:field "层级") :branches '((:equals "20" :actions ((:action :update-field ...))) (:default t :actions ((:action :call-function ...)))))` | 根据 `:on` 解析出的值执行首个匹配分支。每个分支可使用 `:equals`、`:in`、`:match`（正则/函数）或 `:test` 进行匹配，并包含自己的 `:actions` 列表。通过 `:default t` 指定兜底分支。 |
 
 #### 事件上下文（重要）
@@ -360,7 +360,6 @@ graph LR
 引擎常见的 `:path` 形态：
 
 - 节点属性变化：`(:nodes NODE-ID :properties :some-prop)`
-- 遗留 tag-field 变化：`(:fields NODE-ID TAG-ID "field-name")`
 - 全局字段值变化：`(:field-values NODE-ID "field-id")`
 
 `(property-changed ...)` 依赖 `:path` 足够精确（例如 `(:nodes NODE-ID :properties :hours)`），因此事件路由链路必须保留这种精度。
@@ -473,9 +472,9 @@ graph LR
 
 ### 字段为中心的规则（Field-Centric Rules）
 
-在启用全局字段模型（`supertag-use-global-fields` 非空）时，字段不再绑定在某个单一 tag 上，而是作为一等实体存在。此时，自动化 DSL 支持写“以字段为中心”的规则——即规则主要由字段的变化驱动，而不是由 tag 决定：
+全局字段模型始终启用：字段不再绑定在某个单一 tag 上，而是作为一等实体存在。自动化 DSL 支持写“以字段为中心”的规则——即规则主要由字段变化驱动，而不是由 tag 决定：
 
-- `field-equals` / `field-changed` —— 把第一个字符串参数视为全局字段的 id（经 `supertag-sanitize-field-id` 归一化）。
+- `field-equals` / `field-changed` —— 把第一个字符串参数作为稳定全局字段 ID 或显示名解析。
 - `global-field-equals` / `global-field-changed` —— 显式的全局字段版本，如果你希望语义完全清晰。
 
 例如，下面这条规则会在任意节点的全局字段 `status` 变为 `"done"` 时触发，与节点上挂了哪些 tag 无关：
@@ -498,7 +497,7 @@ graph LR
                  (field-equals "status" "doing"))
 ```
 
-在内部实现上，`field-equals` / `field-changed` 会按归一化后的全局字段 id 建立索引，因此 `:on-field-change` 产生的 `:field-values` 事件能够以 O(1) 时间匹配到相关规则。
+在内部实现上，`field-equals` / `field-changed` 按稳定全局字段 ID 建立索引，因此修改显示名不会搬动已有值，也不会让新规则与 `:field-values` 事件失联。
 
 ### 示例2：项目与任务联动
 

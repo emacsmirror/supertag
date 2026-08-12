@@ -4,8 +4,8 @@
 
 Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库**。不依赖外部服务，不需要 Python，你的 `.org` 文件始终是纯文本——我们只是让它变聪明了。
 
-> **⚠️ 从 5.2.0 或更早版本升级？**  
-> 在启用 `supertag-use-global-fields` 之前，请**先完成全局字段迁移**。  
+> **⚠️ 数据库仍在使用旧的 Tag 嵌套字段？**
+> 用当前版本编辑字段前，请**先完成全局字段迁移**。全局字段模型现已强制启用；`supertag-use-global-fields` 已废弃，设置它不会改变读写路径。
 > 具体步骤见 [`doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md`](doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md)。
 
 > **为什么这很重要**：你有没有试过"找出所有还没读的论文"？或者"@小王负责的、本周到期的任务"？纯 Org-mode 做不到，除非你手动维护 PROPERTIES 抽屉再 grep。Org-SuperTag 让这件事变成点几下鼠标。
@@ -375,7 +375,7 @@ M-x supertag-git-clone
 
 > **⚠️ 5.9.x → 6.0.0**：数据库文件格式已变更（见上文"多机同步"）——升级自动完成，但之后想降级需要恢复备份快照。用 `M-x supertag-restore` 选中并恢复升级前的快照，然后立即退出 Emacs 并用旧版重新打开。多机共享 vault 的用户必须所有机器一起升级。
 
-> **⚠️ 5.2.0 → 5.3.0**：在启用 `supertag-use-global-fields` 之前，请先完成[全局字段迁移](doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md)。
+> **⚠️ 旧嵌套字段 → 当前版本**：编辑字段前，请先完成[全局字段迁移](doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md)。当前版本始终使用全局字段模型。
 
 ### 从 SuperTag 4.x 升级
 

@@ -50,18 +50,20 @@ these functions."
 (defvar supertag--tag-field-order-cache (make-hash-table :test 'equal)
   "Cache of tag -> ordered field-ids for the global field model.")
 
-(defcustom supertag-use-global-fields nil
-  "When non-nil, enable the global field model (opt-in).
-This gates new storage collections (:field-definitions, :tag-field-associations,
-and :field-values). Legacy nested field storage remains untouched while this
-flag is nil."
+(defcustom supertag-use-global-fields t
+  "Obsolete compatibility option; the global field model is always enabled.
+Setting this variable to nil no longer re-enables legacy field storage."
   :type 'boolean
   :group 'org-supertag)
 
+(make-obsolete-variable
+ 'supertag-use-global-fields
+ "The global field model is now the only production read/write path."
+ "6.1")
+
 (defun supertag--maybe-rebuild-global-field-caches ()
-  "Rebuild global field caches when enabled."
-  (when supertag-use-global-fields
-    (supertag-schema-rebuild-global-field-caches)))
+  "Rebuild global field caches."
+  (supertag-schema-rebuild-global-field-caches))
 
 (defun supertag-sanitize-field-id (name)
   "Return sanitized field id slug for NAME.
@@ -165,7 +167,7 @@ Keys are keyword symbols, values are plists with:
     :run-script         ; Execute external script
     :call-function))    ; Call custom function
 
-;;; --- Global field caches (opt-in) ---
+;;; --- Global field caches ---
 
 (defun supertag-schema-clear-global-field-caches ()
   "Clear global field caches."
@@ -185,47 +187,40 @@ Keys are keyword symbols, values are plists with:
    (t nil)))
 
 (defun supertag-schema--load-global-fields ()
-  "Populate global field caches from the store when enabled."
-  (when supertag-use-global-fields
-    (let ((defs (supertag-store-get-collection :field-definitions))
-          (assoc-table (supertag-store-get-collection :tag-field-associations)))
-      (supertag-schema-clear-global-field-caches)
-      (when (hash-table-p defs)
-        (maphash
-         (lambda (fid raw)
-           (let* ((plist (supertag-schema--normalize-plist raw))
-                  (sanitized (or (plist-get plist :id) (supertag-sanitize-field-id fid))))
-             (when sanitized
-               (puthash sanitized plist supertag--global-field-cache))))
-         defs))
-      (when (hash-table-p assoc-table)
-        (maphash
-         (lambda (tag-id entries)
-           (let* ((order
-                   (cond
-                    ;; preferred: list of plists with :field-id and optional :order
-                    ((and (listp entries) (plistp (car entries)))
-                     (mapcar (lambda (entry) (plist-get entry :field-id)) entries))
-                    ;; fallback: list of field ids
-                    ((listp entries) entries)
-                    (t nil))))
-             (when order
-               (puthash tag-id order supertag--tag-field-order-cache))))
-         assoc-table)))))
+  "Populate global field caches from the store."
+  (let ((defs (supertag-store-get-collection :field-definitions))
+        (assoc-table (supertag-store-get-collection :tag-field-associations)))
+    (supertag-schema-clear-global-field-caches)
+    (when (hash-table-p defs)
+      (maphash
+       (lambda (fid raw)
+         (let* ((plist (supertag-schema--normalize-plist raw))
+                (sanitized (or (plist-get plist :id)
+                               (supertag-sanitize-field-id fid))))
+           (when sanitized
+             (puthash sanitized plist supertag--global-field-cache))))
+       defs))
+    (when (hash-table-p assoc-table)
+      (maphash
+       (lambda (tag-id entries)
+         (let ((order
+                (cond
+                 ((and (listp entries) (plistp (car entries)))
+                  (mapcar (lambda (entry) (plist-get entry :field-id)) entries))
+                 ((listp entries) entries)
+                 (t nil))))
+           (when order
+             (puthash tag-id order supertag--tag-field-order-cache))))
+       assoc-table))))
 
 (defun supertag-schema-rebuild-global-field-caches ()
-  "Rebuild global field caches from store (no-op unless flag is enabled)."
+  "Rebuild global field caches from Store."
   (interactive)
-  (if (not supertag-use-global-fields)
-      (progn
-        (supertag-schema-clear-global-field-caches)
-        (when (called-interactively-p 'interactive)
-          (message "Global field caches cleared (global fields disabled).")))
-    (supertag-schema--load-global-fields)
-    (when (called-interactively-p 'interactive)
-      (message "Global field caches rebuilt (%d fields, %d tag associations)."
-               (hash-table-count supertag--global-field-cache)
-               (hash-table-count supertag--tag-field-order-cache)))))
+  (supertag-schema--load-global-fields)
+  (when (called-interactively-p 'interactive)
+    (message "Global field caches rebuilt (%d fields, %d tag associations)."
+             (hash-table-count supertag--global-field-cache)
+             (hash-table-count supertag--tag-field-order-cache))))
 
 ;;; --- Database Schema Types ---
 

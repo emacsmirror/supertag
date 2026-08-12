@@ -54,9 +54,7 @@ Returns list of field plists."
           (let* ((fid (or (plist-get field :id)
                           (plist-get field :name)))
                  (slug (and fid (supertag-sanitize-field-id fid)))
-                 (dedupe-key (if supertag-use-global-fields
-                                 slug
-                               (plist-get field :name))))
+                 (dedupe-key slug))
             (when (and dedupe-key (not (gethash dedupe-key seen)))
               (puthash dedupe-key t seen)
               (push field result))))))
@@ -101,22 +99,14 @@ This function correctly uses the Tag -> Field -> Value data model."
                     (let* ((field-name (plist-get new-field-def :name))
                            (value (supertag-ui-read-field-value new-field-def nil)))
                       (unless (or (null value) (string-empty-p value))
-                        (if supertag-use-global-fields
-                            (let ((fid (supertag-sanitize-field-id field-name)))
-                              (when fid
-                                (supertag-node-set-global-field node-id fid value)))
-                          (supertag-field-set node-id tag-id field-name value))
+                        (supertag-field-set node-id tag-id field-name value)
                         (message "Set %s/%s -> %s" tag-id field-name value)))))
              (choice
               (let* ((field-def (cl-find-if (lambda (f) (string= (plist-get f :name) choice)) fields))
                      (current-value (supertag-field-get-with-default node-id tag-id choice))
                      (new-value (supertag-ui-read-field-value field-def current-value)))
                 (unless (or (null new-value) (equal new-value current-value))
-                  (if supertag-use-global-fields
-                      (let ((fid (supertag-sanitize-field-id choice)))
-                        (when fid
-                          (supertag-node-set-global-field node-id fid new-value)))
-                    (supertag-field-set node-id tag-id choice new-value))
+                  (supertag-field-set node-id tag-id choice new-value)
                   (message "Set %s/%s -> %s" tag-id choice new-value)))))))))))
 
 ;;; --- Dynamic Capture Template System ---

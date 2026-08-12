@@ -206,6 +206,18 @@ The existing write command reruns this audit and refuses to mutate on a blocked
 report.  Task014, not the audit, makes the global collections the only production
 read/write path and leaves `:fields` as a migration reader.
 
+Task014 completes that cutover. Field/schema operations and every current
+Table/Node/Kanban/Schema, Query, Capture, Org export and Automation consumer use
+only `:field-definitions`, `:tag-field-associations` and `:field-values`.
+`supertag-use-global-fields` remains only as an obsolete, ignored variable for
+old configurations. A display-name change updates the shared definition while
+preserving its stable ID and values; the shared resolver maps both IDs and
+display names for Query and Automation. The write migration serializes the live
+Store before mutation and changes all three collections in one Store
+transaction. The legacy root and its persistence/merge/transaction seams remain
+until task028 solely for migration and old-data compatibility; production field
+APIs no longer read or grow it.
+
 ### Consumers
 
 Each consumer migrates independently behind its existing public command. Raw interfaces are removed only after repository-wide caller audit.

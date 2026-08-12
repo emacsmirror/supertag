@@ -33,8 +33,7 @@
 (defconst supertag-diagnostics--event-choices
   '((:label "node-change" :type :node-change)
     (:label "property-change" :type :property-change)
-    (:label "field-change (legacy)" :type :field-change)
-    (:label "global-field-change" :type :global-field-change)
+    (:label "field-change" :type :global-field-change)
     (:label "tag-added" :type :tag-change :op :added)
     (:label "tag-removed" :type :tag-change :op :removed))
   "Interactive event choices for dry-run previews.")
@@ -153,9 +152,6 @@
   (pcase (plist-get event :type)
     (:node-change "node-change")
     (:property-change (format "property-change %s" (plist-get event :property)))
-    (:field-change (format "field-change %s (tag %s)"
-                           (plist-get event :field)
-                           (plist-get event :tag)))
     (:global-field-change (format "global-field-change %s" (plist-get event :field)))
     (:tag-change (format "tag-%s %s"
                          (if (eq (plist-get event :op) :added) "added" "removed")
@@ -176,10 +172,6 @@
        (list :type :tag-change
              :op (plist-get spec :op)
              :tag (read-string "Tag (id/name): ")))
-      (:field-change
-       (list :type :field-change
-             :field (read-string "Field name: ")
-             :tag (read-string "Tag id (legacy storage): ")))
       (:global-field-change
        (list :type :global-field-change
              :field (read-string "Global field id: ")))
@@ -196,8 +188,6 @@
      (list :path (list :nodes node-id)))
     (:property-change
      (list :path (list :nodes node-id :properties (plist-get event :property))))
-    (:field-change
-     (list :path (list :fields node-id (plist-get event :tag) (plist-get event :field))))
     (:global-field-change
      (list :path (list :field-values node-id (plist-get event :field))))
     (:tag-change
@@ -227,11 +217,11 @@
       (:manual nil)
       (:on-schedule nil)
       (:always t)
-      (:on-change (memq event-type '(:node-change :property-change :field-change
+      (:on-change (memq event-type '(:node-change :property-change
                                                   :global-field-change :tag-change)))
-      (:on-property-change (memq event-type '(:property-change :field-change
+      (:on-property-change (memq event-type '(:property-change
                                                                :global-field-change)))
-      (:on-field-change (memq event-type '(:field-change :global-field-change)))
+      (:on-field-change (eq event-type :global-field-change))
       (_ nil))))
 
 (defun supertag-diagnostics--automation-dry-run (node-id event)

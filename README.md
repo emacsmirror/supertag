@@ -5,8 +5,8 @@
 Org-SuperTag turns your plain Org headings into a **structured, queryable knowledge base**.  
 No external services. No Python. No lock-in. Your `.org` files stay yours — we just make them smarter.
 
-> **⚠️ Upgrading from 5.2.0 or earlier?**  
-> Before enabling `supertag-use-global-fields`, complete the **global field migration** first.  
+> **⚠️ Upgrading a database that still uses nested Tag fields?**
+> Complete the **global field migration** before editing fields with this version. The global field model is now mandatory; `supertag-use-global-fields` is obsolete and ignored.
 > See [`doc/GLOBAL-FIELD-MIGRATION-GUIDE.md`](doc/GLOBAL-FIELD-MIGRATION-GUIDE.md) for step-by-step instructions.
 
 > **Why this matters**: Ever tried to find "all papers I haven't read yet" across your notes? Or "all tasks due this week assigned to @alice"? Plain Org-mode can't do this without painful manual tagging and grep. Org-SuperTag makes it as easy as clicking a column header.
@@ -381,7 +381,7 @@ This is a stopgap, not a solution — real multi-machine sync needs something th
 
 > **⚠️ 5.9.x → 6.0.0**: The database file format changed (see "Data storage" above) — upgrading is automatic, but downgrading afterward needs a restored backup. Use `M-x supertag-restore` to pick and restore the pre-upgrade snapshot, then quit Emacs immediately and reopen with the older build.
 
-> **⚠️ 5.2.0 → 5.3.0**: Complete the [global field migration](doc/GLOBAL-FIELD-MIGRATION-GUIDE.md) before enabling `supertag-use-global-fields`.
+> **⚠️ Legacy nested fields → current**: Complete the [global field migration](doc/GLOBAL-FIELD-MIGRATION-GUIDE.md) before editing fields. Current releases always use the global field model.
 
 ### From SuperTag 4.x
 

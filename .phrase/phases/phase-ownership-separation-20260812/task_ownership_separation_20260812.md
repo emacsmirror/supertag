@@ -85,10 +85,11 @@
   - 影响范围：migration、field fixtures、docs
   - 完成：2026-08-12；新增确定性 `supertag-migration-audit-global-fields`，覆盖 definition/association mapping、`:extends` inherited values、逐 node/field parity、global-only preservation、冲突/orphan blocking 与磁盘/完整 Store backup SHA；旧 force-write 入口在任何冲突或 orphan 时零写入；ownership ERT 11/11、field/view/transaction 定向 ERT 71/71、修正 runner 后干净临时 clone 全量 ERT 462/462 通过
 
-- task014 [ ] 将 global field model 设为唯一生产读写路径
+- task014 [x] 将 global field model 设为唯一生产读写路径
   - 产出：新写入仅进入 `:field-definitions/:tag-field-associations/:field-values`；legacy `:fields` 只保留 migration reader
   - 验证方式：Table/Node/Kanban/Automation 在迁移前后结果一致；legacy bucket 不再增长
   - 影响范围：field/schema ops、views、automation、migration
+  - 完成：2026-08-12；删除生产 field/schema/view/query/capture/automation 的 legacy 分支与事件订阅，废弃且忽略 `supertag-use-global-fields`；真实迁移先保存 live-Store backup，再在单个 Store transaction 写入三个 global collections，失败恢复且 legacy source 不变；field display rename 保留稳定 ID/value，并由 Query/Automation/sync 共用 resolver；定向 ERT 125/125、干净临时 clone 全量 ERT 465/465、20 个修改生产文件 byte compile、`check-parens` 与 `git diff --check` 通过
 
 - task015 [ ] 分开 document-link、field-reference 与 semantic-edge
   - 产出：Document Link 和 field-reference 是 Projection；field value 拥有 reference field；custom/Notion relation 是 Semantic Edge

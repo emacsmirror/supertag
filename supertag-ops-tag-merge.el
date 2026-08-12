@@ -44,11 +44,9 @@
         (push item result)))))
 
 (defun supertag-tag-merge--field-key (field)
-  "Return the merge key for FIELD in the active field model."
-  (if supertag-use-global-fields
-      (or (plist-get field :id)
-          (supertag-sanitize-field-id (plist-get field :name)))
-    (plist-get field :name)))
+  "Return the global field id used as FIELD's merge key."
+  (or (plist-get field :id)
+      (supertag-sanitize-field-id (plist-get field :name))))
 
 (defun supertag-tag-merge--field-map (tag-id)
   "Return an equal-keyed map of resolved fields for TAG-ID."
@@ -238,33 +236,20 @@ Returns (DEFINITION . CONFLICT), with either side possibly nil."
 NODE-TAGS is the node's current membership.  DEFINITION is the chosen
 destination contract.  TAG-FIELD-MAPS maps each participant tag to its
 resolved fields."
-  (if supertag-use-global-fields
-      (let ((relevant
-             (cl-some (lambda (tag-id)
-                        (and (member tag-id node-tags)
-                             (gethash field-key (gethash tag-id tag-field-maps))))
-                      (let (tags)
-                        (maphash (lambda (tag-id _map) (push tag-id tags)) tag-field-maps)
-                        tags))))
-        (when relevant
-          (let ((value (supertag-store-get-field-value
-                        node-id field-key supertag-tag-merge--missing)))
-            (unless (eq value supertag-tag-merge--missing)
-              (list (list :tag-id :global :value value))))))
-    (let (candidates)
-      (maphash
-       (lambda (tag-id field-map)
-         (when (member tag-id node-tags)
-           (when-let* ((source-definition (gethash field-key field-map)))
-             (when (supertag-tag-merge--definitions-compatible-p
-                    definition source-definition)
-               (let* ((field-name (plist-get source-definition :name))
-                    (value (supertag-field-get
-                            node-id tag-id field-name supertag-tag-merge--missing)))
-                 (unless (eq value supertag-tag-merge--missing)
-                   (push (list :tag-id tag-id :value value) candidates)))))))
-       tag-field-maps)
-      (nreverse candidates))))
+  (ignore definition)
+  (let ((relevant
+         (cl-some (lambda (tag-id)
+                    (and (member tag-id node-tags)
+                         (gethash field-key (gethash tag-id tag-field-maps))))
+                  (let (tags)
+                    (maphash (lambda (tag-id _map) (push tag-id tags))
+                             tag-field-maps)
+                    tags))))
+    (when relevant
+      (let ((value (supertag-store-get-field-value
+                    node-id field-key supertag-tag-merge--missing)))
+        (unless (eq value supertag-tag-merge--missing)
+          (list (list :tag-id :global :value value)))))))
 
 (defun supertag-tag-merge--resolve-value (node-id field-key definition candidates resolutions)
   "Resolve CANDIDATES for NODE-ID/FIELD-KEY.
@@ -338,13 +323,10 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
             (cond
              ((eq selected-fields :all) available-keys)
              ((null selected-fields) nil)
-             (supertag-use-global-fields
-              (mapcar #'supertag-sanitize-field-id selected-fields))
-             (t selected-fields)))
+             (t (mapcar #'supertag-sanitize-field-id selected-fields))))
            (target-field-map (and target-exists-p
                                   (supertag-tag-merge--field-map target)))
            (field-definitions nil)
-           (field-warnings nil)
            (conflicts (supertag-tag-merge--inheritance-conflicts
                        source-ids target target-exists-p)))
       (dolist (key selected-keys)
@@ -357,19 +339,7 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
                           key (cdr (assoc key groups)) field-sources))))
           (if (cdr choice)
               (push (cdr choice) conflicts)
-            (let* ((definition (car choice))
-                   (ignored-tags
-                    (unless supertag-use-global-fields
-                      (cl-loop for candidate in (cdr (assoc key groups))
-                               unless (supertag-tag-merge--definitions-compatible-p
-                                       definition (plist-get candidate :definition))
-                               collect (plist-get candidate :tag-id)))))
-              (when ignored-tags
-                (push (list :kind :incompatible-source-field-definition
-                            :field key :ignored-tags ignored-tags
-                            :kept-definition definition)
-                      field-warnings))
-              (push (cons key definition) field-definitions)))))
+            (push (cons key (car choice)) field-definitions))))
       (setq field-definitions (nreverse field-definitions))
       (let* ((nodes (supertag-tag-merge--affected-nodes source-ids))
              (files (supertag-tag-merge--unique
@@ -411,8 +381,7 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
                 :files files
                 :saved-query-updates query-updates
                 :conflicts conflicts
-                :warnings (append (nreverse field-warnings)
-                                  query-warnings)))))))
+                :warnings query-warnings))))))
 
 (defun supertag-tag-merge--rewrite-node-tags (tags source-ids target-id)
   "Replace SOURCE-IDS in TAGS with TARGET-ID and deduplicate."
@@ -426,24 +395,16 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
         (definitions (plist-get plan :field-definitions)))
     (unless (plist-get plan :target-exists-p)
       (supertag-tag-create
-       (list :id target :name target
-             :fields (unless supertag-use-global-fields
-                       (mapcar (lambda (entry) (copy-tree (cdr entry))) definitions)))))
+       (list :id target :name target)))
     (dolist (entry definitions)
       (let ((key (car entry)) (definition (cdr entry)))
+        (ignore definition)
         (unless (supertag-tag-get-field target key)
-          (if supertag-use-global-fields
-              (supertag-tag-associate-field target key)
-            (supertag-tag-add-field target (copy-tree definition))))))))
+          (supertag-tag-associate-field target key))))))
 
 (defun supertag-tag-merge--write-field-values (plan)
-  "Write resolved legacy field values described by PLAN."
-  (unless supertag-use-global-fields
-    (dolist (write (plist-get plan :value-writes))
-      (supertag-field-set (plist-get write :node-id)
-                          (plist-get plan :target-id)
-                          (plist-get write :field-name)
-                          (plist-get write :value)))))
+  "Keep global values already selected by PLAN."
+  (ignore plan))
 
 (defun supertag-tag-merge--rewrite-nodes (plan)
   "Rewrite affected node tag lists from PLAN."
@@ -465,28 +426,26 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
 
 (defun supertag-tag-merge--cleanup-source-fields (plan)
   "Remove field storage owned only by PLAN's source tags."
-  (let ((sources (plist-get plan :source-ids)))
-    (if supertag-use-global-fields
-        (let ((source-field-ids
-               (supertag-tag-merge--unique
-                (apply #'append
-                       (mapcar (lambda (tag-id)
-                                 (let (keys)
-                                   (maphash (lambda (key _field) (push key keys))
-                                            (supertag-tag-merge--field-map tag-id))
-                                   keys))
-                               sources)))))
-          (dolist (node (plist-get plan :nodes))
-            (let* ((node-id (plist-get node :id))
-                   (remaining-tags (plist-get (supertag-node-get node-id) :tags)))
-              (dolist (field-id source-field-ids)
-                (unless (cl-some (lambda (tag-id)
-                                   (supertag-tag-merge--tag-has-global-field-p tag-id field-id))
-                                 remaining-tags)
-                  (supertag-store-remove-field-value node-id field-id))))))
-      (dolist (node (plist-get plan :nodes))
-        (dolist (source sources)
-          (supertag-store-remove-legacy-tag-fields (plist-get node :id) source))))))
+  (let* ((sources (plist-get plan :source-ids))
+         (source-field-ids
+          (supertag-tag-merge--unique
+           (apply #'append
+                  (mapcar (lambda (tag-id)
+                            (let (keys)
+                              (maphash (lambda (key _field) (push key keys))
+                                       (supertag-tag-merge--field-map tag-id))
+                              keys))
+                          sources)))))
+    (dolist (node (plist-get plan :nodes))
+      (let* ((node-id (plist-get node :id))
+             (remaining-tags (plist-get (supertag-node-get node-id) :tags)))
+        (dolist (field-id source-field-ids)
+          (unless (cl-some
+                   (lambda (tag-id)
+                     (supertag-tag-merge--tag-has-global-field-p
+                      tag-id field-id))
+                   remaining-tags)
+            (supertag-store-remove-field-value node-id field-id)))))))
 
 (defun supertag-tag-merge--rewrite-inheritance-and-delete-sources (plan)
   "Reparent source children and remove source definitions from PLAN."
@@ -503,8 +462,7 @@ maps (NODE-ID FIELD-KEY) to a chosen value or `(:merge-values VALUES)'."
     (dolist (tag-id updates)
       (supertag--set-tag-parent tag-id target))
     (dolist (source sources)
-      (when supertag-use-global-fields
-        (supertag-store-remove-tag-field-associations source))
+      (supertag-store-remove-tag-field-associations source)
       (supertag-tag-delete source))))
 
 (defun supertag-tag-merge--rewrite-relations (source-ids target-id)
@@ -934,43 +892,6 @@ are restored from snapshots if any later step fails."
      (supertag-store-get-collection :tag-field-associations))
     (supertag-update '(:tag-field-associations) result)))
 
-(defun supertag-tag-path-rename--rewrite-legacy-fields (mapping)
-  "Rekey per-node legacy field tables using MAPPING."
-  (let ((fields-root (supertag-store-get-collection :fields)))
-    (maphash
-     (lambda (node-id tag-table)
-       (let ((new-tag-table (make-hash-table :test 'equal)))
-         (maphash
-          (lambda (tag-id fields)
-            (let ((new-id
-                   (supertag-tag-path-rename--mapped tag-id mapping))
-                  (new-fields (make-hash-table :test 'equal)))
-              (when (gethash new-id new-tag-table)
-                (error "Tag rename produced duplicate legacy fields '%s'"
-                       new-id))
-              (maphash
-               (lambda (field-name value)
-                 (puthash
-                  field-name
-                  (if (eq (plist-get
-                           (supertag-tag-get-field new-id field-name)
-                           :type)
-                          :tag)
-                      (supertag-tag-path-rename--rewrite-values value mapping)
-                    value)
-                  new-fields))
-               fields)
-              (puthash new-id new-fields new-tag-table)))
-          tag-table)
-         (unless (equal tag-table new-tag-table)
-           ;; `:fields' is a nested legacy collection.  Replace one node
-           ;; bucket directly so batch notifications never misclassify the
-           ;; whole hash table as a field entity.
-           (supertag--transaction-record-old-value
-            (list :fields node-id) t tag-table)
-           (puthash node-id new-tag-table fields-root))))
-     fields-root)))
-
 (defun supertag-tag-path-rename--rewrite-global-field-values (mapping)
   "Rewrite exact tag references in global field values using MAPPING."
   (let (updates)
@@ -1056,7 +977,6 @@ are restored from snapshots if any later step fails."
                      (supertag-tag-path-rename--rewrite-nodes mapping)
                      (supertag-tag-path-rename--rewrite-relations mapping)
                      (supertag-tag-path-rename--rewrite-associations mapping)
-                     (supertag-tag-path-rename--rewrite-legacy-fields mapping)
                      (supertag-tag-path-rename--rewrite-global-field-values
                       mapping)
                      (supertag-tag-path-rename--rewrite-store-configs mapping)

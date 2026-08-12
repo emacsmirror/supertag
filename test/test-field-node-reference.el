@@ -21,6 +21,7 @@
 (require 'supertag-ops-tag)
 (require 'supertag-ops-relation)
 (require 'supertag-ops-field)
+(require 'supertag-services-sync)
 
 (defmacro field-node-reference-test--with-env (&rest body)
   "Run BODY with a clean store and two synced nodes in a temp Org file."
@@ -57,12 +58,9 @@
 
 (defun field-node-reference-test--tag-with-ref-field ()
   "Create and return a tag with a :node-reference field."
-  (supertag-tag-create
-   (list :id "ref-tag"
-         :name "Reference Tag"
-         :fields (list (list :name "ref"
-                             :type :node-reference
-                             :required nil)))))
+  (supertag-tag-create '(:id "ref-tag" :name "Reference Tag"))
+  (supertag-tag-add-field
+   "ref-tag" '(:name "ref" :type :node-reference :required nil)))
 
 (defun field-node-reference-test--file-hash (file)
   "Return FILE's SHA-256 hash."
@@ -124,10 +122,9 @@
 (ert-deftest field-set-string-does-not-touch-relations ()
   "Setting a non-:node-reference field does not create or delete relations."
   (field-node-reference-test--with-env
-    (supertag-tag-create
-     (list :id "string-tag"
-           :name "String Tag"
-           :fields (list (list :name "note" :type :string :required nil))))
+    (supertag-tag-create '(:id "string-tag" :name "String Tag"))
+    (supertag-tag-add-field
+     "string-tag" '(:name "note" :type :string :required nil))
     (supertag-node-add-tag source-id "string-tag")
     (supertag-field-set source-id "string-tag" "note" "hello")
     (should (null (supertag-relation-find-between source-id target-id :reference)))))
@@ -146,8 +143,7 @@
   "Global :node-reference fields sync relations without Org writes."
   (field-node-reference-test--with-env
     (require 'supertag-ops-global-field)
-    (let ((supertag-use-global-fields t)
-          (file-hash (field-node-reference-test--file-hash test-file)))
+    (let ((file-hash (field-node-reference-test--file-hash test-file)))
       (supertag-global-field-create
        (list :id "ref" :name "Reference" :type :node-reference :required nil))
       (supertag-field-set source-id "any-tag" "ref" target-id)

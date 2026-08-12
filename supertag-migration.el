@@ -18,6 +18,7 @@
 (require 'supertag-core-schema)
 (require 'supertag-core-persistence)
 (require 'supertag-ops-node)
+(require 'supertag-ops-schema)
 (require 'supertag-view-helper)
 (require 'supertag-services-sync)
 (require 'org-id)
@@ -899,11 +900,6 @@ When DRY-RUN is non-nil, do not modify the file; only report changes."
        (or supertag-migration-dry-run
            (bound-and-true-p current-prefix-arg))))
 
-(defun supertag-migration--ensure-flag ()
-  "Ensure global field model is enabled for migration."
-  (unless supertag-use-global-fields
-    (error "Set `supertag-use-global-fields' to t before running migration")))
-
 (defun supertag-migration--compare-field-defs (a b)
   "Return non-nil when field definitions A and B are compatible.
 Compares :type and :config/ :options, ignoring ordering of plist."
@@ -1567,15 +1563,33 @@ DEFS-TABLE is hash of known field definitions (from store plus newly collected).
     (message "Supertag migration finished (dry-run=%s): fields=%d associations=%d values=%d skipped=%d conflicts=%d"
              (if dry-run "yes" "no") fields assocs vals skipped (length conflicts))))
 
+(defun supertag-migration--backup-global-field-cutover ()
+  "Create and return a timestamped live-Store backup before field cutover."
+  (when (hash-table-p supertag--store)
+    (make-directory supertag-db-backup-directory t)
+    (let* ((stamp (format-time-string "%Y%m%d-%H%M%S"))
+           (base (expand-file-name
+                  (format "supertag-db-preglobal-fields-%s.el" stamp)
+                  supertag-db-backup-directory))
+           (backup (if (file-exists-p base)
+                       (make-temp-file
+                        (expand-file-name
+                         (format "supertag-db-preglobal-fields-%s-" stamp)
+                         supertag-db-backup-directory)
+                        nil ".el")
+                     base)))
+      (supertag--persistence-write-store-atomically backup)
+      backup)))
+
 ;;;###autoload
 (defun supertag-migration-run-global-fields (&optional force-write)
   "Run migration to global field model.
 With FORCE-WRITE non-nil (or prefix arg), perform writes; otherwise dry-run."
   (interactive "P")
-  (supertag-migration--ensure-flag)
   (let* ((dry-run (supertag-migration--dry-run-p force-write))
          (audit (supertag-migration-audit-global-fields))
-         (defs-table nil))
+         (defs-table nil)
+         backup)
     (if dry-run
         (progn
           (when (called-interactively-p 'interactive)
@@ -1589,14 +1603,17 @@ With FORCE-WRITE non-nil (or prefix arg), perform writes; otherwise dry-run."
       (with-current-buffer (get-buffer-create supertag-migration-log-buffer)
         (erase-buffer))
       (supertag-migration--log "--- Supertag global field migration start (dry-run=no) ---")
-      (supertag-migration--log "Reminder: ensure a fresh backup exists before applying migration.")
-      (message "[supertag] Applying migration. Run `supertag-backup-database-now` first.")
-      (setq defs-table (supertag-migration--migrate-field-definitions nil))
-      (supertag-migration--log "Stats after field definitions: %S" supertag-migration--stats)
-      (supertag-migration--migrate-tag-associations nil)
-      (supertag-migration--log "Stats after associations: %S" supertag-migration--stats)
-      (supertag-migration--migrate-field-values nil defs-table)
-      (supertag-migration--log "Stats after values: %S" supertag-migration--stats)
+      (setq backup (supertag-migration--backup-global-field-cutover))
+      (supertag-migration--log "Pre-cutover backup: %s"
+                               (or backup "database file absent"))
+      (supertag-with-transaction
+        (setq defs-table (supertag-migration--migrate-field-definitions nil))
+        (supertag-migration--log "Stats after field definitions: %S" supertag-migration--stats)
+        (supertag-migration--migrate-tag-associations nil)
+        (supertag-migration--log "Stats after associations: %S" supertag-migration--stats)
+        (supertag-migration--migrate-field-values nil defs-table)
+        (supertag-migration--log "Stats after values: %S" supertag-migration--stats))
+      (supertag-ops-schema-rebuild-cache)
       (supertag-migration--report nil))))
 
 ;; ------------------------------------------------------------------
@@ -1799,7 +1816,7 @@ This function:
       (let ((field-def `(:name ,property-name
                          :id ,field-id
                          :type ,field-type)))
-        ;; Use supertag-tag-add-field which handles both global and legacy models
+        ;; Use the production global field path.
         (supertag-tag-add-field tag-id field-def))
 
       ;; Step 2: For each node with this property, set the field value

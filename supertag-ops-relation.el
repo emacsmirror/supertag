@@ -118,7 +118,7 @@ Reciprocal links are no longer written."
 
 (defun supertag-reference--update-field-cache (from-id field-id)
   "Sync FIELD-ID value for FROM-ID from reference relations."
-  (when (and supertag-use-global-fields from-id field-id)
+  (when (and from-id field-id)
     (unless supertag-reference--materializing
       (let* ((raw (supertag-store-get-field-value from-id field-id supertag-reference--missing))
              (legacy (if (eq raw supertag-reference--missing)

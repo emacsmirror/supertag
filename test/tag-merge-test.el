@@ -32,7 +32,6 @@
           (supertag-db-backup-directory (expand-file-name "backups" tmp))
           (supertag--store nil)
           (supertag--store-origin nil)
-          (supertag-use-global-fields nil)
           (supertag-query-saved nil)
           (supertag--view-configs (make-hash-table :test 'eq))
           (supertag--index-relations-by-from (make-hash-table :test 'equal))
@@ -55,7 +54,16 @@
 
 (defun tag-merge-test--create-tag (id fields &optional parent)
   "Create tag ID with FIELDS and optional PARENT."
-  (supertag-tag-create (list :id id :name id :fields fields :extends parent)))
+  (supertag-tag-create (list :id id :name id :extends parent))
+  (dolist (field fields)
+    (let* ((field-id (or (plist-get field :id)
+                         (supertag-sanitize-field-id
+                          (plist-get field :name))))
+           (existing (supertag-global-field-get field-id)))
+      (if existing
+          (supertag-tag-associate-field id field-id)
+        (supertag-tag-add-field id field))))
+  (supertag-tag-get id))
 
 (defun tag-merge-test--create-node (id file tags)
   "Create node ID in FILE with TAGS and matching relations."
@@ -223,40 +231,35 @@
   (should (eq (lookup-key supertag-schema-view-mode-map (kbd "m M"))
               #'supertag-schema-merge-marked-tags)))
 
-(ert-deftest tag-merge-plan-requires-definition-choice-for-incompatible-fields ()
+(ert-deftest tag-merge-plan-uses-one-global-field-definition ()
   (tag-merge-test--with-store
     (tag-merge-test--create-tag "a" '((:name "status" :type :string)))
     (tag-merge-test--create-tag "b" '((:name "status" :type :integer)))
-    (let ((blocked (supertag-tag-merge-plan '("a" "b") "merged"
-                                             :selected-fields '("status"))))
-      (should (eq (plist-get (car (plist-get blocked :conflicts)) :kind)
-                  :field-definition)))
-    (let ((resolved (supertag-tag-merge-plan
-                     '("a" "b") "merged"
-                     :selected-fields '("status")
-                     :field-sources '(("status" . "b")))))
-      (should-not (plist-get resolved :conflicts))
-      (should (eq (plist-get (cdr (assoc "status" (plist-get resolved :field-definitions)))
-                             :type)
-                  :integer)))))
+    (let ((plan (supertag-tag-merge-plan
+                 '("a" "b") "merged" :selected-fields '("status"))))
+      (should-not (plist-get plan :conflicts))
+      (should (= 1 (length (plist-get plan :field-definitions))))
+      (should (eq (plist-get
+                   (cdr (assoc "status" (plist-get plan :field-definitions)))
+                   :type)
+                  :string)))))
 
-(ert-deftest tag-merge-definition-choice-filters-incompatible-source-values ()
+(ert-deftest tag-merge-shared-global-field-keeps-one-node-value ()
   (tag-merge-test--with-store
     (let ((file (tag-merge-test--write-org tmp "node.org" "* Node #a #b\n")))
       (tag-merge-test--create-tag "a" '((:name "status" :type :string)))
-      (tag-merge-test--create-tag "b" '((:name "status" :type :integer)))
+      (tag-merge-test--create-tag "b" '((:name "status" :type :string)))
       (tag-merge-test--create-node "n1" file '("a" "b"))
-      (supertag-field-set "n1" "a" "status" "not-an-integer")
-      (supertag-field-set "n1" "b" "status" 2)
+      (supertag-field-set "n1" "a" "status" "first")
+      (supertag-field-set "n1" "b" "status" "second")
       (let* ((plan (supertag-tag-merge-plan
                     '("a" "b") "merged"
-                    :selected-fields '("status")
-                    :field-sources '(("status" . "b"))))
+                    :selected-fields '("status")))
              (_result (supertag-tag-merge-execute plan)))
         (should-not (plist-get plan :conflicts))
-        (should (eq (plist-get (car (plist-get plan :warnings)) :kind)
-                    :incompatible-source-field-definition))
-        (should (= (supertag-field-get "n1" "merged" "status") 2))))))
+        (should-not (plist-get plan :warnings))
+        (should (equal (supertag-field-get "n1" "merged" "status")
+                       "second"))))))
 
 (ert-deftest tag-merge-plan-blocks-deleting-target-ancestor ()
   (tag-merge-test--with-store
@@ -320,7 +323,11 @@
         (should (equal (plist-get (supertag-node-get "n1") :tags) '("work")))
         (should (equal (supertag-field-get "n1" "work" "status") "doing"))
         (should (= (supertag-field-get "n1" "work" "priority") 2))
-        (should (eq (supertag-field-get "n1" "task" "status" :missing) :missing))
+        ;; TAG-ID is schema context, not part of global value identity.
+        (should (equal (supertag-field-get
+                        "n1" "task" "status" :missing)
+                       "doing"))
+        (should-not (supertag-tag-get-field "task" "status"))
         (should (supertag-relation-find-between "n1" "work" :node-tag))
         (let ((automation (supertag-store-get-entity :automations "auto-1")))
           (should (equal (plist-get automation :condition)
@@ -336,7 +343,7 @@
           (should (search-forward "#work" nil t))
           (should (search-forward "#tasking" nil t)))))))
 
-(ert-deftest tag-merge-existing-target-preserves-fields-and-requires-value-resolution ()
+(ert-deftest tag-merge-existing-target-preserves-global-fields-and-values ()
   (tag-merge-test--with-store
     (let* ((file (tag-merge-test--write-org tmp "node.org" "* Node #old-a #old-b #work\n"))
            (status '(:name "status" :type :string))
@@ -349,22 +356,17 @@
       (supertag-field-set "n1" "work" "owner" "alice")
       (supertag-field-set "n1" "old-a" "status" "doing")
       (supertag-field-set "n1" "old-b" "status" "done")
-      (let ((blocked (supertag-tag-merge-plan '("old-a" "old-b") "work"
-                                               :selected-fields '("status"))))
-        (should (= 1 (length (plist-get blocked :conflicts))))
-        (should-error (supertag-tag-merge-execute blocked)))
-      (let* ((resolved (supertag-tag-merge-plan
-                        '("old-a" "old-b") "work"
-                        :selected-fields '("status")
-                        :resolutions '((("n1" "status") . "doing"))))
-             (_result (supertag-tag-merge-execute resolved)))
-        (should-not (plist-get resolved :conflicts))
-        (should (equal (supertag-field-get "n1" "work" "status") "doing"))
+      (let* ((plan (supertag-tag-merge-plan
+                    '("old-a" "old-b") "work"
+                    :selected-fields '("status")))
+             (_result (supertag-tag-merge-execute plan)))
+        (should-not (plist-get plan :conflicts))
+        (should (equal (supertag-field-get "n1" "work" "status") "done"))
         (should (equal (supertag-field-get "n1" "work" "owner") "alice"))
         (should (supertag-tag-get-field "work" "owner"))
         (should (= 1 (length (supertag-relation-find-between "n1" "work" :node-tag))))))))
 
-(ert-deftest tag-merge-multi-value-resolution-is-explicit ()
+(ert-deftest tag-merge-multi-value-field-keeps-global-node-value ()
   (tag-merge-test--with-store
     (let* ((file (tag-merge-test--write-org tmp "node.org" "* Node #a #b\n"))
            (labels '(:name "labels" :type :tag)))
@@ -375,12 +377,11 @@
       (supertag-field-set "n1" "b" "labels" "green")
       (let* ((plan (supertag-tag-merge-plan
                     '("a" "b") "merged"
-                    :selected-fields '("labels")
-                    :resolutions '((("n1" "labels") . (:merge-values ("red" "green"))))))
+                    :selected-fields '("labels")))
              (_result (supertag-tag-merge-execute plan)))
         (should-not (plist-get plan :conflicts))
         (should (equal (supertag-field-get "n1" "merged" "labels")
-                       '("red" "green")))))))
+                       "green"))))))
 
 (ert-deftest tag-merge-global-fields-retains-selected-and-drops-orphaned-values ()
   (tag-merge-test--with-store

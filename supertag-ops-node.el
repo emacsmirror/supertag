@@ -164,35 +164,26 @@ This operation is atomic and ensures no dangling references remain."
 
 (defun supertag-node-initialize-tag-fields (node-id tag-id)
   "Initialize missing global fields associated with TAG-ID on NODE-ID."
-  (when supertag-use-global-fields
-    (let* ((assoc-table
-            (supertag-store-get-collection :tag-field-associations))
-           (entries (and (hash-table-p assoc-table)
-                         (gethash tag-id assoc-table)))
-           (values (supertag-store-get-collection :field-values))
-           (node-table (and (hash-table-p values) (gethash node-id values))))
-      (dolist (entry (and (listp entries) entries))
-        (when-let* ((field-id (plist-get entry :field-id)))
-          (unless (and node-table (ht-contains? node-table field-id))
-            (supertag-store-put-field-value node-id field-id nil)))))))
+  (let* ((assoc-table
+          (supertag-store-get-collection :tag-field-associations))
+         (entries (and (hash-table-p assoc-table)
+                       (gethash tag-id assoc-table)))
+         (values (supertag-store-get-collection :field-values))
+         (node-table (and (hash-table-p values) (gethash node-id values))))
+    (dolist (entry (and (listp entries) entries))
+      (when-let* ((field-id (plist-get entry :field-id)))
+        (unless (and node-table (ht-contains? node-table field-id))
+          (supertag-store-put-field-value node-id field-id nil))))))
 
 (defun supertag-node-clear-tag-fields (node-id tag-id)
   "Clear field values associated with TAG-ID from NODE-ID."
-  (if supertag-use-global-fields
-      (let* ((assoc-table
-              (supertag-store-get-collection :tag-field-associations))
-             (entries (and (hash-table-p assoc-table)
-                           (gethash tag-id assoc-table))))
-        (dolist (entry (and (listp entries) entries))
-          (when-let* ((field-id (plist-get entry :field-id)))
-            (supertag-store-remove-field-value node-id field-id))))
-    (let* ((tags (supertag-store-get-collection :tags))
-           (tag-data (and (hash-table-p tags) (gethash tag-id tags))))
-      (dolist (field (plist-get tag-data :fields))
-        (when-let* ((field-name (plist-get field :name)))
-          (when (fboundp 'supertag-field-remove)
-            (ignore-errors
-              (supertag-field-remove node-id tag-id field-name))))))))
+  (let* ((assoc-table
+          (supertag-store-get-collection :tag-field-associations))
+         (entries (and (hash-table-p assoc-table)
+                       (gethash tag-id assoc-table))))
+    (dolist (entry (and (listp entries) entries))
+      (when-let* ((field-id (plist-get entry :field-id)))
+        (supertag-store-remove-field-value node-id field-id)))))
 
 (defun supertag-node-add-tag (node-id tag-id)
   "Add a tag to a node.

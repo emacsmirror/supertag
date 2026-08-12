@@ -59,6 +59,8 @@ distinct :created-at timestamps; four are tagged \"area\" (no field).
 Returns the list of created node ids, in creation order."
   (supertag-tag-create (list :id "project" :name "project"))
   (supertag-tag-create (list :id "area" :name "area"))
+  (supertag-tag-add-field
+   "project" '(:name "priority" :type :integer))
   (let (ids)
     (cl-loop
      for i from 1 to 6

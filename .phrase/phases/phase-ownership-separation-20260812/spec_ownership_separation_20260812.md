@@ -53,6 +53,7 @@
 2. 系统只提交 Semantic Fact。
 3. 相关 Query Projection 失效并重建。
 4. 系统不向 Org 插入伪装成事实的 reciprocal text。
+5. 字段显示名修改保留稳定 field ID 与已有 node values；消费者通过 resolver 继续命中同一字段。
 
 ### Reference navigation
 
@@ -77,6 +78,7 @@
 - ID-less heading 在用户显式创建持久 Org ID 前保持普通 heading，并被 Document Projector 跳过。
 - Document Link、field-reference 与 Semantic Edge 必须可区分来源。
 - Node 删除必须处理 global field values、relations 与 derived indexes。
+- Legacy field apply 必须先生成 live-Store backup；冲突、孤立项或写入失败不得留下部分 global 数据。
 - Reindex 不得把缺失文档解释为“允许删除”，除非 sync snapshot 明确为 complete。
 - `SUPERTAG_ALIASES` 当前是 Org concept property；不能直接充当未来的 Semantic Tag alias registry。
 - Saved query 与 exported view config 在迁入 semantic store 前，必须明确其外部持久化 owner。
@@ -93,6 +95,7 @@
 - Node projection 不再依赖 unknown-key merge 保存 Semantic Facts。
 - Semantic Tag 使用稳定 ID；rename 不要求重写所有引用集合和 Org 文件。
 - UI、View、Completion、Board、Query 与 Automation 不再读取 raw collection hash table。
-- Legacy `:fields` 不再有生产 writer，且完成可验证迁移后删除。
+- Legacy `:fields` 不再有生产 reader/writer；只保留 migration/低层兼容 seam，并在 task028 完成可验证迁移后删除。
+- 字段定义、Tag 关联和值只写入 `:field-definitions`、`:tag-field-associations`、`:field-values`；旧开关不能改变该路径。
 - `:boards`、`:automations`、queries、views 与 unresolved conflicts 受到 durable contract 保护。
 - 完整 ERT、byte compile、migration fixtures 和 `git diff --check` 通过。

@@ -5,7 +5,7 @@
 ;; - Global field CRUD stored in :field-definitions
 ;; - Tag/field association list stored in :tag-field-associations
 ;; - Node/field values stored in :field-values
-;; Intended to coexist with legacy tag-scoped model during transition.
+;; Legacy tag-scoped fields are read only by the migration module.
 
 ;;; Code:
 
@@ -80,7 +80,8 @@ Accepts both legacy string lists and plist entries."
   (let ((previous (supertag-store-get-field-definition field-id)))
     (unless previous
       (error "Global field '%s' not found" field-id))
-    (let* ((updated (funcall updater (copy-tree previous)))
+    (let* ((updated (plist-put (funcall updater (copy-tree previous))
+                               :id field-id))
            (normalized (supertag-global-field--normalize updated)))
       (supertag-store-put-field-definition field-id normalized t)
       (supertag-schema-rebuild-global-field-caches)
