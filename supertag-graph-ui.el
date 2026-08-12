@@ -21,6 +21,7 @@
 
 (require 'json)
 (require 'supertag-view-api)
+(require 'supertag-services-query)
 (require 'supertag-core-schema)
 
 ;;; --- Configuration ---
@@ -179,7 +180,7 @@ Starts HTTP and WebSocket servers to serve the graph UI."
 Tries the supertag store first (file + position), then falls back
 to `org-id-find' so the function works even without an up-to-date
 org-id-locations cache."
-  (let* ((node-data (supertag-node-get id))
+  (let* ((node-data (supertag-query-node id))
          (file (and node-data (plist-get node-data :file)))
          (pos  (and node-data
                     (or (plist-get node-data :position)
@@ -210,62 +211,45 @@ org-id-locations cache."
 (defun supertag-graph-ui--get-nodes ()
   "Get all nodes from supertag store as a list of alists.
 Format is compatible with org-roam-ui frontend."
-  (let ((nodes-ht (supertag-view-api-get-collection :nodes))
-        (result '()))
-    (when (hash-table-p nodes-ht)
-      (maphash
-       (lambda (id data)
-         (when (and id (stringp id) data)
-           (push `((id . ,id)
-                   (file . ,(or (plist-get data :file) ""))
-                   (title . ,(or (plist-get data :title) "Untitled"))
-                   (level . ,(or (plist-get data :level) 0))
-                   (pos . ,(or (plist-get data :position) 0))
-                   (olp . ,(vconcat (or (plist-get data :olp) '())))
-                   (properties . ,(make-hash-table :size 0))
-                   (tags . ,(vconcat (or (plist-get data :tags) '()))))
-                 result)))
-       nodes-ht))
-    (nreverse result)))
+  (mapcar
+   (lambda (pair)
+     (let* ((id (car pair))
+            (data (cdr pair)))
+       `((id . ,id)
+         (file . ,(or (plist-get data :file) ""))
+         (title . ,(or (plist-get data :title) "Untitled"))
+         (level . ,(or (plist-get data :level) 0))
+         (pos . ,(or (plist-get data :position) 0))
+         (olp . ,(vconcat (or (plist-get data :olp) '())))
+         (properties . ,(make-hash-table :size 0))
+         (tags . ,(vconcat (or (plist-get data :tags) '()))))))
+   (supertag-query-nodes
+    (lambda (id data) (and id (stringp id) data)))))
 
 (defun supertag-graph-ui--get-links ()
-  "Get all relations from supertag store as a list of alists.
+  "Get all relations between existing nodes as a list of alists.
 Includes semantic type metadata (label, color, style) when available."
-  (let ((rels-ht (supertag-view-api-get-collection :relations))
-        (nodes-ht (supertag-view-api-get-collection :nodes))
-        (result '()))
-    (when (hash-table-p rels-ht)
-      (maphash
-       (lambda (_id data)
-         (when data
-           (let* ((rel (if (hash-table-p data)
-                           (let (plist)
-                             (maphash (lambda (k v)
-                                        (setq plist (plist-put plist k v)))
-                                      data)
-                             plist)
-                         data))
-                  (from (plist-get rel :from))
-                  (to (plist-get rel :to))
-                  (type (plist-get rel :type))
-                  (type-str (and type (substring (symbol-name type) 1)))
-                  (meta (and type (supertag-relation-type-get type))))
-             ;; Only include links where both nodes exist
-             (when (and from to
-                        (hash-table-p nodes-ht)
-                        (gethash from nodes-ht)
-                        (gethash to nodes-ht))
-               (push `((source . ,from)
-                       (target . ,to)
-                       (type . ,(or type-str "id"))
-                       ,@(when meta
-                           `((label . ,(plist-get meta :name))
-                             (color . ,(or (plist-get meta :color) ""))
-                             (style . ,(let ((s (plist-get meta :style)))
-                                         (if (eq s :dashed) "dashed" "solid"))))))
-                     result)))))
-       rels-ht))
-    (nreverse result)))
+  (let* ((node-ids
+          (mapcar #'car
+                  (supertag-query-nodes
+                   (lambda (id data) (and id (stringp id) data)))))
+         (relations (supertag-query-relations-among node-ids))
+         (result '()))
+    (dolist (rel relations (nreverse result))
+      (let* ((from (plist-get rel :from))
+             (to (plist-get rel :to))
+             (type (plist-get rel :type))
+             (type-str (and type (substring (symbol-name type) 1)))
+             (meta (and type (supertag-relation-type-get type))))
+        (push `((source . ,from)
+                (target . ,to)
+                (type . ,(or type-str "id"))
+                ,@(when meta
+                    `((label . ,(plist-get meta :name))
+                      (color . ,(or (plist-get meta :color) ""))
+                      (style . ,(let ((s (plist-get meta :style)))
+                                  (if (eq s :dashed) "dashed" "solid"))))))
+              result)))))
 
 (defun supertag-graph-ui--get-tags ()
   "Get all unique tag names."
@@ -279,49 +263,51 @@ Includes semantic type metadata (label, color, style) when available."
 Uses :file, :level, and :position fields to determine parent-child
 relationships within each file.  Returns a list of alists with
 source (parent id), target (child id), and type \"parent-child\"."
-  (let ((nodes-ht (supertag-view-api-get-collection :nodes))
-        (by-file (make-hash-table :test 'equal))
+  (let ((by-file (make-hash-table :test 'equal))
         (result '()))
-    (when (hash-table-p nodes-ht)
-      ;; Group nodes by file
-      (maphash
-       (lambda (id data)
-         (when (and id (stringp id) data)
-           (let ((file (plist-get data :file)))
-             (when (and file (stringp file) (not (string-empty-p file)))
-               (puthash file
-                        (cons (list :id id
-                                    :level (or (plist-get data :level) 0)
-                                    :pos (or (plist-get data :position) 0))
-                              (gethash file by-file '()))
-                        by-file)))))
-       nodes-ht)
-      ;; Per file: sort by position, then use a stack to find each
-      ;; node's nearest ancestor (lowest enclosing level).
-      (maphash
-       (lambda (_file nodes)
-         (let* ((sorted (sort (copy-sequence nodes)
-                              (lambda (a b)
-                                (< (plist-get a :pos)
-                                   (plist-get b :pos)))))
-                (stack '()))
-           (dolist (node sorted)
-             (let ((level (plist-get node :level))
-                   (id    (plist-get node :id)))
-               ;; Pop entries whose level >= current (they are siblings
-               ;; or deeper, not ancestors).
-               (while (and stack
-                           (>= (plist-get (car stack) :level) level))
-                 (setq stack (cdr stack)))
-               ;; Top of stack is the direct parent, if any.
-               (when stack
-                 (push `((source . ,(plist-get (car stack) :id))
-                         (target . ,id)
-                         (type   . "parent-child"))
-                       result))
-               (push node stack)))))
-       by-file))
+    ;; Group nodes by file
+    (dolist (pair
+             (supertag-query-nodes
+              (lambda (id data)
+                (and id (stringp id) data
+                     (stringp (plist-get data :file))
+                     (not (string-empty-p (plist-get data :file)))))))
+      (let* ((id (car pair))
+             (data (cdr pair))
+             (file (plist-get data :file)))
+        (puthash file
+                 (cons (list :id id
+                             :level (or (plist-get data :level) 0)
+                             :pos (or (plist-get data :position) 0))
+                       (gethash file by-file '()))
+                 by-file)))
+    ;; Per file: sort by position, then use a stack to find each
+    ;; node's nearest ancestor (lowest enclosing level).
+    (maphash
+     (lambda (_file nodes)
+       (let* ((sorted (sort (copy-sequence nodes)
+                            (lambda (a b)
+                              (< (plist-get a :pos)
+                                 (plist-get b :pos)))))
+              (stack '()))
+         (dolist (node sorted)
+           (let ((level (plist-get node :level))
+                 (id    (plist-get node :id)))
+             ;; Pop entries whose level >= current (they are siblings
+             ;; or deeper, not ancestors).
+             (while (and stack
+                         (>= (plist-get (car stack) :level) level))
+               (setq stack (cdr stack)))
+             ;; Top of stack is the direct parent, if any.
+             (when stack
+               (push `((source . ,(plist-get (car stack) :id))
+                       (target . ,id)
+                       (type   . "parent-child"))
+                     result))
+             (push node stack)))))
+     by-file)
     (nreverse result)))
+
 
 (defun supertag-graph-ui--send-graphdata ()
   "Send graph data to the connected WebSocket client."

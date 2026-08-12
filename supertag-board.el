@@ -716,19 +716,18 @@ Result shape is an alist: (TAG-ID . [((name . ..) (value . ..)) ...])."
 
 (defun supertag-board--send-node-list ()
   "Send list of all available nodes to the frontend."
-  (let ((nodes-ht (supertag-view-api-get-collection :nodes))
-        (result '()))
-    (when (hash-table-p nodes-ht)
-      (maphash
-       (lambda (id data)
-         (when (and id (stringp id) data)
-           (push `((id . ,id)
-                   (title . ,(or (plist-get data :title) "Untitled"))
-                   (tags . ,(vconcat (or (plist-get data :tags) '())))
-                   (file . ,(or (plist-get data :file) "")))
-                 result)))
-       nodes-ht))
-    (supertag-board--ws-send "node-list" (vconcat (nreverse result)))))
+  (let ((result
+         (mapcar
+          (lambda (pair)
+            (let* ((id (car pair))
+                   (data (cdr pair)))
+              `((id . ,id)
+                (title . ,(or (plist-get data :title) "Untitled"))
+                (tags . ,(vconcat (or (plist-get data :tags) '())))
+                (file . ,(or (plist-get data :file) "")))))
+          (supertag-query-nodes
+           (lambda (id data) (and id (stringp id) data))))))
+    (supertag-board--ws-send "node-list" (vconcat result))))
 
 ;;; --- Store Change Listener ---
 
