@@ -333,3 +333,17 @@ Behavior：触发恰好一次、recursion guard、tag/field/relation condition �
 Risk：无；所有替换均为 1:1 等价映射。
 
 Verification：`test-automation-scheduled.el` self-check 通过（scheduled rule 触发 + days-of-week filter）；sync-worker/query-model/ownership 定向 47/47；干净临时 worktree（HEAD + task024 patch）全量 ERT 489/489；3 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过（automation 两文件的 check-parens 报错为仓库既有 false positive，与本次修改无关）。
+
+## 2026-08-13 — task025 formula/rollup 语义收敛
+
+- Add `supertag-services-formula.el`：新增 `supertag-rollup-apply`，为 Table/Virtual Column/Automation/Relation 共用的唯一 rollup 归约，词汇表为 count/sum/avg(average)/min/max/first/last/unique-count/concat/function-object，兼容 VC 的 `:keyword` 与 Automation 的 `'symbol` 两种写法。
+- Modify `supertag-virtual-column.el`：`--compute-rollup` 与 `--compute-aggregate` 的 pcase 归约替换为 `supertag-rollup-apply`。
+- Modify `supertag-automation.el`：`--apply-rollup-function` 收缩为共享归约调用；`--evaluate-formula` 改为委托 `supertag-formula-evaluate`（保留 error→0 容错）；删除 `supertag-automation-calculate-rollup` 中永远不执行的 `supertag-node-update-property` fboundp 写回分支。
+- Modify `supertag-ops-relation.el`：`supertag-relation-calculate-rollup` 的 `(funcall rollup-function values)` 改为 `supertag-rollup-apply`（同时修复了传 symbol 名时 funcall 会报错的潜在缺陷）。
+- Modify `test/formula-test.el`：新增共享归约 parity 测试（关键词/符号两种词汇、空列表语义）。
+
+Behavior：materialized rollup 结果不存在——全部 rollup 都是派生投影（VC 缓存仅会话内、不持久化）；此前 fboundp 写回分支是死代码，删除后语义不变。
+
+Risk：Automation `average` 空列表结果从 0.0 变为 0（数值相等，无实际影响）；`{{...}}` 公式中数字字段值的 literal 嵌入与旧 string 嵌入在算术语义下等价，字符串字段行为更正确。
+
+Verification：formula/aggregate/vc/view-table 定向 42/42；干净临时 worktree（HEAD + task025 patch）全量 ERT 490/490；4 个修改 Elisp byte-compile 零新增 warning、`git diff --check` 通过。
