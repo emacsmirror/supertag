@@ -23,6 +23,7 @@
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
 (require 'supertag-ops-field)
+(require 'supertag-services-query)
 
 ;; --- Query & Entity Fetch ---
 
@@ -43,7 +44,7 @@ This function is UI-agnostic and read-only."
        (let ((tag (plist-get query-spec :value)))
          (unless (and tag (stringp tag) (not (string-empty-p tag)))
            (error "Query :tag requires a non-empty :value string"))
-         (supertag-index-get-nodes-by-tag
+         (supertag-query-node-ids-by-tag
           tag
           (plist-get query-spec :include-descendants))))
       ((or :nodes :tags :relations :embeds
@@ -96,7 +97,7 @@ Callers MUST treat the returned hash table as read-only."
            (:database :databases)
            (_ type))))
     (pcase normalized
-    (:nodes (supertag-node-get entity-id))
+    (:nodes (supertag-query-node entity-id))
     (:tags (supertag-store-get-entity :tags entity-id))
     (:automations (supertag-store-get-entity :automations entity-id))
     (_ (supertag-store-get-entity normalized entity-id)))))
@@ -116,23 +117,16 @@ Entities that do not exist are skipped."
 
 (defun supertag-view-api-list-tags ()
   "Return tag names (sorted)."
-  (let ((tags (supertag-view-api-get-collection :tags))
-        (names '()))
-    (when (hash-table-p tags)
-      (maphash
-       (lambda (_id tag-data)
-         (when-let ((name (plist-get tag-data :name)))
-           (push name names)))
-       tags))
-    (sort (delete-dups names) #'string<)))
+  (sort (delete-dups
+         (mapcar (lambda (tag) (plist-get tag :name))
+                 (supertag-query-tag-paths)))
+        #'string<))
 
 (defun supertag-view-api-list-tag-ids ()
   "Return canonical tag IDs (sorted)."
-  (let ((tags (supertag-view-api-get-collection :tags))
-        ids)
-    (when (hash-table-p tags)
-      (maphash (lambda (id _tag-data) (push id ids)) tags))
-    (sort ids #'string<)))
+  (sort (mapcar (lambda (tag) (plist-get tag :id))
+                (supertag-query-tag-paths))
+        #'string<))
 
 (defun supertag-view-api-tag-id (tag-name)
   "Return tag ID for TAG-NAME, or nil."
@@ -144,7 +138,7 @@ Entities that do not exist are skipped."
 (defun supertag-view-api-nodes-by-tag (tag-name &optional include-descendants)
   "Return node IDs that have TAG-NAME.
 When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' descendants."
-  (supertag-index-get-nodes-by-tag tag-name include-descendants))
+  (supertag-query-node-ids-by-tag tag-name include-descendants))
 
 (defun supertag-view-api-tag-descendants (tag-name)
   "Return Tag IDs that transitively extend TAG-NAME."
@@ -162,7 +156,7 @@ When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' descendants."
 FIELD-NAME is a string (as used by `supertag-field-get-with-default')."
   (unless (and (stringp field-name) (not (string-empty-p field-name)))
     (error "FIELD-NAME must be a non-empty string"))
-  (supertag-field-get-with-default node-id tag-id field-name))
+  (supertag-query-field-value node-id tag-id field-name))
 
 ;; --- Subscription ---
 

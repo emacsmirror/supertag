@@ -20,10 +20,10 @@
 
 (require 'json)
 (require 'url-util)
+(require 'supertag-core-schema)
 (require 'supertag-view-api)
-(require 'supertag-ops-tag)
-(require 'supertag-ops-field)
 (require 'supertag-board-ops)
+(require 'supertag-services-query)
 
 ;;; --- Configuration ---
 
@@ -386,7 +386,8 @@ Starts HTTP and WebSocket servers to serve the board UI."
 (defun supertag-board--send-board-data (board)
   "Serialize and send BOARD data to the frontend."
   (let* ((board-id (plist-get board :id))
-         (placements (plist-get board :node-placements))
+         (detail (supertag-query-board-detail board-id))
+         (board (plist-get detail :board))
          (board-edges (plist-get board :board-edges))
          (groups (plist-get board :groups))
          (viewport (plist-get board :viewport))
@@ -394,17 +395,17 @@ Starts HTTP and WebSocket servers to serve the board UI."
          (nodes-data '())
          (edges-data '())
          (groups-data '())
-         ;; Also gather global relations between placed nodes
-         (placed-ids (mapcar #'car placements))
-         (global-edges (supertag-board--get-global-edges placed-ids)))
+         (global-edges
+          (supertag-board--get-global-edges (plist-get detail :relations))))
     ;; Build nodes
-    (dolist (placement placements)
-      (let* ((node-id (car placement))
-             (pos (cdr placement))
-             (node-store (and (stringp node-id) (not (string-empty-p node-id))
-                              (ignore-errors (supertag-view-api-get-entity :nodes node-id))))
-             (tags (when node-store (plist-get node-store :tags)))
-             (tag-fields (supertag-board--node-tag-fields-preview node-id tags)))
+    (dolist (entry (plist-get detail :nodes))
+      (let* ((node-id (plist-get entry :id))
+             (pos (plist-get entry :placement))
+             (node-detail (plist-get entry :detail))
+             (node-store (plist-get node-detail :node))
+             (tags (plist-get node-detail :tags))
+             (tag-fields (supertag-board--node-tag-fields-preview
+                          tags (plist-get node-detail :fields))))
         (push `((id . ,node-id)
                 (title . ,(if node-store
                               (or (plist-get node-store :title) "Untitled")
@@ -472,63 +473,45 @@ Starts HTTP and WebSocket servers to serve the board UI."
    ((eq value t) "true")
    (t (format "%s" value))))
 
-(defun supertag-board--node-tag-fields-preview (node-id tags)
-  "Return per-tag fields for NODE-ID using TAGS.
+(defun supertag-board--node-tag-fields-preview (tags fields)
+  "Return FIELDS grouped by TAGS for board display.
 Result shape is an alist: (TAG-ID . [((name . ..) (value . ..)) ...])."
   (let ((result '()))
     (dolist (tag-id tags (nreverse result))
-      (let* ((field-defs (ignore-errors (supertag-tag-get-all-fields tag-id)))
-             (items '()))
-        (dolist (field-def (or field-defs '()))
-          (let* ((field-name (or (plist-get field-def :name)
-                                 (plist-get field-def :id)))
-                 (raw-value (and field-name
-                                 (ignore-errors
-                                   (supertag-field-get-with-default node-id tag-id field-name)))))
-            (when field-name
-              (push `((name . ,field-name)
-                      (value . ,(supertag-board--field-value-to-string raw-value)))
-                    items))))
+      (let (items)
+        (dolist (entry fields)
+          (when (equal tag-id (plist-get entry :tag-id))
+            (let* ((field-def (plist-get entry :field-def))
+                   (field-name (or (plist-get field-def :name)
+                                   (plist-get field-def :id))))
+              (when field-name
+                (push `((name . ,field-name)
+                        (value . ,(supertag-board--field-value-to-string
+                                   (plist-get entry :value))))
+                      items)))))
         (push (cons tag-id (vconcat (nreverse items))) result)))))
 
-(defun supertag-board--get-global-edges (node-ids)
-  "Get global relations between NODE-IDS as edge alists."
-  (let ((rels-ht (supertag-view-api-get-collection :relations))
-        (id-set (make-hash-table :test 'equal))
-        (result '()))
-    (dolist (id node-ids)
-      (puthash id t id-set))
-    (when (hash-table-p rels-ht)
-      (maphash
-       (lambda (_id data)
-         (when data
-           (let* ((rel (if (hash-table-p data)
-                           (let (plist)
-                             (maphash (lambda (k v)
-                                        (setq plist (plist-put plist k v)))
-                                      data)
-                             plist)
-                         data))
-                  (from (plist-get rel :from))
-                  (to (plist-get rel :to))
-                  (type (plist-get rel :type)))
-             (when (and (gethash from id-set)
-                        (gethash to id-set))
-               (let ((meta (and type (supertag-relation-type-get type))))
-                 (push `((id . ,(format "global-%s-%s" from to))
-                         (from . ,from)
-                         (to . ,to)
-                         (label . ,(if meta (or (plist-get meta :name) "") ""))
-                         (style . ,(if meta
-                                       (let ((s (plist-get meta :style)))
-                                         (if (eq s :dashed) "dashed" "solid"))
-                                     "solid"))
-                         (color . ,(when meta (plist-get meta :color)))
-                         (sourceHandle . "right")
-                         (targetHandle . "left")
-                         (isGlobal . t))
-                       result))))))
-       rels-ht))
+(defun supertag-board--get-global-edges (relations)
+  "Format RELATIONS as global board edge alists."
+  (let (result)
+    (dolist (relation relations)
+      (let* ((from (plist-get relation :from))
+             (to (plist-get relation :to))
+             (type (plist-get relation :type))
+             (meta (and type (supertag-relation-type-get type))))
+        (push `((id . ,(format "global-%s-%s" from to))
+                (from . ,from)
+                (to . ,to)
+                (label . ,(if meta (or (plist-get meta :name) "") ""))
+                (style . ,(if meta
+                              (let ((style (plist-get meta :style)))
+                                (if (eq style :dashed) "dashed" "solid"))
+                            "solid"))
+                (color . ,(when meta (plist-get meta :color)))
+                (sourceHandle . "right")
+                (targetHandle . "left")
+                (isGlobal . t))
+              result)))
     result))
 
 (defun supertag-board--on-create-board (data)

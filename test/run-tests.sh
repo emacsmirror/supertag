@@ -10,6 +10,7 @@
 #   ./test/run-tests.sh restore      # Run only snapshot restore tests
 #   ./test/run-tests.sh field-ref    # Run only node-reference field tests
 #   ./test/run-tests.sh query        # Run only query-block tests
+#   ./test/run-tests.sh query-model  # Run only concrete Query Model tests
 #   ./test/run-tests.sh smart-key    # Run only semantic activation tests
 #   ./test/run-tests.sh tag-merge    # Run only destructive tag merge tests
 #   ./test/run-tests.sh reference-migration # Run reciprocal migration tests
@@ -52,6 +53,7 @@ TEST_FILES=(
     "test/canonical-serialization-test.el"
     "test/query-block-test.el"
     "test/query-library-test.el"
+    "test/query-model-test.el"
     "test/transaction-test.el"
     "test/merge-test.el"
     "test/git-integration-test.el"
@@ -89,7 +91,8 @@ if [ $# -gt 0 ]; then
             persist)   FILTER="$FILTER test/supertag-persistence-test.el test/persistence-hardening-test.el test/supertag-restore-test.el" ;;
             restore)   FILTER="$FILTER test/supertag-restore-test.el" ;;
             canon)     FILTER="$FILTER test/canonical-serialization-test.el" ;;
-            query)     FILTER="$FILTER test/query-block-test.el test/query-library-test.el" ;;
+            query)     FILTER="$FILTER test/query-block-test.el test/query-library-test.el test/query-model-test.el" ;;
+            query-model) FILTER="$FILTER test/query-model-test.el" ;;
             tx)        FILTER="$FILTER test/transaction-test.el" ;;
             merge)     FILTER="$FILTER test/merge-test.el" ;;
             git)       FILTER="$FILTER test/git-integration-test.el test/git-sync-mode-test.el" ;;
@@ -103,7 +106,7 @@ if [ $# -gt 0 ]; then
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership all"; exit 1 ;;
         esac
     done
     TEST_FILES=($FILTER)

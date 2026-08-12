@@ -98,15 +98,9 @@ If OTHER-WINDOW is non-nil, open in another window."
 ;;; --- Shared Node View State Builder ---
 
 (defun supertag-view--resolve-node-tags (node-id)
-  "Return tag IDs for NODE-ID, preferring relations and falling back to node tags."
+  "Compatibility wrapper returning the Semantic Tag IDs for NODE-ID."
   (when (and node-id (stringp node-id))
-    (let* ((rel-tags (mapcar (lambda (rel) (plist-get rel :to))
-                             (supertag-relation-find-by-from node-id :node-tag)))
-           (node (supertag-view-api-get-entity :nodes node-id))
-           (node-tags (when node (plist-get node :tags)))
-           (merged (cl-delete-duplicates (append rel-tags (or node-tags '()))
-                                         :test #'equal)))
-      (cl-remove-if-not #'stringp merged))))
+    (supertag-query-node-tags node-id)))
 
 (defun supertag-view-build-node-state (node-id)
   "Build a reusable view state plist for NODE-ID.
@@ -127,37 +121,7 @@ Returned keys (current contract):
 - :field-count  — Total number of fields across all tags
 - :ref-count    — Total number of references (:refs-to + :refs-from)"
   (when (and node-id (stringp node-id))
-    (let* ((node (supertag-view-api-get-entity :nodes node-id)))
-      (when node
-        (let* ((tag-ids (supertag-view--resolve-node-tags node-id))
-               (fields '()))
-          ;; Collect all fields for each tag on this node.
-          (dolist (tag-id tag-ids)
-            (let ((tag-fields (ignore-errors (supertag-tag-get-all-fields tag-id))))
-              (dolist (field-def tag-fields)
-                (let* ((fname (plist-get field-def :name))
-                       (value (and fname
-                                   (supertag-view-api-node-field-in-tag node-id tag-id fname))))
-                  (push (list :tag-id tag-id
-                              :field-def field-def
-                              :value value)
-                        fields)))))
-          (setq fields (nreverse fields))
-          ;; Compute reference info from :reference relations.
-          (let* ((refs-to-rels (supertag-relation-find-by-from node-id :reference))
-                 (refs-to (mapcar (lambda (rel) (plist-get rel :to)) refs-to-rels))
-                 (refs-from-rels (supertag-relation-find-by-to node-id :reference))
-                 (refs-from (mapcar (lambda (rel) (plist-get rel :from))
-                                    refs-from-rels)))
-            ;; Build final state plist.
-            (list :id node-id
-                  :node node
-                  :tags tag-ids
-                  :fields fields
-                  :refs-to refs-to
-                  :refs-from refs-from
-                  :field-count (length fields)
-                  :ref-count (+ (length refs-to) (length refs-from)))))))))
+    (supertag-query-node-detail node-id)))
 
 (defvar supertag-ui--node-cache nil
   "Cache for node selection candidates to improve performance.")

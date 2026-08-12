@@ -1,35 +1,139 @@
 ;;; org-supertag/services/query.el --- Query system for Org-Supertag -*- lexical-binding: t; -*-
 
-;;; ⚠️  ARCHITECTURE WARNING ⚠️
-;; This file should ONLY contain the high-level S-expression query engine.
-;;
-;; For simple, internal API queries, use the functions in `supertag-core-scan.el`.
-;; That file contains all scan-based query functions, such as:
-;; - supertag-find-nodes-by-tag           (for complete node data)
-;; - supertag-find-nodes-by-file          (for file-based queries)
-;; - supertag-find-nodes-by-title         (for title pattern matching)
-;; - supertag-find-nodes                  (for complex predicate filtering)
-;; - supertag-index-get-nodes-by-tag      (for tag-based queries, returns IDs)
-;; - supertag-index-get-nodes-by-word     (for full-text search, returns IDs)
-;; - supertag-index-get-nodes-by-date-range (for time-based queries, returns IDs)
-;; - supertag-index-node-has-tag-p        (for boolean checks)
-;;
-;; DO NOT add any simple, internal query functions to this file!
-;;
 ;;; Commentary:
-;; This file provides S-expression query engine for the Org-Supertag
-;; data-centric architecture. It allows users to express complex queries
-;; using a Lisp-like syntax, but should NOT be used for internal module queries.
+;; This module is the read boundary for composed Org-Supertag data.  Concrete
+;; queries hide Store/index joins from UI consumers.  The legacy generic query
+;; helpers remain temporarily for compatibility and must not gain new callers.
 
 ;;; Code:
 
 (require 'cl-lib)
-(require 'supertag-core-store) ; For store buckets
+(require 'supertag-core-scan)
+(require 'supertag-core-store)
+(require 'supertag-board-ops)
+(require 'supertag-ops-relation)
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
-(require 'supertag-ops-field)   ; For supertag-field-get
+(require 'supertag-ops-field)
 
 ;;; --- Query System ---
+
+(defun supertag-query-node (node-id)
+  "Return the Document Projection node for NODE-ID, or nil."
+  (supertag-node-get node-id))
+
+(defun supertag-query-tag-paths ()
+  "Return sorted Semantic Tag path descriptors.
+Each descriptor contains :id, :name, and :display-path."
+  (let (result)
+    (maphash
+     (lambda (tag-id tag)
+       (let ((tag (supertag--ensure-plist tag)))
+         (push (list :id tag-id
+                     :name (or (plist-get tag :name) tag-id)
+                     :display-path (supertag-tag-display-path tag-id))
+               result)))
+     (supertag-store-get-collection :tags))
+    (sort result
+          (lambda (left right)
+            (let ((left-path (plist-get left :display-path))
+                  (right-path (plist-get right :display-path)))
+              (if (equal left-path right-path)
+                  (string< (plist-get left :id) (plist-get right :id))
+                (string< left-path right-path)))))))
+
+(defun supertag-query-node-ids-by-tag (tag-name &optional include-descendants)
+  "Return node IDs tagged with TAG-NAME.
+When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' children."
+  (supertag-index-get-nodes-by-tag tag-name include-descendants))
+
+(defun supertag-query-resolved-fields (tag-id)
+  "Return inherited field definitions resolved for TAG-ID."
+  (supertag-tag-get-all-fields tag-id))
+
+(defun supertag-query-field-value (node-id tag-id field-name)
+  "Return NODE-ID's FIELD-NAME value in TAG-ID's resolved schema."
+  (supertag-field-get-with-default node-id tag-id field-name))
+
+(defun supertag-query-relations-from (entity-id &optional type kind)
+  "Return relations from ENTITY-ID, optionally filtered by TYPE and KIND."
+  (supertag-relation-find-by-from entity-id type kind))
+
+(defun supertag-query-relations-to (entity-id &optional type kind)
+  "Return relations to ENTITY-ID, optionally filtered by TYPE and KIND."
+  (supertag-relation-find-by-to entity-id type kind))
+
+(defun supertag-query-relations-among (entity-ids &optional type kind)
+  "Return relations whose endpoints are both in ENTITY-IDS.
+TYPE and KIND optionally filter the induced relation set."
+  (let ((id-set (make-hash-table :test 'equal))
+        result)
+    (dolist (entity-id entity-ids)
+      (puthash entity-id t id-set))
+    (maphash
+     (lambda (entity-id _present)
+       (dolist (relation (supertag-query-relations-from entity-id type kind))
+         (when (gethash (plist-get relation :to) id-set)
+           (push relation result))))
+     id-set)
+    (nreverse result)))
+
+(defun supertag-query-node-tags (node-id)
+  "Return the Semantic Tag IDs attached to NODE-ID."
+  (let* ((relations (supertag-query-relations-from node-id :node-tag))
+         (relation-tags (mapcar (lambda (relation) (plist-get relation :to))
+                                relations))
+         (node (supertag-query-node node-id))
+         (node-tags (and node (plist-get node :tags))))
+    (cl-remove-if-not
+     #'stringp
+     (cl-delete-duplicates (append relation-tags (or node-tags '()))
+                           :test #'equal))))
+
+(defun supertag-query-node-detail (node-id)
+  "Return the composed node detail needed by node-oriented views."
+  (when-let* ((node (supertag-query-node node-id)))
+    (let ((tag-ids (supertag-query-node-tags node-id))
+          fields)
+      (dolist (tag-id tag-ids)
+        (dolist (field-def (ignore-errors
+                             (supertag-query-resolved-fields tag-id)))
+          (when-let* ((field-name (plist-get field-def :name)))
+            (push (list :tag-id tag-id
+                        :field-def field-def
+                        :value (supertag-query-field-value
+                                node-id tag-id field-name))
+                  fields))))
+      (setq fields (nreverse fields))
+      (let* ((refs-to (mapcar (lambda (relation) (plist-get relation :to))
+                              (supertag-query-relations-from
+                               node-id :reference)))
+             (refs-from (mapcar (lambda (relation) (plist-get relation :from))
+                                (supertag-query-relations-to
+                                 node-id :reference))))
+        (list :id node-id
+              :node node
+              :tags tag-ids
+              :fields fields
+              :refs-to refs-to
+              :refs-from refs-from
+              :field-count (length fields)
+              :ref-count (+ (length refs-to) (length refs-from)))))))
+
+(defun supertag-query-board-detail (board-id)
+  "Return BOARD-ID with placed node details and their induced relations."
+  (when-let* ((board (supertag-board-get board-id)))
+    (let ((placements (plist-get board :node-placements))
+          nodes)
+      (dolist (placement placements)
+        (push (list :id (car placement)
+                    :placement (cdr placement)
+                    :detail (supertag-query-node-detail (car placement)))
+              nodes))
+      (list :board board
+            :nodes (nreverse nodes)
+            :relations (supertag-query-relations-among
+                        (mapcar #'car placements))))))
 
 (defun supertag-query (collection &optional filter)
   "Query data from a COLLECTION in the central store.
@@ -76,14 +180,17 @@ Returns a list of (id . node-data) pairs."
 
 (require 'cl-lib)
 
-(defun supertag-query-sexp (query-sexp)
-  "Execute an S-expression query and return matching node IDs.
+(defun supertag-query-node-ids (query-sexp)
+  "Execute QUERY-SEXP and return matching node IDs.
 QUERY-SEXP is an S-expression like (and (tag \"foo\") (term \"bar\")).
 Returns a list of node IDs matching the query."
   (let* ((ast (supertag-query--parse-sexp query-sexp))
          (node-ids (supertag-query--execute-ast ast)))
-    (message "Supertag Query Debug: Query %s returned node IDs: %s" query-sexp node-ids)
     node-ids))
+
+(defun supertag-query-sexp (query-sexp)
+  "Compatibility entry point for `supertag-query-node-ids'."
+  (supertag-query-node-ids query-sexp))
 
 (defun supertag-query--parse-sexp (query-sexp)
   "Parse a query S-expression into an AST.
