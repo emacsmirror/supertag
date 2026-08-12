@@ -153,10 +153,11 @@
   - 影响范围：automation、automation-sync、scheduler/tests
   - 完成：2026-08-13；automation-scheduled self-check 通过、sync-worker/query-model/ownership 47/47；干净临时 worktree 全量 ERT 489/489
 
-- task025 [ ] 收敛 formula/rollup 语义
+- task025 [x] 收敛 formula/rollup 语义
   - 产出：纯 evaluator 成为唯一计算实现；materialized result 明确 owner
   - 验证方式：Table、virtual column、Automation 对同一输入得到相同结果
   - 影响范围：formula、virtual column、automation、relation ops
+  - 完成：2026-08-13；rollup 归约统一到 `supertag-rollup-apply`，Automation formula 委托共享服务；确认 rollup 无 materialization（全部派生，死代码写回分支已删）；{{}} 与表达式两种公式语法服务于不同配置表面，语法统一不在本 task 范围
 
 - task026 [ ] 封住 raw Store read seam
   - 产出：私有化/删除 `supertag-view-api-get-collection` 与 generic collection/path query；subscriptions 改为语义失效通知
