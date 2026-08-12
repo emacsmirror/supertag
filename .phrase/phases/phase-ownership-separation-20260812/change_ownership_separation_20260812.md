@@ -308,3 +308,16 @@ Behavior：Graph/Board 序列化输出格式不变；WS DTO 不变。
 Risk：`get-links` 从单次 maphash 改为 per-node outgoing 查索引（同为 O(E)），无性能回归。
 
 Verification：query-model/ownership 定向通过、view-runtime 除隔离 TextUI 实验外全过；干净临时 worktree（HEAD + task022 patch）全量 ERT 489/489；2 个修改文件 byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
+
+## 2026-08-13 — task023 Query Block 与 Saved Query executor 迁移
+
+- Add `supertag-services-query.el`：新增公开接口 `supertag-query-fields`（查询引用字段提取，供表格列头）、`supertag-query-validate`（用引擎解析器校验并返回 sexp）、`supertag-query-date-valid-p`（日期解析器校验）。
+- Modify `supertag-ui-query-block.el`：`--headers-and-rows` 改走 `supertag-query-node-ids` + `supertag-query-fields`；`--sort-value` 与 `--row` 的全局字段值改走 `supertag-query-field-value` raw 模式（nil tag 上下文）。
+- Modify `supertag-query-library.el`：render/read/condition-builder/date-reader 全部改走公开接口，不再调用 `supertag-query--parse-sexp/-execute-ast/-get-fields-from-ast/-get-node-field-value/-resolve-date-string`；文件头注释同步更新。
+- Modify `test/run-tests.sh`：多个 filter 组合时按文件路径去重，修复 `query query-model` 同时传入导致 ERT "redefined" 的加载错误。
+
+Behavior：查询语义不变；解析次数从 1 次增为最多 2 次（O(size) 可忽略）。
+
+Risk：`supertag-query-field-value` raw 模式与旧 `--get-node-field-value` 等价（resolve-id nil + global store 原始值）。
+
+Verification：query-block/query-library/query-model 28/28 通过；干净临时 worktree（HEAD + task023 patch）全量 ERT 489/489；3 个修改 Elisp byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
