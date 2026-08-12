@@ -129,10 +129,11 @@
   - 影响范围：completion、schema picker、Stream tests
   - 完成：2026-08-12；smart-key+tag-path 55/55、stream 定向回归、ownership 26/26、query-model 7/7、两个 completion self-check 通过；干净临时 worktree 全量 ERT 489/489；`get-all-tags` 改为 display-path 排序后三处既有测试全部通过
 
-- task021 [ ] 迁移 Node、Table 与 Kanban
+- task021 [x] 迁移 Node、Table 与 Kanban
   - 产出：统一 resolved fields、node field value、relations from/to 和 node detail；移除 view 内重复 join
   - 验证方式：field order/default/formula/reference/filter/sort/expanded row/selection parity
   - 影响范围：Node/Table/Kanban、services-ui、view tests
+  - 完成：2026-08-13；view/table/kanban/node 定向 59/59、view-runtime 除隔离的 TextUI 实验外全过；干净临时 worktree 全量 ERT 489/489
 
 - task022 [ ] 迁移 Board 与 Graph
   - 产出：Board/Graph 使用 board detail、node summaries 与 relations-among
