@@ -47,6 +47,19 @@ Each descriptor contains :id, :name, and :display-path."
 When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' children."
   (supertag-index-get-nodes-by-tag tag-name include-descendants))
 
+(defun supertag-query-automations (&optional filter)
+  "Return automation rules, optionally filtered by FILTER.
+FILTER is a function receiving an automation plist and returning non-nil."
+  (let (result)
+    (maphash
+     (lambda (_id rule)
+       (when (or (null filter) (funcall filter rule))
+         (push rule result)))
+     (supertag-store-get-collection :automations))
+    (sort result
+          (lambda (a b)
+            (string< (plist-get a :name) (plist-get b :name))))))
+
 (defun supertag-query-tag-occurrences ()
   "Return sorted unique Org Tag Occurrence tokens from projected nodes."
   (let (occurrences)

@@ -290,7 +290,7 @@ OP must be :added or :removed."
 
 (defun supertag-automation-sync--process-node-creation (node-id payload)
   "Process a node creation and trigger relevant automation rules."
-  (let* ((node-data (or payload (supertag-node-get node-id)))
+  (let* ((node-data (or payload (supertag-query-node node-id)))
          (rule-ids (supertag-automation-sync--get-relevant-rules node-id nil node-data)))
     ;; Treat initial tags as :added events (first time the node is tagged).
     (dolist (tag (supertag-automation-sync--normalize-tag-list (plist-get node-data :tags)))
@@ -346,7 +346,7 @@ OP must be :added or :removed."
 This is an optimized version of the original rule lookup."
   (supertag-automation--ensure-rule-index)
   (let ((rules '())
-        (node-data (or new-node old-node (supertag-node-get node-id))))
+        (node-data (or new-node old-node (supertag-query-node node-id))))
     (when node-data
       ;; Get rules based on node tags - safe lookup
       (let ((node-tags (plist-get node-data :tags)))
@@ -397,13 +397,12 @@ This is an optimized version of the original rule lookup."
 
 (defun supertag-automation-sync--get-affected-node-ids (tag-id operation previous-tags)
   "Get list of node IDs affected by a tag operation."
-  (let ((all-nodes '()))
-    (maphash (lambda (_id node-data)
-               (when (and (plist-get node-data :tags)
-                          (member tag-id (plist-get node-data :tags)))
-                 (push _id all-nodes)))
-             (supertag-store-get-collection :nodes))
-    all-nodes))
+  (ignore operation previous-tags)
+  (mapcar #'car
+          (supertag-query-nodes
+           (lambda (_id node-data)
+             (and (plist-get node-data :tags)
+                  (member tag-id (plist-get node-data :tags)))))))
 
 ;;; --- Recursion Protection and Async Fallback ---
 
@@ -450,7 +449,7 @@ This is an optimized version of the original rule lookup."
         (from-id (plist-get relation :from))
         (to-id (plist-get relation :to)))
     (when (and sync-fields from-id to-id)
-      (let ((from-entity (or (supertag-node-get from-id) (supertag-tag-get from-id))))
+      (let ((from-entity (or (supertag-query-node from-id) (supertag-tag-get from-id))))
         (when from-entity
           (dolist (field-name sync-fields)
             (let ((value (supertag-automation-sync--get-field-value from-entity field-name)))
@@ -461,10 +460,8 @@ This is an optimized version of the original rule lookup."
   "Get field value from ENTITY by FIELD-NAME.
 Nodes read global field storage; tags read their own plist metadata."
   (if (plist-get entity :tags)  ; It's a node
-      (let* ((node-id (plist-get entity :id))
-             (field-id (supertag-field-resolve-id nil field-name)))
-        (and field-id
-             (supertag-node-get-global-field node-id field-id)))
+      (supertag-query-field-value
+       (plist-get entity :id) nil field-name t)
     ;; It's a tag
     (plist-get entity (intern (concat ":" field-name)))))
 
@@ -478,7 +475,7 @@ Preserves all existing target entity data."
       (puthash sync-key value supertag-automation--sync-cache)
 
       ;; Determine target entity type and update
-      (let ((target-node (supertag-node-get to-id))
+      (let ((target-node (supertag-query-node to-id))
             (target-tag (supertag-tag-get to-id)))
         (cond
          ;; Target is a node

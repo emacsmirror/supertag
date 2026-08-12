@@ -37,6 +37,7 @@
 (require 'supertag-ops-node)       ; For node operations
 (require 'supertag-ops-field)      ; For field operations
 (require 'supertag-service-org)
+(require 'supertag-services-query)
 (require 'org-id)                  ; For ID generation
 (require 'ht)
 
@@ -334,10 +335,10 @@ This function uses the pre-built supertag--rule-index for O(1) lookups."
          (entity-id (cadr path))
          (node-data (cond
                      ((eq entity-type :nodes)
-                      (supertag-node-get entity-id))
+                      (supertag-query-node entity-id))
                      ;; Global field values: (:field-values node-id field-id)
                      ((eq entity-type :field-values)
-                      (supertag-node-get entity-id))
+                      (supertag-query-node entity-id))
                      (t nil)))
          (node-tags (when node-data (plist-get node-data :tags)))
          (changed-prop (let ((p path))
@@ -520,14 +521,7 @@ Returns the deleted automation data or nil if not found."
 (defun supertag-automation-list (&optional filter)
   "List all automations with optional FILTER.
 FILTER can be a function that receives automation data and returns t/nil."
-  (let ((result '()))
-    (maphash
-     (lambda (_id automation)
-       (when (or (null filter) (funcall filter automation))
-         (push automation result)))
-     (supertag-store-get-collection :automations))
-    (sort result (lambda (a b)
-                   (string< (plist-get a :name) (plist-get b :name))))))
+  (supertag-query-automations filter))
 
 (defun supertag-automation-get-by-name (name)
   "Get automation by name.
@@ -725,7 +719,7 @@ BRANCH can specify :equals (single value or list), :in (list),
 
 (defun supertag-automation-action-case (node-id params context)
   "Evaluate CASE action described by PARAMS for NODE-ID with CONTEXT."
-  (let* ((node-data (or (supertag-node-get node-id)
+  (let* ((node-data (or (supertag-query-node node-id)
                         (list :id node-id :tags nil :properties nil)))
          (on-spec (plist-get params :on))
          (branches (plist-get params :branches))
@@ -790,7 +784,7 @@ PARAMS should contain :state with the new TODO keyword (e.g., \"DONE\")."
 Append inline #tag at the end of the headline when it is not present."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
-      (let* ((node (supertag-node-get node-id))
+      (let* ((node (supertag-query-node node-id))
              (tags (plist-get node :tags))
              (tag-id (supertag-automation--semantic-tag-id tag-name)))
         (if (and tag-id (member tag-id tags))
@@ -806,7 +800,7 @@ Append inline #tag at the end of the headline when it is not present."
 Uses the same Org-first path as UI commands."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
-      (let* ((node (supertag-node-get node-id))
+      (let* ((node (supertag-query-node node-id))
              (tags (plist-get node :tags))
              (tag-id (supertag-automation--semantic-tag-id tag-name)))
         (if (not (member tag-id tags))
@@ -871,7 +865,7 @@ Uses the same Org-first path as UI commands."
      ((not (and tag-id (stringp field)))
       (message "ERROR(:update-field): requires :tag and string :field")))
     (when (and node-id tag-id (stringp field))
-      (let ((current (supertag-field-get node-id tag-id field)))
+      (let ((current (supertag-query-field-value node-id tag-id field t)))
         (if (equal current value)
             (supertag-automation--log "SKIP(update-field): %s/%s unchanged on node %s" tag-id field node-id)
           (supertag-field-set node-id tag-id field value))))))
@@ -893,7 +887,7 @@ RELATION-CONFIG provides sync configuration from the relation."
         (puthash sync-key value supertag-automation--sync-cache)
 
         ;; Determine target entity type and update
-        (let ((target-node (supertag-node-get to-id))
+        (let ((target-node (supertag-query-node to-id))
               (target-tag (supertag-tag-get to-id)))
           (cond
            ;; Target is a node
@@ -947,8 +941,8 @@ FIELD-NAME is the field that changed.
 VALUE is the new value."
   (when supertag-automation--enabled
     ;; Find all relations from this entity
-    (let ((relations (when (fboundp 'supertag-relation-find-by-from)
-                       (supertag-relation-find-by-from
+    (let ((relations (when (fboundp 'supertag-query-relations-from)
+                       (supertag-query-relations-from
                         entity-id nil :semantic-edge))))
       (dolist (relation relations)
         (let* ((sync-fields (plist-get relation :sync-fields))
@@ -1008,7 +1002,7 @@ FORCE bypasses recursion protection when t."
   "Collect values of FIELD-NAME from a list of entity info plists."
   (let ((values '()))
     (dolist (entity-info entities-info)
-      (let* ((node-data (supertag-node-get (plist-get entity-info :id)))
+      (let* ((node-data (supertag-query-node (plist-get entity-info :id)))
              (props (plist-get node-data :properties))
              (value (plist-get props (intern (concat ":" field-name)))))
         (when value
@@ -1052,7 +1046,7 @@ FORMULA-FIELD is the field configuration with formula."
 (defun supertag-automation--evaluate-formula (formula entity-id)
   "Evaluate FORMULA for ENTITY-ID.
 Supports basic arithmetic and property references."
-  (let* ((entity (or (supertag-node-get entity-id)
+  (let* ((entity (or (supertag-query-node entity-id)
                      (supertag-tag-get entity-id)))
          (props (plist-get entity :properties)))
 
@@ -1140,11 +1134,11 @@ This is the actual handler that was previously called directly."
                  ((or (eq entity-type :tags) tags-change-under-node)
                   (let* ((old-tags (if (listp old-value)
                                        old-value
-                                     (let ((nd (supertag-node-get node-id)))
+                                     (let ((nd (supertag-query-node node-id)))
                                        (plist-get nd :tags))))
                          (new-tags (if (listp new-value)
                                        new-value
-                                     (let ((nd (supertag-node-get node-id)))
+                                     (let ((nd (supertag-query-node node-id)))
                                        (plist-get nd :tags)))))
                     (supertag-automation--handle-tag-change node-id old-tags new-tags))))))
           ;; Always remove the node-id from the queue when done.
@@ -1175,7 +1169,7 @@ This is the actual handler that was previously called directly."
   (let* ((resolve (lambda (value)
                     (cond
                      ((listp value) value)
-                     (t (let ((nd (supertag-node-get node-id)))
+                     (t (let ((nd (supertag-query-node node-id)))
                           (plist-get nd :tags))))))
          (old (cl-remove-duplicates (copy-sequence (or (funcall resolve old-tags) '()))
                                     :test 'equal))
@@ -1216,9 +1210,7 @@ This is the actual handler that was previously called directly."
 TAGS is retained for call compatibility."
   (ignore tags)
   (when (stringp field-name)
-    (let ((field-id (supertag-field-resolve-id nil field-name)))
-      (and field-id
-           (supertag-node-get-global-field node-id field-id)))))
+    (supertag-query-field-value node-id nil field-name t)))
 
 (defun supertag-automation--get-global-field-value (node-id field-id)
   "Get global field value for FIELD-ID on NODE-ID.
@@ -1395,7 +1387,7 @@ Returns t if condition passes, nil otherwise.
 Empty/nil conditions always return t."
   (if (not condition)
       t
-    (let ((node-data (supertag-node-get node-id)))
+    (let ((node-data (supertag-query-node node-id)))
       (unless node-data
         (message "Automation Warning: Node %s not found" node-id)
         (setq node-data (list :id node-id :tags nil :properties nil)))
