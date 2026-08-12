@@ -147,10 +147,11 @@
   - 影响范围：query block、query library、query docs/tests
   - 完成：2026-08-13；query 定向 28/28（含 AND/OR/NOT、日期边界、field 渲染）；干净临时 worktree 全量 ERT 489/489
 
-- task024 [ ] 最后迁移 Automation 读取路径
+- task024 [x] 最后迁移 Automation 读取路径
   - 产出：rule index 从 query interface 重建；Document actions 与 Semantic actions 分别走对应写入模块
   - 验证方式：trigger 恰好一次、scheduler restart、recursion guard、tag/field/relation conditions parity
   - 影响范围：automation、automation-sync、scheduler/tests
+  - 完成：2026-08-13；automation-scheduled self-check 通过、sync-worker/query-model/ownership 47/47；干净临时 worktree 全量 ERT 489/489
 
 - task025 [ ] 收敛 formula/rollup 语义
   - 产出：纯 evaluator 成为唯一计算实现；materialized result 明确 owner
