@@ -12,6 +12,7 @@
 #   ./test/run-tests.sh query        # Run only query-block tests
 #   ./test/run-tests.sh smart-key    # Run only semantic activation tests
 #   ./test/run-tests.sh tag-merge    # Run only destructive tag merge tests
+#   ./test/run-tests.sh reference-migration # Run reciprocal migration tests
 #   ./test/run-tests.sh embed        # Run only embed/cache regression tests
 
 set -euo pipefail
@@ -57,6 +58,7 @@ TEST_FILES=(
     "test/conflicts-test.el"
     "test/sync-worker-regression-test.el"
     "test/tag-merge-test.el"
+    "test/reciprocal-migration-test.el"
     "test/tag-path-test.el"
     "test/test-smart-key.el"
     "test/embed-cache-test.el"
@@ -93,11 +95,12 @@ if [ $# -gt 0 ]; then
             cl-block|sync-worker) FILTER="$FILTER test/sync-worker-regression-test.el" ;;
             smart-key) FILTER="$FILTER test/test-smart-key.el" ;;
             tag-merge) FILTER="$FILTER test/tag-merge-test.el" ;;
+            reference-migration) FILTER="$FILTER test/reciprocal-migration-test.el" ;;
             tag-path)  FILTER="$FILTER test/tag-path-test.el" ;;
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge tag-path embed ownership all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-path embed ownership all"; exit 1 ;;
         esac
     done
     TEST_FILES=($FILTER)

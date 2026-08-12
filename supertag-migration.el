@@ -19,6 +19,7 @@
 (require 'supertag-core-persistence)
 (require 'supertag-ops-node)
 (require 'supertag-view-helper)
+(require 'supertag-services-sync)
 (require 'org-id)
 (require 'org)
 (require 'org-element)
@@ -218,16 +219,319 @@ This function recursively copies nested hash tables."
       (list :changedp t :begin beg :end (save-excursion (goto-char beg) (end-of-line) (point))))))
 
 (defun supertag-migration--backup-file (file)
-  "Create a timestamped backup for FILE. Return backup path."
-  (let* ((backup (format "%s.bak-%s" file (format-time-string "%Y%m%d-%H%M%S"))))
-    (copy-file file backup t)
+  "Create a unique adjacent backup for FILE. Return backup path."
+  (let ((backup
+         (make-temp-file
+          (expand-file-name
+           (format ".%s.supertag-migration-" (file-name-nondirectory file))
+           (file-name-directory file))
+          nil ".bak")))
+    (copy-file file backup t t)
     backup))
 
 (defun supertag-migration--restore-backup (file backup)
   "Restore FILE from BACKUP. Return t on success."
   (when (and (file-exists-p backup))
-    (copy-file backup file t)
+    (copy-file backup file t t)
+    (when-let* ((buffer (find-buffer-visiting file)))
+      (with-current-buffer buffer
+        (let ((inhibit-message t))
+          (revert-buffer t t t))))
     t))
+
+(defconst supertag-migration--reciprocal-buffer
+  "*Supertag Reciprocal Link Migration*"
+  "Preview buffer for ambiguous reciprocal links.")
+
+(defun supertag-migration--link-owner (link file-header)
+  "Return LINK's persistent source ID and title.
+FILE-HEADER supplies the owner for links outside every headline."
+  (let ((parent (org-element-property :parent link)))
+    (while (and parent (not (eq (org-element-type parent) 'headline)))
+      (setq parent (org-element-property :parent parent)))
+    (if parent
+        (list (org-element-property :ID parent)
+              (org-element-property :raw-value parent))
+      (list (plist-get file-header :id)
+            (plist-get file-header :title)))))
+
+(defun supertag-migration--scan-reference-occurrences (file)
+  "Return persistent directed reference occurrences physically in FILE."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (delay-mode-hooks (org-mode))
+    (let* ((file (file-truename file))
+           (file-hash (secure-hash 'sha256 (current-buffer)))
+           (file-header (supertag-sync--parse-file-header))
+           (ast (org-element-parse-buffer))
+           occurrences)
+      (org-element-map ast 'link
+        (lambda (link)
+          (when-let* ((target (car (supertag--extract-refs (list link))))
+                      (owner (supertag-migration--link-owner link file-header))
+                      (source (car owner)))
+            (let* ((begin (org-element-property :begin link))
+                   (end (- (org-element-property :end link)
+                           (or (org-element-property :post-blank link) 0)))
+                   (text (buffer-substring-no-properties begin end))
+                   (id (secure-hash
+                        'sha256
+                        (prin1-to-string
+                         (list file file-hash source target begin end text))))
+                   (source-title (or (cadr owner) source))
+                   (target-title
+                    (or (plist-get (supertag-node-get target) :title) target)))
+              (push
+               (list :id id :from source :to target :file file
+                     :begin begin :end end
+                     :line (line-number-at-pos begin t)
+                     :text text :file-hash file-hash
+                     :source-title source-title :target-title target-title
+                     :label
+                     (format "Delete %s → %s (%s:%d) [%s]"
+                             source-title target-title
+                             (file-name-nondirectory file)
+                             (line-number-at-pos begin t)
+                             (substring id 0 8)))
+               occurrences)))))
+      (nreverse occurrences))))
+
+(defun supertag-migration--reciprocal-candidates (files)
+  "Return exact mutual directed link occurrences from FILES."
+  (let ((directions (make-hash-table :test 'equal)) occurrences)
+    (dolist (file files)
+      (setq occurrences
+            (nconc occurrences
+                   (supertag-migration--scan-reference-occurrences file))))
+    (dolist (item occurrences)
+      (puthash (cons (plist-get item :from) (plist-get item :to)) t directions))
+    (sort
+     (cl-remove-if-not
+      (lambda (item)
+        (let ((from (plist-get item :from))
+              (to (plist-get item :to)))
+          (and (not (equal from to))
+               (gethash (cons to from) directions))))
+      occurrences)
+     (lambda (left right)
+       (let ((left-key (cons (plist-get left :file) (plist-get left :begin)))
+             (right-key (cons (plist-get right :file) (plist-get right :begin))))
+         (or (string< (car left-key) (car right-key))
+             (and (equal (car left-key) (car right-key))
+                  (< (cdr left-key) (cdr right-key)))))))))
+
+(defun supertag-migration--show-reciprocal-preview (report)
+  "Display read-only reciprocal migration REPORT."
+  (with-current-buffer (get-buffer-create supertag-migration--reciprocal-buffer)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert "Ambiguous Reciprocal Link Migration\n\n"
+              "A mutual pair does not prove which link was an old automatic backlink.\n"
+              "Nothing is selected or deleted by default.\n\n")
+      (if (eq 'preview (plist-get report :status))
+          (progn
+            (insert (format "%d candidate occurrence(s):\n\n"
+                            (plist-get report :candidate-count)))
+            (dolist (item (plist-get report :candidates))
+              (insert "[ ] " (plist-get item :label) "\n"
+                      "    " (plist-get item :text) "\n")))
+        (insert (format "Preview aborted: snapshot is %s.\n"
+                        (plist-get report :snapshot-status)))
+        (dolist (error (plist-get report :errors))
+          (insert (format "  %s\n" error))))
+      (goto-char (point-min))
+      (special-mode))
+    (display-buffer (current-buffer)))
+  report)
+
+;;;###autoload
+(defun supertag-migration-preview-reciprocal-links (&optional displayp)
+  "Preview exact link occurrences participating in mutual directed pairs.
+The scan is read-only.  Mutuality is only a candidate signal: this command
+does not infer ownership and does not select anything for deletion."
+  (interactive (list t))
+  (let* ((snapshot (supertag-sync--snapshot-build))
+         (snapshot-status (plist-get snapshot :status))
+         (files (sort (mapcar #'file-truename
+                              (copy-sequence (plist-get snapshot :files)))
+                      #'string<))
+         report)
+    (if (not (eq snapshot-status 'complete))
+        (setq report
+              (list :status 'aborted :snapshot-status snapshot-status
+                    :files-scanned 0 :candidate-count 0 :candidates nil
+                    :errors (plist-get snapshot :errors)))
+      (condition-case err
+          (let ((candidates
+                 (supertag-migration--reciprocal-candidates files)))
+            (setq report
+                  (list :status 'preview :snapshot-status snapshot-status
+                        :files-scanned (length files)
+                        :candidate-count (length candidates)
+                        :candidates candidates :errors nil)))
+        (error
+         (setq report
+               (list :status 'aborted :snapshot-status snapshot-status
+                     :files-scanned 0 :candidate-count 0 :candidates nil
+                     :errors (list (error-message-string err)))))))
+    (if displayp
+        (supertag-migration--show-reciprocal-preview report)
+      report)))
+
+(defun supertag-migration--restore-state-table (table snapshot)
+  "Replace TABLE contents with SNAPSHOT."
+  (clrhash table)
+  (maphash (lambda (key value) (puthash key value table)) snapshot))
+
+(defun supertag-migration--selected-candidates (report candidate-ids)
+  "Resolve CANDIDATE-IDS against REPORT, or return nil if stale."
+  (let ((wanted (delete-dups (copy-sequence candidate-ids))) selected)
+    (dolist (id wanted)
+      (when-let* ((item (cl-find id (plist-get report :candidates)
+                                 :key (lambda (candidate)
+                                        (plist-get candidate :id))
+                                 :test #'equal)))
+        (push item selected)))
+    (when (= (length wanted) (length selected))
+      (nreverse selected))))
+
+;;;###autoload
+(defun supertag-migration-execute-reciprocal-links (report candidate-ids)
+  "Delete exact CANDIDATE-IDS selected from preview REPORT.
+Return a report plist.  Empty or stale selections abort without writes.
+Every affected Org file is backed up before the first deletion; file and
+Store changes are restored if projection fails."
+  (if (null candidate-ids)
+      (list :status 'aborted :reason 'no-selection :removed 0)
+    (let* ((fresh (supertag-migration-preview-reciprocal-links))
+           (original (supertag-migration--selected-candidates report candidate-ids))
+           (selected (and original
+                          (supertag-migration--selected-candidates fresh candidate-ids))))
+      (if (or (not (eq 'preview (plist-get fresh :status)))
+              (null original) (null selected))
+          (list :status 'aborted :reason 'stale-preview :removed 0)
+        (let* ((files (delete-dups (mapcar (lambda (item) (plist-get item :file))
+                                           selected)))
+               (state-table (supertag-sync--get-state-table))
+               (state-before (copy-hash-table state-table))
+               (deferred-before (copy-hash-table supertag-sync--deferred-files))
+               (internal-before
+                (copy-hash-table supertag-sync--internal-modifications))
+               (snapshot-before (copy-tree (supertag-sync--snapshot-get)))
+               (counters '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0
+                           :references-created 0 :references-deleted 0))
+               buffers opened backups report-result)
+          (unwind-protect
+              (condition-case err
+                  (progn
+                    ;; Refuse to overwrite user edits and validate every exact range
+                    ;; before creating snapshots or touching any file.
+                    (dolist (file files)
+                      (let* ((existing (find-buffer-visiting file))
+                             (buffer (or existing (find-file-noselect file))))
+                        (unless existing (push buffer opened))
+                        (with-current-buffer buffer
+                          (when (buffer-modified-p)
+                            (error "Unsaved edits in %s" file))
+                          (unless (verify-visited-file-modtime buffer)
+                            (revert-buffer t t t))
+                          (dolist (item (cl-remove-if-not
+                                         (lambda (candidate)
+                                           (equal file (plist-get candidate :file)))
+                                         selected))
+                            (unless (and (<= (plist-get item :end) (point-max))
+                                         (equal (plist-get item :text)
+                                                (buffer-substring-no-properties
+                                                 (plist-get item :begin)
+                                                 (plist-get item :end))))
+                              (error "Stale link occurrence in %s" file))))
+                        (push (cons file buffer) buffers)))
+                    (dolist (file files)
+                      (push (cons file (supertag-migration--backup-file file)) backups))
+                    (supertag-with-transaction
+                      (dolist (pair buffers)
+                        (let ((file (car pair)))
+                          (with-current-buffer (cdr pair)
+                            (save-restriction
+                              (widen)
+                              (dolist
+                                  (item
+                                   (sort
+                                    (cl-remove-if-not
+                                     (lambda (candidate)
+                                       (equal file (plist-get candidate :file)))
+                                     (copy-sequence selected))
+                                    (lambda (left right)
+                                      (> (plist-get left :begin)
+                                         (plist-get right :begin)))))
+                                (delete-region (plist-get item :begin)
+                                               (plist-get item :end))))
+                            (supertag--mark-internal-modification file)
+                            (save-buffer))))
+                      (let ((supertag-sync--is-full-rescan-p t))
+                        (dolist (file files)
+                          (supertag-sync--process-single-file file counters)))
+                      (supertag-sync--rebuild-reference-caches))
+                    (setq report-result
+                          (list :status 'complete :removed (length selected)
+                                :files-changed (length files)
+                                :backups (nreverse backups))))
+                (error
+                 (let (restore-errors)
+                   (dolist (pair backups)
+                     (condition-case restore-error
+                         (supertag-migration--restore-backup (car pair) (cdr pair))
+                       (error
+                        (push (error-message-string restore-error) restore-errors))))
+                   (supertag-migration--restore-state-table state-table state-before)
+                   (setq supertag-sync--deferred-files deferred-before
+                         supertag-sync--internal-modifications internal-before)
+                   (supertag-sync--snapshot-set snapshot-before)
+                   (when restore-errors
+                     (error "Migration and recovery failed; backups: %S; errors: %S"
+                            backups (nreverse restore-errors)))
+                   (setq report-result
+                         (list :status 'failed :removed 0
+                               :files-changed 0 :backups (nreverse backups)
+                               :errors (list (error-message-string err)))))))
+            (dolist (buffer opened)
+              (when (buffer-live-p buffer) (kill-buffer buffer))))
+          report-result)))))
+
+;;;###autoload
+(defun supertag-migrate-reciprocal-links ()
+  "Preview and explicitly select ambiguous reciprocal links to delete."
+  (interactive)
+  (let* ((preview (supertag-migration-preview-reciprocal-links))
+         (candidates (plist-get preview :candidates)))
+    (supertag-migration--show-reciprocal-preview preview)
+    (cond
+     ((not (eq 'preview (plist-get preview :status))) preview)
+     ((null candidates)
+      (message "Supertag: no reciprocal link candidates found")
+      (list :status 'aborted :reason 'no-candidates :removed 0))
+     (t
+      (let* ((labels (mapcar (lambda (item) (plist-get item :label)) candidates))
+             (chosen-labels
+              (completing-read-multiple
+               "Delete exact link occurrences (none by default): " labels nil t))
+             (chosen
+              (cl-remove-if-not
+               (lambda (item) (member (plist-get item :label) chosen-labels))
+               candidates)))
+        (cond
+         ((null chosen)
+          (list :status 'aborted :reason 'no-selection :removed 0))
+         ((not (yes-or-no-p
+                (format "Delete %d selected link occurrence(s)? " (length chosen))))
+          (list :status 'aborted :reason 'confirmation-declined :removed 0))
+         (t
+          (let ((result
+                 (supertag-migration-execute-reciprocal-links
+                  preview (mapcar (lambda (item) (plist-get item :id)) chosen))))
+            (message "Supertag reciprocal migration: %s, %d removed"
+                     (plist-get result :status) (or (plist-get result :removed) 0))
+            result))))))))
 
 (defun supertag-migrate-legacy-tags-file (file &optional dry-run)
   "Migrate org native :tag: in FILE to inline #tags. Returns report plist.

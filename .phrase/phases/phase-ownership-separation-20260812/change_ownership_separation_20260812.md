@@ -1,5 +1,18 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task010 旧 reciprocal link 确认式迁移
+
+- Add read-only `supertag-migration-preview-reciprocal-links`：从一个 complete Vault snapshot 扫描实际 Org link occurrence；互相指向只生成候选，不推断 owner、不默认选择。
+- Add `supertag-migrate-reciprocal-links`：逐条选择精确 direction/file/line occurrence，再进行第二次确认；空选择、拒绝确认、不完整 snapshot 与 stale preview 均零写入。
+- Modify migration file safety：每个受影响 Org 文件先创建唯一相邻 `.<文件名>.supertag-migration-*.bak`；删除按文件内位置倒序执行，只重投影受影响文件；写入或投影失败时恢复全部文件、visiting buffers、Store transaction、sync/deferred state。
+- Modify command discovery/docs/tests：Migration 菜单提供 preview/apply；中英文 README 与 Unreleased Changelog 说明不可推断边界、操作与恢复路径；新增 4 项稳定 ERT。
+
+Behavior：用户先只读查看候选，再明确选择“删除 Source → Target (file:line)”条目并确认。系统只删除选中的物理 link；未选择内容保持原样，成功后 Backlink 由 relation index 重新派生。
+
+Risk：候选扫描是显式 O(Vault size) 操作；这是一次性迁移命令的可接受成本。互相指向不等于旧 backlink，因此候选仍需用户判断。备份默认保留在原文件旁，不自动清理。
+
+Verification：4 项迁移 ERT 覆盖 preview 文件/Store hash 不变、空选择与拒绝确认零写入、只删除确认 occurrence、第二个文件投影失败后恢复首个文件的 Store 变更与全部文件字节；修改文件 byte-compile 与 `check-parens` 通过（仅既有 warning），`git diff --check` 通过，干净临时 clone 全量 ERT 441/441 通过。
+
 ## 2026-08-12 — task009 单一 forward Document Link 与派生 Backlink
 
 - Modify document commands：`supertag-add-reference`、create variant 与 remove command 只在 source 的 direct content 写入/删除一条 Org link，保存后通过既有 Document Projector 收敛；target Org 不再打开、写入或补偿回滚。

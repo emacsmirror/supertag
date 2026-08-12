@@ -4,8 +4,11 @@
 - New references now write one forward Org link in the source node only.
   Backlinks in Node/Table views are derived from the relation index; relation
   and node-reference field operations never insert reciprocal text into target
-  files. Existing ambiguous reciprocal links are preserved for a separate,
-  confirmation-only migration.
+  files.
+- Existing ambiguous reciprocal links now have a confirmation-only migration:
+  read-only preview, exact occurrence selection, a second confirmation, adjacent
+  file snapshots, and automatic file/Store restoration on projection failure.
+  Nothing is selected or deleted by default.
 *** Breaking: database format version bump 5.0.0 -> 6.0.0
 - =supertag-data-version= is now =6.0.0=. A review of the git-sync S2
   canonical (line-per-entity) serialization found its "old versions can

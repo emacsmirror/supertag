@@ -58,6 +58,14 @@
 2. Target 侧通过查询看到 Backlink。
 3. 旧 reciprocal link 只有在 preview 后经用户确认才迁移；默认保留。
 
+### Legacy reciprocal migration
+
+1. 用户先打开 read-only preview，查看参与互相指向的每一条物理 link occurrence。
+2. 系统不推断哪条是旧自动 backlink，也不默认选择任何条目。
+3. 用户逐条选择并二次确认后，系统只删除选中的精确 occurrence。
+4. abort、空选择、过期 preview 或不完整 Vault snapshot 均零写入。
+5. 每个受影响文件先创建相邻 snapshot；任一写入或重新投影失败时恢复全部文件与 Store。
+
 ## Edge Cases
 
 - 未解析的 Tag Occurrence 可以存在，但不得静默绑定到错误的 Semantic Tag。
@@ -78,6 +86,7 @@
 - Reindex 不修改任何 Org buffer 或文件。
 - Document Projection 与 Query Projection 均可清空并冷重建。
 - 一个新 reference 只有一个物理 forward Document Link；Backlink 由查询产生。
+- 旧 reciprocal migration 只处理用户明确确认的 occurrence；dry-run/abort 零写入，失败可恢复。
 - Node projection 不再依赖 unknown-key merge 保存 Semantic Facts。
 - Semantic Tag 使用稳定 ID；rename 不要求重写所有引用集合和 Org 文件。
 - UI、View、Completion、Board、Query 与 Automation 不再读取 raw collection hash table。

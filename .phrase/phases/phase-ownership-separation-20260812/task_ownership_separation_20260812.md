@@ -59,10 +59,11 @@
   - 影响范围：relation commands、UI commands、Node/Table views
   - 完成：2026-08-12；source/target 文件哈希、heading/file-node reproject、field-reference 零 Org 写入及三个 Backlink consumer 已由稳定 ERT 覆盖；干净临时 clone 全量 ERT 437/437 通过
 
-- task010 [ ] 提供旧 ambiguous reciprocal link 的确认式迁移
+- task010 [x] 提供旧 ambiguous reciprocal link 的确认式迁移
   - 产出：read-only preview、逐项选择、确认/abort、文件 snapshot；默认不删除
   - 验证方式：dry-run/abort 零写入；只处理用户确认条目；失败恢复文件
   - 影响范围：migration command、reference docs/tests
+  - 完成：2026-08-12；read-only preview、空选择/拒绝确认零写入、confirmed-only 精确删除、投影中途失败恢复文件与 Store 均由 4 项稳定 ERT 覆盖；干净临时 clone 全量 ERT 441/441 通过
 
 - task011 [ ] 统一 Tag membership 的 Org-first 写入
   - 产出：add/remove/change Tag 及 Automation Tag action 先保存 Org，再 point reindex；Store 不提前写 membership

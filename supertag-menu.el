@@ -155,6 +155,8 @@
 (declare-function supertag-migrate-database-to-new-arch "supertag-migration" ())
 (declare-function supertag-batch-convert-properties-to-fields "supertag-migration" ())
 (declare-function supertag-migration-add-ids-to-org-headings "supertag-migration" (directory))
+(declare-function supertag-migration-preview-reciprocal-links "supertag-migration" (&optional displayp))
+(declare-function supertag-migrate-reciprocal-links "supertag-migration" ())
 ;; supertag-migrate-tag-ids.el (no autoload cookie; NOT part of
 ;; org-supertag.el's own `require' chain; wrapped)
 (declare-function supertag-migrate-tag-ids "supertag-migrate-tag-ids" ())
@@ -444,6 +446,8 @@ analytic demo view, and database migration commands."
     ("ma" "Migrate DB to new arch"          supertag-migrate-database-to-new-arch)
     ("mp" "Convert properties to fields"    supertag-batch-convert-properties-to-fields)
     ("mi" "Add IDs to org headings"         supertag-migration-add-ids-to-org-headings)
+    ("mr" "Preview reciprocal links"        supertag-migration-preview-reciprocal-links)
+    ("mx" "Migrate reciprocal links"        supertag-migrate-reciprocal-links)
     ("mt" "Migrate tag IDs"                 supertag-menu--migrate-tag-ids)]])
 
 (provide 'supertag-menu)

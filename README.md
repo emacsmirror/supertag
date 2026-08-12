@@ -396,6 +396,18 @@ M-x supertag-migrate-database-to-new-arch RET
 
 No migration needed. Add `#tag` to headings, define fields, and start using views. Your existing files work as-is.
 
+### Old reciprocal reference links
+
+Older Org-SuperTag versions could insert the same reference in both source and
+target files. Those generated links are indistinguishable from links you wrote
+yourself, so Org-SuperTag never deletes them automatically. Run
+`M-x supertag-migration-preview-reciprocal-links` for a read-only list of exact
+mutual link occurrences. If you decide some are obsolete, run
+`M-x supertag-migrate-reciprocal-links`, select the individual occurrences, and
+confirm once more. Nothing is selected by default; aborting writes nothing.
+Each changed file receives an adjacent `.<filename>.supertag-migration-*.bak` snapshot,
+and every file is restored if reprojection fails.
+
 ---
 
 ## Troubleshooting quick reference

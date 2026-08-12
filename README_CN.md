@@ -390,6 +390,15 @@ M-x supertag-migrate-database-to-new-arch RET
 
 无需迁移。给标题加 `#tag`，定义字段，开始使用视图。你现有的文件原样兼容。
 
+### 旧 reciprocal reference link
+
+旧版 Org-SuperTag 可能同时在 source 与 target 文件插入同一 reference。这类自动生成的
+link 与用户手写 link 完全同形，因此系统绝不自动删除。先运行
+`M-x supertag-migration-preview-reciprocal-links`，只读查看每一条互相指向的物理 link；
+确定其中某条已经多余后，再运行 `M-x supertag-migrate-reciprocal-links`，逐条选择并二次
+确认。默认不选择任何条目，abort 零写入。每个被改文件都会留下相邻的
+`.<文件名>.supertag-migration-*.bak` 快照；重新投影失败时，全部文件自动恢复。
+
 ---
 
 ## 常见问题速查

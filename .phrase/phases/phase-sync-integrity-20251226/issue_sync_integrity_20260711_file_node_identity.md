@@ -23,12 +23,13 @@
 - [x] Org-ID 与 Denote file-node 可在同一 store 生成正确链接。
 - [x] 新 reference 只写 source 的 forward link，target Backlink 由 relation index 派生。
 - [x] 旧 ambiguous link 默认保留；迁移边界与 task010 的确认式流程已经明确。
+- [x] 旧 ambiguous link 可只读预览并逐 occurrence 确认迁移；默认/abort 零写入，失败恢复文件与 Store。
 
 ## Migration Blocker
 
 旧 reciprocal backlink 与用户手写的正向 Org link 完全同形，不能安全自动删除。
 这不再阻塞停止新增物化 backlink：task013 已让新写入 forward-only，并将反向展示改为查询。
-遗留文本的 preview、逐项确认与文件回滚由 ownership task010 单独处理。
+遗留文本的 preview、逐项确认与文件回滚已由 ownership task010 完成。
 
 ## Fix
 
@@ -47,7 +48,7 @@
 
 - [ ] 在真实 Vault 新建 reference，确认 Git diff 只有 source Org 文件。
 - [ ] 在 target Node/Table View 确认 Backlink 可见，再删除 source link 确认其消失。
-- [ ] 旧 reciprocal links 保持原样，直到 task010 预览并确认迁移。
+- [ ] 在真实 Vault 运行 preview，按用户判断选择旧 backlink，并确认未选 link 保持原样。
 
 ## Related
 

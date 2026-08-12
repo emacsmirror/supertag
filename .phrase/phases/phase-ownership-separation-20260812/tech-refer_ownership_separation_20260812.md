@@ -156,8 +156,12 @@ Existing automatic and user-authored links are syntactically indistinguishable. 
 
 Implemented in task009: new document commands persist exactly one source Org
 link, while relation/field operations are Store-only and Backlink consumers use
-the `relations-to` index. Existing ambiguous target text is not touched; task010
-owns its preview and confirmation workflow.
+the `relations-to` index. Task010 scans exact physical occurrences from one
+complete Vault snapshot. A mutual pair only creates candidates; ownership is
+never inferred. The public preview is read-only, and execution accepts only
+candidate IDs present in both the original and a fresh preview. Selected ranges
+are validated before any write, every affected file is snapshotted, and a single
+Store transaction plus file restoration covers projection failures.
 
 ### Stable Tag ID
 
