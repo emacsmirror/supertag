@@ -141,10 +141,11 @@
   - 影响范围：board backend、graph UI、Board frontend contract tests
   - 完成：2026-08-13；query-model 的 board-detail/WS DTO parity 测试通过；干净临时 worktree 全量 ERT 489/489；无 frontend contract test（ext/ 无测试目录）
 
-- task023 [ ] 迁移 Query Block 与 Saved Query executor
+- task023 [x] 迁移 Query Block 与 Saved Query executor
   - 产出：只调用公开 node-query interface，不再调用私有 parser/executor/field getter
   - 验证方式：AND/OR/NOT、日期边界、term、field nil/default、Org output parity
   - 影响范围：query block、query library、query docs/tests
+  - 完成：2026-08-13；query 定向 28/28（含 AND/OR/NOT、日期边界、field 渲染）；干净临时 worktree 全量 ERT 489/489
 
 - task024 [ ] 最后迁移 Automation 读取路径
   - 产出：rule index 从 query interface 重建；Document actions 与 Semantic actions 分别走对应写入模块
