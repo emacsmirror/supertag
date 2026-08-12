@@ -224,7 +224,7 @@ rating   →  数字（1–5）
 | 高亮概念提及 | `M-x supertag-concept-link-mode` | 将概念 title/alias 的提及显示为琥珀色语义高亮，不落库为链接 |
 | 操作光标下的对象 | `M-x supertag-smart-key` | 执行当前 tag、node、field、link、button 或 table cell 的默认动作 |
 | 选择光标对象的相关动作 | `M-x supertag-assist` | 只显示对象相关动作，并保留完整菜单出口 |
-| 全量重建数据库 | `M-x supertag-sync-full-rescan` | 安全——仅重新读取 Org 文件 |
+| 重扫 Org 派生数据 | `M-x supertag-sync-full-rescan` | 在现有 Store 中协调数据；不会恢复不可重建的语义数据 |
 
 除了单条命令，Org-Supertag 还提供一套小巧的 S-expression 查询语言，可以组合标签、字段、日期和全文搜索，例如
 `(and (tag "task") (not (field "status" "done")))`。可以把它写进 `org-supertag-query-block`
@@ -273,7 +273,7 @@ Org-SuperTag 从三个层面避免这个问题：
 
 ### 3. 同步自动且安全
 
-Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。它**绝不**修改你的 Org 文件，除非你通过 SuperTag 视图显式编辑。如果数据库损坏了，`M-x supertag-sync-full-rescan` 从零重建。
+Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。用户编辑通常通过显式命令和 View 写入 Org；当前 legacy reference reconciler 仍可能在扫描时插入 reciprocal link，ownership-separation phase 会移除这条双写路径。`M-x supertag-sync-full-rescan` 只会在现有 Store 中协调 Org 派生数据；不可重建的语义数据必须从备份或同步副本恢复。
 
 ### 算一笔账
 
@@ -315,7 +315,9 @@ Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.
 | 同步状态 | `~/.emacs.d/org-supertag/sync-state.el` | 文件 mtime 和 hash |
 | 每日备份 | `~/.emacs.d/org-supertag/backups/` | 带时间戳的数据库快照 |
 
-**Org 文件拥有你的文本和结构；数据库拥有你的结构化数据。** Org 文件（标题、正文、`:ID:` 属性）是节点"是什么"的唯一真实数据源，`M-x supertag-sync-full-rescan` 随时可以从它们重新推导出节点和标签。但 schema 定义、字段值、表格/看板视图布局、自动化规则**只**存在于 `supertag-db.el` 里——重扫不会凭空从 org 正文里造出它们，因为纯 org 文本根本没有编码这些信息。丢失数据库而又没有备份或同步副本，就是真的丢数据了，和丢失任何其他无法重新生成的文件一样；请按上文备份，或按下文同步。
+**Org 文件拥有文档事实；数据库拥有语义事实。** 标题、正文、文档拓扑、Org properties、Tag Occurrence 和真实 Org link 属于文档；稳定 Tag identity、Schema、field value、Semantic Edge、Board、Automation 以及持久 Query/View 定义属于数据库。当前数据库也保存 Org 内容的可重建 Projection，但这些副本没有独立主权。
+
+`M-x supertag-sync-full-rescan` 当前会在现有 Store 中重扫并协调 Org 派生的 node、Tag Occurrence 和 link。它不是 whole-database rebuild 或 Semantic Restore，也不能恢复不可重建的 Semantic Facts。没有备份或同步副本时丢失 `supertag-db.el`，就会永久丢失不可重建数据。完整规则见[《数据主权宪章》](doc/OWNERSHIP-CONSTITUTION_cn.md)。
 
 ---
 

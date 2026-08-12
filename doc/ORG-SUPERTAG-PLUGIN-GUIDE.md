@@ -4,7 +4,7 @@ This is the canonical developer guide for building org-supertag plugins.
 
 Core principles:
 
-- DB/Store is the single source of truth.
+- Org owns Document Facts; the database owns Semantic Facts and physically contains rebuildable Projections.
 - Plugins primarily extend *views* (any UI), not schemas.
 - Plugins MUST read data through the **UI-agnostic View Data API** (`supertag-view-api.el`).
 - Writes go through **ops** APIs and (usually) `supertag-with-transaction`.
@@ -21,8 +21,9 @@ Chinese version:
 
 ### Entities and storage
 
-org-supertag stores its state in a central store (backed by hash tables). In
-most user-facing discussions, we call this “the database”.
+org-supertag currently stores Semantic Facts, Document Projections, and derived
+state in one central hash-table Store. The Store is a physical container, not
+the owner of every fact in it. See `doc/OWNERSHIP-CONSTITUTION_cn.md`.
 
 Common collections and their types:
 
@@ -40,7 +41,8 @@ Common collections and their types:
 ### Read vs write contract
 
 - Read APIs return plists and MUST be treated as immutable snapshots by plugin code.
-- Write APIs accept plists or update functions; they update store and emit events.
+- Document Fact writes go through document commands; Semantic Fact writes go
+  through the matching ops function. Both emit the events needed by views.
 
 ## 1) Read APIs (View Data API)
 
@@ -80,12 +82,13 @@ Many read APIs take a `QUERY-SPEC` plist, e.g.:
 - `(supertag-view-api-get-entities TYPE IDS) -> (list plist)`  
   Batch fetch (recommended for performance).
 
-**Raw collections (advanced)**
+**Raw collections (legacy compatibility)**
 
 - `(supertag-view-api-get-collection COLLECTION) -> hash-table`  
-  Returns the underlying store collection hash table. Treat as **read-only**.
-  Use only when you need to scan/aggregate (e.g. backlinks reverse scan, schema
-  browsers). Prefer query helpers when available.
+  Transitional legacy Interface that returns an underlying Store collection.
+  Do not use it in new plugins. Use a specific query helper; if none exists,
+  add the smallest domain query to the existing query Module. Removal is tracked
+  by ownership-separation `task026`.
 
 **Field access**
 
@@ -100,7 +103,8 @@ Many read APIs take a `QUERY-SPEC` plist, e.g.:
 
 ## 2) Write APIs (Ops layer)
 
-Plugins that modify data MUST use ops APIs, not raw store mutation.
+Plugins MUST NOT mutate the raw Store. Use document commands for Document Facts
+and ops functions for Semantic Facts.
 
 ### Transactions (recommended)
 

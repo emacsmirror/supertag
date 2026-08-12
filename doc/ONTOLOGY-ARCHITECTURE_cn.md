@@ -4,6 +4,9 @@
 
 本文把“本体论三分法”落到 org-supertag 当前代码结构上，给出可执行的架构视图与边界约束，并回答它与 `supertag-automation` 规则系统的差异。
 
+三层架构回答“代码负责什么”；[《数据主权宪章》](OWNERSHIP-CONSTITUTION_cn.md)
+另外回答“事实由谁拥有”。两条轴必须同时成立。
+
 ## 0. 给初中生的 3 分钟版本（用户能得到什么）
 
 把 org-supertag 想象成一个“整理知识的游戏”，你在玩的时候最关心三件事：
@@ -38,7 +41,7 @@
 - **允许**：实体/字段/关系定义、持久化与扫描、数据模型与索引。
 - **禁止**：推理、规则、自动化、条件判断、UI 交互。
 - **在 org-supertag 中的体现**：
-  - `supertag-core-store.el`：单一真相源（store）
+  - `supertag-core-store.el`：当前物理容器；混装 Semantic Facts、Document Projections 与 derived state，不是系统整体的单一真相源
   - `supertag-core-schema.el`：实体类型与字段/关系的结构性定义
   - `supertag-core-persistence.el`：落盘/加载
   - `supertag-core-transform.el`：原子写入与标准化
@@ -88,7 +91,7 @@
 
 | 层 | 主要职责 | 代表模块/文件 |
 | :--- | :--- | :--- |
-| **Data** | 数据模型、持久化、存取与变更通知 | `supertag-core-store.el`, `supertag-core-schema.el`, `supertag-core-persistence.el`, `supertag-core-transform.el`, `supertag-core-notify.el`, `supertag-core-state.el` |
+| **Data** | 数据模型、所有权、持久化、投影、存取与变更通知 | `supertag-core-store.el`, `supertag-core-schema.el`, `supertag-core-persistence.el`, `supertag-core-transform.el`, `supertag-core-notify.el`, `supertag-core-state.el` |
 | **Logic** | 派生事实、语义查询、只读计算 | `supertag-services-query.el`, `supertag-core-scan.el`, `supertag-services-formula.el`，以及 `supertag-automation.el` 中的条件/公式/rollup 逻辑 |
 | **Behavior** | 自动化、同步、UI、对外动作 | `supertag-automation.el`, `supertag-automation-sync.el`, `supertag-ops-*.el`, `supertag-services-sync.el`, `supertag-services-capture.el`, `supertag-services-ui.el`, `supertag-services-scheduler.el`, `supertag-services-embed.el`, `supertag-service-org.el`, `supertag-ui-*.el`, `supertag-view-*.el` |
 
@@ -107,31 +110,28 @@
 - `supertag-view-table--evaluate-filter-condition` / `supertag-view-table--compare-values` (`supertag-view-table.el`)：UI 内部实现过滤语义，和 `supertag-services-query.el` 的过滤/比较逻辑重复。
 - `supertag-query--evaluate-filter-condition` / `supertag-query--compare-values` (`supertag-services-query.el`)：语义过滤实现属于逻辑层，但挂在 services 模块中（可接受但需要边界声明）。
 
-### 拆分建议（最小）
+### 收敛建议（最小）
 
-- 提取“逻辑引擎”到独立模块（如 `supertag-logic-condition.el`、`supertag-logic-formula.el`、`supertag-logic-rollup.el`、`supertag-logic-filter.el`），保证**无副作用**。
-- 行为层（automation/ops）只负责调度与写入：计算逻辑统一调用逻辑模块，避免重复实现。
-- UI 过滤与 query 过滤共用同一逻辑函数，保持语义一致；UI 只负责交互与显示。
-- 如果暂不新增模块，至少在 `supertag-services-query.el` 或 `supertag-services-formula.el` 中集中逻辑实现，并让 automation 作为调用方。
+- 先把重复的条件、公式、rollup 与过滤实现收敛到现有 `supertag-services-query.el` 或 `supertag-services-formula.el`。
+- 行为层（automation/ops）只负责调度与写入，UI 只负责交互与显示。
+- 只有现有 Module 无法形成足够深的 Interface 时才新增 logic Module；不为假想实现预建 adapter/factory。
 
 ## 3. 运行流与边界
 
 ```
-Org 文本/用户动作
-  -> ops/services (行为入口)
-  -> core-transform (原子变更)
-  -> core-store (单一真相源)
-  -> core-notify (事件广播)
-  -> automation/scheduler (行为执行)
-  -> UI/views (展示)
+Org Document Facts -> Document Projection ┐
+                                          ├-> Query Model -> UI/Logic/Automation
+Semantic Facts ---------------------------┘
 
-逻辑层：从 store 读取 -> 计算派生事实/视图 -> 供行为层/AI 使用
+Document command -> 写入并保存 Org -> 重新投影受影响文档
+Semantic command -> Semantic transaction -> 使相关 Projection 失效
 ```
 
 **边界要点**：
 - 逻辑层只能“读”和“推导”，不能“写”。
-- 行为层必须通过 ops/transform 修改数据，不能直接改 store。
-- 任何 AI 行为都应基于“数据 + 逻辑结论”，而不是直接改 Org。
+- 行为层修改 Document Fact 时必须经过 document command；修改 Semantic Fact 时必须经过 semantic operation。
+- Query/View 读取具体 Query Model Interface，不直接取得 raw Store collection。
+- 任何 AI 行为都应基于“数据 + 逻辑结论”，并通过对应写入 Interface 执行。
 
 ## 4. 与 `supertag-automation` 规则的区别
 
@@ -140,7 +140,7 @@ Org 文本/用户动作
 | 维度 | 逻辑层（Logic） | 自动化规则（Behavior） |
 | :--- | :--- | :--- |
 | **目的** | 定义“什么成立 / 什么成立的含义” | 定义“发生什么就做什么” |
-| **副作用** | 无副作用，只读推导 | 有副作用，写入 store/触发外部动作 |
+| **副作用** | 无副作用，只读推导 | 有副作用，写入 Org 或 Semantic Store、触发外部动作 |
 | **触发** | 可按需重算；不依赖事件 | 由事件触发（`:store-changed` / schedule） |
 | **稳定性** | 作为语义基线，默认成立 | 可启用/关闭，属于可选行为 |
 | **表达形态** | 声明式规则/约束/派生事实 | WHEN/IF/THEN 规则（触发 + 条件 + 动作） |

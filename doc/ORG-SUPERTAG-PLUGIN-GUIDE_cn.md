@@ -4,7 +4,7 @@
 
 核心原则：
 
-- DB/Store 是唯一真相源；
+- Org 拥有 Document Facts；数据库拥有 Semantic Facts，并暂时物理保存可重建的 Projections；
 - 插件的主要扩展点是 *视图（View）*（任意 UI），而不是 schema；
 - 插件必须通过 **UI 无关的 View Data API**（`supertag-view-api.el`）读取数据；
 - 写入必须通过 **ops** API，并通常使用 `supertag-with-transaction`。
@@ -17,8 +17,9 @@
 
 ### 实体与存储
 
-org-supertag 的系统状态集中存放在一个中心 store（底层是 hash table）。
-在很多用户讨论里，我们也会把它称为“数据库”。
+org-supertag 当前把 Semantic Facts、Document Projections 与 derived state
+集中存放在一个 hash-table Store 中。Store 是物理容器，不是其中每个事实的 Owner。
+完整定义见 `doc/OWNERSHIP-CONSTITUTION_cn.md`。
 
 常见 collection：
 
@@ -36,7 +37,7 @@ org-supertag 的系统状态集中存放在一个中心 store（底层是 hash t
 ### 读写契约
 
 - 读 API 返回的 plist，请当作不可变快照使用；
-- 写 API 接收 plist 或 updater 函数，会更新 store 并触发事件。
+- Document Fact 通过 document command 写入，Semantic Fact 通过对应 ops 函数写入；两者都会触发 View 所需事件。
 
 ## 1）读取 API（View Data API）
 
@@ -76,11 +77,12 @@ View Data API 是 **内部公开（internal public）** 且 **UI 无关** 的数
 - `(supertag-view-api-get-entities TYPE IDS) -> (list plist)`  
   批量读取（性能建议优先用它）。
 
-**底层 collection（高级用法）**
+**底层 collection（兼容旧代码）**
 
 - `(supertag-view-api-get-collection COLLECTION) -> hash-table`  
-  返回底层 store 的 collection hash table（必须按只读使用）。
-  仅在需要 scan/聚合时使用（例如反向引用扫描、schema 浏览）。
+  这是返回底层 Store collection 的过渡 Interface。新插件不得使用；应调用具体
+  query helper。若缺少所需读取能力，只在现有 query Module 中补最小领域查询。
+  删除该入口由 ownership-separation `task026` 跟踪。
 
 **字段读取**
 
@@ -94,7 +96,7 @@ View Data API 是 **内部公开（internal public）** 且 **UI 无关** 的数
 
 ## 2）写入 API（Ops 层）
 
-插件要修改数据，必须走 ops API，而不是直接改 store。
+插件不得直接修改 Store。Document Fact 走 document command，Semantic Fact 走 ops 函数。
 
 ### 事务（推荐）
 

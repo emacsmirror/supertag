@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task001 Ownership Constitution and migration map
 - 2025-12-16: phase-foundation-20251216/change_foundation_20251216.md
 - 2025-12-16: phase-extractor-fix-20251216/change_extractor_fix_20251216.md
 - 2025-12-16: phase-sync-improve-20251216/change_sync_improve_20251216.md

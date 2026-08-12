@@ -225,7 +225,7 @@ Define fields on `#meeting`: `date`, `participants`, `decisions`, `action-items`
 | Highlight concept mentions | `M-x supertag-concept-link-mode` | Shows concept title/alias mentions as amber semantic highlights, not stored links |
 | Act on the object at point | `M-x supertag-smart-key` | Runs the default action for the current tag, node, field, link, button, or table cell |
 | Choose actions for the object at point | `M-x supertag-assist` | Shows only relevant actions, with the complete menu as a fallback |
-| Full database rebuild | `M-x supertag-sync-full-rescan` | Safe — just re-reads your Org files |
+| Rescan Org-derived data | `M-x supertag-sync-full-rescan` | Reconciles data in the existing Store; it does not restore non-rebuildable semantic data |
 
 Beyond single-command lookups, Org-Supertag has a small S-expression query
 language for combining tags, fields, dates, and full-text search, e.g.
@@ -277,7 +277,7 @@ You define `status`, `priority`, `due` for `#task` **one time**. Every `#task` n
 
 ### 3. Sync is automatic and safe
 
-Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). It never modifies your Org files unless you explicitly edit through a SuperTag view. If the database gets corrupted, `M-x supertag-sync-full-rescan` rebuilds it from scratch.
+Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). User edits normally reach Org through explicit commands and views. The current legacy reference reconciler can also insert reciprocal links during a scan; the ownership-separation phase removes that dual write. `M-x supertag-sync-full-rescan` reconciles Org-derived data in the existing Store; restore non-rebuildable semantic data from a backup or synced copy instead.
 
 ### Compare the effort
 
@@ -319,7 +319,9 @@ Org-SuperTag grows with you. Start simple, add power when you need it:
 | Sync state | `~/.emacs.d/org-supertag/sync-state.el` | File mtimes and hashes |
 | Daily backups | `~/.emacs.d/org-supertag/backups/` | Timestamped DB snapshots |
 
-**Org files own your text and structure; the database owns your typed data.** Org files (headings, body text, `:ID:` properties) are the source of truth for what a node *is*, and `M-x supertag-sync-full-rescan` can always re-derive nodes and tags from them. But schema definitions, field values, Table/Board view layouts, and automation rules live *only* in `supertag-db.el` — a rescan does not invent them from org text, because plain org text doesn't encode them. Losing the database without a backup or a synced copy loses that data for real, the same as losing any other file you can't regenerate; back it up (see above) or sync it (see below) accordingly.
+**Org files own document facts; the database owns semantic facts.** Titles, body text, document topology, Org properties, tag occurrences, and physical Org links belong to the documents. Stable tag identities, schemas, field values, semantic relations, boards, automations, and persisted query/view definitions belong to the database. The current database also contains rebuildable projections of Org content; those copies are not independent owners.
+
+`M-x supertag-sync-full-rescan` currently rescans and reconciles Org-derived nodes, tag occurrences, and links inside the existing Store. It is not a whole-database rebuild or a semantic restore, and it cannot recover non-rebuildable semantic facts. Losing `supertag-db.el` without a backup or synced copy therefore loses non-rebuildable data. See the [data ownership constitution](doc/OWNERSHIP-CONSTITUTION_cn.md) for the authoritative ownership and migration rules.
 
 **6.0 changed the on-disk format of `supertag-db.el` — this is a one-way upgrade.** Since 6.0, the database is written in a deterministic, one-entity-per-line format (what makes git-native sync's field-level merging possible). Older builds (5.9.x and earlier) cannot read entities out of this format — a 5.9.x Emacs pointed at a 6.0+ database will look like it loaded successfully but show an empty store, because the old code only reads the file's first line. Upgrading is safe and automatic (opening an old database with 6.0+ migrates and re-saves it), but **going back to 5.9.x afterward is not** unless you restore a pre-upgrade copy. Two safety nets exist for that: an automatic `backups/supertag-db-premigrate-<old-version>-<timestamp>.el` snapshot the moment an out-of-date database is first loaded, and a `backups/supertag-db-preformat6-<timestamp>.el` snapshot the moment a database still in the old file format is first re-saved (covering the case where the stored version already looked current but the file itself had not been re-saved yet). Neither is ever deleted by the daily-backup cleanup. To downgrade: run `M-x supertag-restore`, pick the pre-upgrade snapshot from the list, preview it, and confirm — then quit Emacs immediately and reopen with the older build. The command keeps the selected file in the old format, refuses to replace a database locked by another Emacs, and first saves the current state (including unsaved changes) as a unique `backups/supertag-db-prerestore-*` recovery point. `M-x supertag-doctor` reports both the current on-disk format and how many of each migration snapshot type exist.
 
