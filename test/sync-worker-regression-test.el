@@ -17,10 +17,18 @@
 (require 'bytecomp)
 (require 'supertag-services-sync)
 
+(declare-function supertag-create-node "supertag-ui-commands")
+
 (defconst supertag-sync-worker-test--root
   (expand-file-name
    ".." (file-name-directory (or load-file-name buffer-file-name)))
   "Repository root.")
+
+(defun supertag-sync-worker-test--without-volatile-node-data (node)
+  "Return NODE without wall-clock fields that differ between test runs."
+  (let ((copy (copy-tree node)))
+    (setq copy (plist-put copy :created-at nil))
+    (plist-put copy :modified-at nil)))
 
 (ert-deftest supertag-sync-verify-file-nodes-skips-when-guarded ()
   "Byte-compiled `supertag-sync--verify-file-nodes' returns nil when
@@ -133,6 +141,111 @@ the old mtime until destructive cleanup is allowed."
              file (list :nodes-created 0 :nodes-updated 0 :nodes-deleted 0)))
           (should parsed))
       (ignore-errors (delete-file file)))))
+
+(ert-deftest supertag-projector-idless-headings-never-get-ephemeral-ids ()
+  "Repeated projection skips ID-less headings without inventing identities."
+  (with-temp-buffer
+    (org-mode)
+    (insert "* No persistent identity\nBody\n")
+    (let ((supertag-sync-auto-create-node t)
+          (before (buffer-string))
+          (generated 0))
+      (cl-letf (((symbol-function 'org-id-new)
+                 (lambda (&rest _)
+                   (setq generated (1+ generated))
+                   (format "ephemeral-%d" generated))))
+        (should-not (supertag--parse-org-nodes-from-current-buffer
+                     "/tmp/idless.org"))
+        (should-not (supertag--parse-org-nodes-from-current-buffer
+                     "/tmp/idless.org"))
+        (should (= generated 0))
+        (should (equal before (buffer-string)))))))
+
+(ert-deftest supertag-create-node-persists-id-before-projecting-heading ()
+  "Explicit node creation reparses the heading after writing its Org ID."
+  (require 'supertag-ui-commands)
+  (let ((supertag--store nil))
+    (supertag--ensure-store)
+    (with-temp-buffer
+      (org-mode)
+      (setq buffer-file-name "/tmp/supertag-explicit-node.org")
+      (insert "* Persistent heading\nBody\n")
+      (goto-char (point-min))
+      (cl-letf (((symbol-function 'org-id-new) (lambda (&rest _) "persistent-id")))
+        (should (equal "persistent-id" (supertag-create-node)))
+        (let ((node (supertag-node-get "persistent-id")))
+          (should (equal "Persistent heading" (plist-get node :title)))
+          (should (equal "Body\n" (plist-get node :content)))
+          (should (equal "persistent-id" (org-entry-get nil "ID"))))))))
+
+(ert-deftest supertag-projector-hash-covers-schedule-deadline-and-references ()
+  "Every Document Fact that drives reconciliation changes the node hash."
+  (let* ((base '(:id "node" :file "/tmp/node.org" :level 1
+                 :title "Node" :raw-value "Node" :olp ("Node")
+                 :tags nil :todo nil :priority nil :scheduled nil
+                 :deadline nil :content "Body\n" :properties nil
+                 :ref-to nil :position 1 :pos 1 :parent-id "file"
+                 :link-type id))
+         (old (plist-put (copy-tree base) :hash (supertag-node-hash base))))
+    (dolist (change '((:scheduled . "<2026-08-13 Thu>")
+                      (:deadline . "<2026-08-14 Fri>")
+                      (:ref-to . ("target"))))
+      (let ((new (plist-put (copy-tree base) (car change) (cdr change))))
+        (should (supertag-node-changed-p old new))))))
+
+(ert-deftest supertag-projector-point-and-file-sync-have-node-parity ()
+  "Point and file entry points apply the same node reconciliation."
+  (let* ((tmp (make-temp-file "supertag-projector-parity-" t))
+         (file (expand-file-name "note.org" (file-truename tmp)))
+         (supertag-data-directory tmp)
+         (supertag-db-file (expand-file-name "supertag-db.el" tmp))
+         (supertag-db-backup-directory (expand-file-name "backups" tmp))
+         (supertag-sync--state
+          (list :sync-state (make-hash-table :test 'equal)))
+         (supertag-sync--deferred-files (make-hash-table :test 'equal))
+         (seed (list :id "child" :type :node :title "Old" :raw-value "Old"
+                     :file nil :level 2 :semantic-note "keep"))
+         full-node point-node source-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert ":PROPERTIES:\n:ID: file-id\n:END:\n#+TITLE: Note\n"
+                    "* Parent\n:PROPERTIES:\n:ID: parent\n:END:\n"
+                    "** Child\nSCHEDULED: <2026-08-13 Thu>\n"
+                    ":PROPERTIES:\n:ID: child\n:CUSTOM: value\n:END:\nBody\n"))
+          (setq seed (plist-put seed :hash (supertag-node-hash seed)))
+          (setq supertag--store nil)
+          (supertag--ensure-store)
+          (supertag-node-create (copy-tree seed))
+          (cl-letf (((symbol-function 'supertag-sync--allow-destructive-p)
+                     (lambda () t)))
+            (supertag-sync--process-single-file
+             file '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0
+                    :references-created 0 :references-deleted 0)))
+          (setq full-node
+                (supertag-sync-worker-test--without-volatile-node-data
+                 (supertag-node-get "child")))
+
+          (setq supertag--store nil)
+          (supertag--ensure-store)
+          (supertag-node-create (copy-tree seed))
+          (setq source-buffer (find-file-noselect file))
+          (with-current-buffer source-buffer
+            (org-mode)
+            (goto-char (point-min))
+            (re-search-forward "^:ID: child$" nil t)
+            (org-back-to-heading t)
+            (supertag-node-sync-at-point))
+          (setq point-node
+                (supertag-sync-worker-test--without-volatile-node-data
+                 (supertag-node-get "child")))
+          (should (equal full-node point-node))
+          (should (equal "keep" (plist-get point-node :semantic-note)))
+          (should (equal '("Parent" "Child") (plist-get point-node :olp)))
+          (should (equal "file-id" (plist-get point-node :parent-id))))
+      (when (buffer-live-p source-buffer)
+        (kill-buffer source-buffer))
+      (ignore-errors (delete-directory tmp t)))))
 
 (ert-deftest supertag-sync-deferred-file-requeues-after-worker-error ()
   "A failed worker does not leave a deferred file permanently queued."

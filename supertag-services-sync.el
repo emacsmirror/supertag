@@ -114,10 +114,17 @@ Takes precedence over `org-supertag-sync-directories`."
 
 (defcustom supertag-sync-hash-props
   '(:raw-value :olp :tags :todo :priority :content :properties :parent-id)
-  "Properties to include when calculating node hash values.
-`:id' is always included. `:todo-type' is treated as `:todo'."
+  "Additional properties to include when calculating node hashes.
+All keys in `supertag-sync-document-fact-hash-props' are always included;
+this option can extend that contract, but cannot remove Document Facts."
   :type '(repeat symbol)
   :group 'supertag-sync)
+
+(defconst supertag-sync-document-fact-hash-props
+  '(:title :raw-value :olp :tags :todo :priority :scheduled :deadline
+    :content :properties :ref-to :file :level :position :pos :parent-id
+    :link-type)
+  "Document Projection properties that must participate in node hashes.")
 
 (defcustom supertag-sync-smart-detection-enabled nil
   "If non-nil, enable smart detection to skip unchanged files during sync.
@@ -135,9 +142,9 @@ When enabled, files are hashed and only re-parsed if their content has changed."
 Stores a plist with :file, :decision, :reason, and :time.")
 
 (defcustom supertag-sync-auto-create-node nil
-  "Whether to automatically create nodes for headings during sync.
-When enabled, any heading without an ID will get one automatically.
-Note: This can interfere with embed block synchronization, so it's disabled by default."
+  "Deprecated compatibility option; sync never invents heading IDs.
+Use an explicit document command such as `supertag-create-node' to persist
+an Org ID before projection.  A read-only scan skips ID-less headings."
   :type 'boolean
   :group 'supertag-sync)
 
@@ -830,7 +837,10 @@ Returns the loaded or initialized sync state."
   "Calculate hash value for NODE.
 Includes the node's ID to ensure absolute uniqueness of the state fingerprint."
   (let* ((id (or (plist-get node :id) "")) ; Ensure ID is part of the hash
-         (hash-props (or supertag-sync-hash-props '()))
+         (hash-props
+          (delete-dups
+           (append supertag-sync-document-fact-hash-props
+                   (copy-sequence (or supertag-sync-hash-props '())))))
          (payload (mapconcat
                    (lambda (key)
                      (format "%s=%s"
@@ -877,13 +887,13 @@ COUNTERS is an optional plist for tracking statistics."
       (setq node-props (plist-put node-props :hash node-hash))
       ;; Process tags only when actually saving the node
       (supertag--process-node-tags node-props)
-      ;; Process reference relations when actually saving the node
-      (when counters
-        (let ((current-refs (plist-get node-props :ref-to)))
-          ;; Clean up orphaned references first
-          (supertag--cleanup-orphaned-references id current-refs counters)
-          ;; Then process current references
-          (supertag--process-node-references node-props counters)))
+      ;; Reference reconciliation is part of projection, not reporting.
+      (let ((reference-counters
+             (or counters (list :references-created 0 :references-deleted 0)))
+            (current-refs (plist-get node-props :ref-to)))
+        (supertag--cleanup-orphaned-references
+         id current-refs reference-counters)
+        (supertag--process-node-references node-props reference-counters))
       ;; If this node comes from a file (i.e., has :file), clear any orphan marker
       (when (plist-get node-props :file)
         (setq node-props (plist-put node-props :orphaned-at nil)))
@@ -894,8 +904,7 @@ COUNTERS is an optional plist for tracking statistics."
 If OLD-NODE doesn't have a hash value, calculate it on the fly."
   (let ((old-hash (or (plist-get old-node :hash)
                       (supertag-node-hash old-node)))
-        (new-hash (or (plist-get new-node :hash)
-                      (supertag-node-hash new-node))))
+        (new-hash (supertag-node-hash new-node)))
     (not (string= old-hash new-hash))))
 
 (defun supertag--merge-node-properties (new-props old-props)
@@ -908,6 +917,29 @@ OLD-PROPS is the source of truth for database-only fields."
              do (unless (member key standard-keys)
                   (plist-put merged-props key value)))
     merged-props))
+
+(defun supertag-sync--reconcile-node (new-props &optional counters)
+  "Reconcile NEW-PROPS with its current node Projection.
+COUNTERS, when non-nil, receives create/update counts.  Both file and point
+sync use this function so change detection, semantic-key preservation, tag
+membership, and reference reconciliation cannot diverge."
+  (let* ((id (plist-get new-props :id))
+         (old-props (and id (supertag-node-get id))))
+    (cond
+     ((null id) nil)
+     ((null old-props)
+      (prog1 (supertag-db-add-with-hash id new-props counters)
+        (when counters
+          (setf (plist-get counters :nodes-created)
+                (1+ (or (plist-get counters :nodes-created) 0))))))
+     ((supertag-node-changed-p old-props new-props)
+      (prog1
+          (supertag-db-add-with-hash
+           id (supertag--merge-node-properties new-props old-props) counters)
+        (when counters
+          (setf (plist-get counters :nodes-updated)
+                (1+ (or (plist-get counters :nodes-updated) 0))))))
+     (t old-props))))
 
 (defun supertag-sync--parse-file-header ()
   "Parse file header in current buffer for file node properties.
@@ -1032,12 +1064,8 @@ COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-dele
         (supertag-sync-update-state file content-hash)
 
       ;; Upsert file node
-      (let ((file-node-id (supertag-sync--upsert-file-node file file-header counters)))
-        ;; Assign :parent-id to all heading nodes
-        (when file-node-id
-          (dolist (node-props nodes-from-file)
-            (plist-put node-props :parent-id file-node-id)))
-
+      (progn
+        (supertag-sync--upsert-file-node file file-header counters)
         ;; Parse & Update heading nodes
         (let* ((current-nodes-in-file (make-hash-table :test 'equal))
                ;; nodes-from-file is already set
@@ -1062,19 +1090,14 @@ COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-dele
                     (setf (plist-get counters :nodes-deleted)
                           (1+ (or (plist-get counters :nodes-deleted) 0))))
                 (setq deferred-deletions t)))
-             ((supertag-node-changed-p old-node-props new-node-props)
-              (let ((merged-props (supertag--merge-node-properties new-node-props old-node-props)))
-                (supertag-db-add-with-hash id merged-props counters))
-              (setf (plist-get counters :nodes-updated)
-                    (1+ (or (plist-get counters :nodes-updated) 0))))
+             (new-node-props
+              (supertag-sync--reconcile-node new-node-props counters))
              (t nil))
             (remhash id current-nodes-in-file))))
 
         ;; Process new nodes
-        (maphash (lambda (id new-node-props)
-                   (supertag-db-add-with-hash id new-node-props counters)
-                   (setf (plist-get counters :nodes-created)
-                         (1+ (or (plist-get counters :nodes-created) 0))))
+        (maphash (lambda (_id new-node-props)
+                   (supertag-sync--reconcile-node new-node-props counters))
                  current-nodes-in-file)
 
         ;; Update sync state — but keep the old hash while deletions are
@@ -1909,34 +1932,21 @@ Returns: :ref-to (list of UUID strings)."
   (supertag-extractor-register :name 'refs :priority 50
                                :fn #'supertag-extractor--refs))
 
-(defun supertag--convert-element-to-node-plist (headline file &optional migration-mode)
+(defun supertag--convert-element-to-node-plist (headline file &optional _migration-mode)
   "Convert a headline ELEMENT from org-element into a node plist.
 This is the core reusable parser for a single headline.
 NOTE: This function only parses data, it does NOT create tag entities or relations.
-MIGRATION-MODE when t, only processes nodes with existing IDs (no auto-generation)."
-  (let* ((id (org-element-property :ID headline)))
-    ;; Handle ID generation based on mode
-    (let ((final-id (if migration-mode
-                        ;; Migration mode: only use existing IDs
-                        id
-                      ;; Normal mode: generate ID if auto-create is enabled
-                      (or id (when supertag-sync-auto-create-node
-                               (org-id-new))))))
-      ;; Only create node if we have a valid ID
-      (when final-id
-        ;; Run the extractor pipeline to collect all per-headline fields.
-        ;; The CTX plist carries parse-context flags shared across extractors.
-        (let* ((ctx (list :file file
-                          :full-rescan-p supertag-sync--is-full-rescan-p))
-               (extracted (supertag-extractor--run headline file ctx)))
-          ;; Build final plist: :id and :file are non-pluggable dispatcher
-          ;; fields; everything else comes from the extractor pipeline.
-          (append (list :id final-id :file file)
-                  extracted))))))
+The optional third argument is retained for caller compatibility.  Projection
+always requires an Org-owned persistent ID and skips ID-less headings."
+  (when-let* ((id (org-element-property :ID headline)))
+    (let* ((ctx (list :file file
+                      :full-rescan-p supertag-sync--is-full-rescan-p))
+           (extracted (supertag-extractor--run headline file ctx)))
+      (append (list :id id :file file) extracted))))
 
 (defun supertag--map-headlines (parsed-ast file &optional migration-mode)
   "Map over headlines in PARSED-AST and parse them into nodes.
-MIGRATION-MODE when t, only processes nodes with existing IDs."
+MIGRATION-MODE is retained for caller compatibility; all modes require IDs."
   (let (nodes)
     (org-element-map parsed-ast 'headline
       (lambda (headline)
@@ -1963,16 +1973,22 @@ FILE is used for setting the :file property on nodes."
         (when (re-search-forward "^#\\+end_embed" nil t)
           (delete-region start (match-beginning 0)))))
     (goto-char (point-min))
-    ;; Parse without triggering org-mode initialization
-    (let ((parsed-ast (org-element-parse-buffer)))
-      (supertag--map-headlines parsed-ast file migration-mode))))
+    ;; Parse without triggering org-mode initialization.
+    (let* ((file-id (plist-get (supertag-sync--parse-file-header) :id))
+           (parsed-ast (org-element-parse-buffer))
+           (nodes (supertag--map-headlines parsed-ast file migration-mode)))
+      (if (null file-id)
+          nodes
+        (mapcar (lambda (node)
+                  (plist-put node :parent-id file-id))
+                nodes)))))
 
 ;;;###autoload
 (defun supertag--parse-org-nodes (file &optional migration-mode)
   "Parse the org file and return a list of nodes. Entry point.
 This function IGNORES content inside #+begin_embed blocks.
 Uses a temporary buffer with minimal side effects to avoid interfering with other packages.
-MIGRATION-MODE when t, only processes nodes with existing IDs."
+MIGRATION-MODE is retained for caller compatibility; all modes require IDs."
   (unless (file-exists-p file)
     (error "File does not exist: %s" file))
   (with-temp-buffer
@@ -2170,54 +2186,45 @@ external modifications (by user/other tools) to avoid unnecessary re-parsing."
 
 (defun supertag--parse-node-at-point ()
   "Parse the Org heading at point and return its property list.
-This version manually extracts the subtree to bypass the org-element
-cache, ensuring the current, unsaved buffer state is parsed.
-Uses minimal side effects to avoid interfering with other packages."
+The current unsaved buffer is parsed through the same projector as file sync,
+preserving outline path, file parent, and absolute positions."
   (when (org-at-heading-p)
     (save-excursion
       (org-back-to-heading t)
-      (let* ((begin (point))
-             (end (save-excursion (org-end-of-subtree t t) (point)))
-             (subtree-text (buffer-substring-no-properties begin end))
-             (current-file (and (buffer-file-name)
-                                (file-truename (expand-file-name (buffer-file-name)))))
-             ;; Capture TODO keywords and relevant regexps from the source buffer
-             (source-todo-keywords-1 org-todo-keywords-1)
-             (source-todo-regexp org-todo-regexp)
-             (source-not-done-regexp org-not-done-regexp)
-             (source-complex-heading-regexp org-complex-heading-regexp)
-             (source-todo-line-regexp org-todo-line-regexp))
-        (with-temp-buffer
-          ;; Disable hooks that might interfere
-          (let ((org-mode-hook nil)
-                (org-inhibit-startup t)
-                (org-agenda-inhibit-startup t)
-                (inhibit-modification-hooks t))
-            (insert subtree-text)
-            (org-mode)
-            ;; Disable org-element cache in temp buffer to avoid freezes.
-            (setq-local org-element-use-cache nil)
-            ;; Restore TODO keywords and regexps to the temp buffer
-            (setq-local org-todo-keywords-1 source-todo-keywords-1)
-            (setq-local org-todo-regexp source-todo-regexp)
-            (setq-local org-not-done-regexp source-not-done-regexp)
-            (setq-local org-complex-heading-regexp source-complex-heading-regexp)
-            (setq-local org-todo-line-regexp source-todo-line-regexp)
-
-            ;; Ensure tab-width is 8 as required by org-current-text-column
-            (setq-local tab-width 8)
-            (let ((ast (org-element-parse-buffer)))
-              ;; The AST of the subtree will have one top-level headline
-              (when (and (eq (org-element-type ast) 'org-data)
-                         (org-element-contents ast))
-                (let ((headline-element (car (org-element-contents ast))))
-                  (when (eq (org-element-type headline-element) 'headline)
-                    (let ((node-props (supertag--convert-element-to-node-plist headline-element current-file)))
-                      ;; The subtree is parsed in a temp buffer, so :begin is 1.
-                      ;; Preserve the original buffer position for navigation.
-                      (setq node-props (plist-put node-props :position begin))
-                      (setq node-props (plist-put node-props :pos begin))
-                      node-props)))))))))))
+      (let* ((source-buffer (or (buffer-base-buffer) (current-buffer)))
+             (source-file (buffer-local-value 'buffer-file-name source-buffer)))
+        (when-let* ((node-id (org-entry-get nil "ID"))
+                    (current-file (and source-file
+                                       (file-truename
+                                        (expand-file-name source-file)))))
+          (let* ((source-text
+                  (save-restriction
+                    (widen)
+                    (buffer-substring-no-properties (point-min) (point-max))))
+                 ;; Capture TODO keywords and relevant regexps from the source buffer
+                 (source-todo-keywords-1 org-todo-keywords-1)
+                 (source-todo-regexp org-todo-regexp)
+                 (source-not-done-regexp org-not-done-regexp)
+                 (source-complex-heading-regexp org-complex-heading-regexp)
+                 (source-todo-line-regexp org-todo-line-regexp))
+            (with-temp-buffer
+              (let ((org-mode-hook nil)
+                    (org-inhibit-startup t)
+                    (org-agenda-inhibit-startup t)
+                    (inhibit-modification-hooks t))
+                (insert source-text)
+                (org-mode)
+                (setq-local org-element-use-cache nil)
+                (setq-local org-todo-keywords-1 source-todo-keywords-1)
+                (setq-local org-todo-regexp source-todo-regexp)
+                (setq-local org-not-done-regexp source-not-done-regexp)
+                (setq-local org-complex-heading-regexp source-complex-heading-regexp)
+                (setq-local org-todo-line-regexp source-todo-line-regexp)
+                (setq-local tab-width 8)
+                (cl-find node-id
+                         (supertag--parse-org-nodes-from-current-buffer current-file)
+                         :key (lambda (node) (plist-get node :id))
+                         :test #'equal)))))))))
 
 ;;;###autoload
 (defun supertag-node-sync-at-point ()
@@ -2226,7 +2233,7 @@ Parses the current state of the headline and updates the store."
   (when (org-at-heading-p)
     (let ((props (supertag--parse-node-at-point)))
       (when props
-        (supertag-db-add-with-hash (plist-get props :id) props)))))
+        (supertag-sync--reconcile-node props)))))
 
 ;;;###autoload
 (defun supertag-migrate-org-files-to-database (path &optional counters allow-no-id)
@@ -2236,7 +2243,7 @@ PATH can be a file or a directory path. If it is a directory, all .org files
 will be processed recursively.
 
 COUNTERS is an optional plist for tracking migration statistics.
-ALLOW-NO-ID when t, also processes nodes without existing IDs (generates temporary IDs).
+ALLOW-NO-ID is retained for caller compatibility; ID-less headings are skipped.
 Returns a plist containing summary information.
 
 This is a one-time operation for initializing user data when first using org-supertag.
@@ -2260,9 +2267,7 @@ It will create entities of type :node and :tag, and establish relations between 
       (condition-case err
           (progn
             (message "Parsing file: %s" file)
-            (let ((nodes (supertag--parse-org-nodes file (not allow-no-id)))) ; migration-mode = not allow-no-id
-              ;; When allow-no-id is nil: only nodes with existing IDs are returned
-              ;; When allow-no-id is t: all nodes are returned (including auto-generated IDs)
+            (let ((nodes (supertag--parse-org-nodes file (not allow-no-id))))
               (setq all-nodes (append all-nodes nodes))
               ;; Collect tags from valid nodes
               (dolist (node nodes)

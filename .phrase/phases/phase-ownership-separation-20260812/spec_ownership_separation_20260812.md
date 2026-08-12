@@ -63,6 +63,7 @@
 - 未解析的 Tag Occurrence 可以存在，但不得静默绑定到错误的 Semantic Tag。
 - Semantic Tag alias 必须全局唯一；冲突时 fail closed。
 - ID-less heading 不得产生下次扫描会漂移的临时身份。
+- ID-less heading 在用户显式创建持久 Org ID 前保持普通 heading，并被 Document Projector 跳过。
 - Document Link、field-reference 与 Semantic Edge 必须可区分来源。
 - Node 删除必须处理 global field values、relations 与 derived indexes。
 - Reindex 不得把缺失文档解释为“允许删除”，除非 sync snapshot 明确为 complete。

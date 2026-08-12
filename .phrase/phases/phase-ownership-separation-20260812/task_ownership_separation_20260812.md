@@ -26,10 +26,11 @@
   - 影响范围：`supertag-ops-node.el`、relation/field tests
   - 完成：2026-08-12；定向 node/transaction/field-reference ERT 39/39 通过；提交态临时 clone 全量 ERT 422/422 通过
 
-- task005 [ ] 修正 Document Projector 的身份与增量 parity
+- task005 [x] 修正 Document Projector 的身份与增量 parity
   - 产出：ID-less heading 不再产生不可持久身份；hash 覆盖全部 Document Facts；point/full sync 使用同一 reconciliation
   - 验证方式：重复扫描不产生漂移 ID；只改 schedule/deadline/ref-to 也被发现；point/full 结果一致
   - 影响范围：`supertag-services-sync.el`、sync regression tests
+  - 完成：2026-08-12；定向 sync/Stream/相关 consumer 回归通过；修改文件 byte-compile 成功；干净临时 clone 全量 ERT 426/426 通过
 
 ## M1 — One-way Document Projection
 

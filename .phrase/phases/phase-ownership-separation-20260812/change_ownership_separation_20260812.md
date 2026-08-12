@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task005 Document Projector identity 与增量 parity
+
+- Modify `supertag-services-sync.el`：ID-less heading 在所有扫描/迁移模式中统一跳过；新增不可被 Customize 删减的 Document Fact hash keys；file/point sync 统一进入 `supertag-sync--reconcile-node`。
+- Modify point parser：复制完整未保存 Org buffer 并复用 file parser，保留 outline path、file parent 与绝对位置；indirect Stream edit 从 base buffer 取得源文件。
+- Modify reference reconciliation：统计 counters 不再控制 projection 行为；point sync 同样收敛 outgoing references。
+- Modify `supertag-ui-commands.el`：显式创建 node 时先写 Org ID，再重新解析完整 heading，避免残缺 node plist。
+- Modify `test/sync-worker-regression-test.el`：覆盖无漂移临时 ID、schedule/deadline/ref-to hash、point/file parity、semantic extension 保留与 explicit create。
+- Add `issue040`：记录 Document Projector 身份、hash 和入口分叉的根因、修复与真实 Vault 确认项。
+
+Behavior：后台扫描保持只读且不会为普通 heading 发明身份；用户显式创建 node 的入口不变。point sync 现在与 file sync 产生相同 Document Projection，并保留数据库语义扩展。
+
+Risk：point sync 为保持上下文会解析当前完整 buffer，而非孤立 subtree；这是正确性优先的 O(file size) 路径，若真实 Vault 测量显示延迟再考虑 org-element 增量优化。旧 `supertag-sync-auto-create-node` 与 migration `ALLOW-NO-ID` 参数保留但不再生成临时身份。
+
+Verification：新增四条 ERT 先红后绿；`sync-worker` 11/11、`view-stream` 9/9，extractor/tag-path/reference/field-reference/smart-key 定向测试通过；修改文件 byte-compile 成功；`check-parens`、`git diff --check` 通过；干净临时 clone 全量 ERT 426/426 通过。
+
 ## 2026-08-12 — task004 Transactional node delete cleanup
 
 - Modify `supertag-ops-node.el`：删除 node 时不再直接扫描/remhash relations；统一调用 `supertag-relation-delete-for-node`，并在删除 node 前清理 legacy `:fields` 与 global `:field-values` per-node bucket；整个操作进入 `supertag-with-transaction`。

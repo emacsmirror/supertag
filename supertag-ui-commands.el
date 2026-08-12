@@ -206,7 +206,7 @@ Otherwise, it will prompt for a title and create a new heading."
           (setq props (supertag--get-node-props-at-point))
           (unless (plist-get props :id)
             (org-id-get-create) ; Ensure ID exists for the heading
-            (setq props (plist-put props :id (org-id-get))))
+            (setq props (supertag--get-node-props-at-point)))
           (setq node-id (plist-get props :id))
           (supertag-node-create props)
           (message "Node created from current heading: %s" (plist-get props :title)))
