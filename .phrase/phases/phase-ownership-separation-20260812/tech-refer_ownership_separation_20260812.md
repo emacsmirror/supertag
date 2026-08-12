@@ -154,6 +154,11 @@ Reindex must not change:
 
 Existing automatic and user-authored links are syntactically indistinguishable. Migration is preview + explicit confirmation only; new writes can become forward-only independently.
 
+Implemented in task009: new document commands persist exactly one source Org
+link, while relation/field operations are Store-only and Backlink consumers use
+the `relations-to` index. Existing ambiguous target text is not touched; task010
+owns its preview and confirmation workflow.
+
 ### Stable Tag ID
 
 Dry-run must produce a complete old-ID mapping, alias conflict report and reverse mapping before any write. Unresolved occurrences remain visible and fail closed rather than silently rebinding.

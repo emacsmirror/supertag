@@ -43,6 +43,8 @@ TEST_FILES=(
     "test/reference-test.el"
     "test/virtual-column-test.el"
     "test/test-field-node-reference.el"
+    "test/test-add-reference.el"
+    "test/test-denote-reference.el"
     "test/persistence-hardening-test.el"
     "test/supertag-restore-test.el"
     "test/canonical-serialization-test.el"
@@ -79,6 +81,7 @@ if [ $# -gt 0 ]; then
             reference) FILTER="$FILTER test/reference-test.el" ;;
             vc|virtual) FILTER="$FILTER test/virtual-column-test.el" ;;
             field-ref) FILTER="$FILTER test/test-field-node-reference.el" ;;
+            add-reference) FILTER="$FILTER test/test-add-reference.el test/test-denote-reference.el" ;;
             persist)   FILTER="$FILTER test/supertag-persistence-test.el test/persistence-hardening-test.el test/supertag-restore-test.el" ;;
             restore)   FILTER="$FILTER test/supertag-restore-test.el" ;;
             canon)     FILTER="$FILTER test/canonical-serialization-test.el" ;;
@@ -94,7 +97,7 @@ if [ $# -gt 0 ]; then
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge tag-path embed ownership all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge tag-path embed ownership all"; exit 1 ;;
         esac
     done
     TEST_FILES=($FILTER)

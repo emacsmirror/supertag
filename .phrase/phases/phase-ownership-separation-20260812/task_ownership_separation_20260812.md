@@ -52,11 +52,12 @@
   - 影响范围：sync command、menu/setup/git fallback、README/docs、tests
   - 完成：2026-08-12；定向 ERT 58/58 与 62/62、干净临时 clone 全量 ERT 429/429 通过；修改文件 byte-compile 成功
 
-- task009 [ ] 新 Reference 改为单一 forward Document Link
+- task009 [x] 新 Reference 改为单一 forward Document Link
   - 依赖：复用并完成 `phase-sync-integrity-20251226/task013` 的旧 reciprocal 审计结论
   - 产出：新 reference 只修改 source Org；target Backlink 通过 `relations-to` 查询
   - 验证方式：新建 reference 只改变一个 Org 文件；Node View/Table Refs 显示 derived backlink
   - 影响范围：relation commands、UI commands、Node/Table views
+  - 完成：2026-08-12；source/target 文件哈希、heading/file-node reproject、field-reference 零 Org 写入及三个 Backlink consumer 已由稳定 ERT 覆盖；干净临时 clone 全量 ERT 437/437 通过
 
 - task010 [ ] 提供旧 ambiguous reciprocal link 的确认式迁移
   - 产出：read-only preview、逐项选择、确认/abort、文件 snapshot；默认不删除

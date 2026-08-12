@@ -144,25 +144,11 @@ Returned keys (current contract):
                         fields)))))
           (setq fields (nreverse fields))
           ;; Compute reference info from :reference relations.
-          (let* ((refs-to-rels   (supertag-relation-find-by-from node-id :reference))
-                 (refs-to        (mapcar (lambda (rel) (plist-get rel :to)) refs-to-rels))
-                 (all-relations  (supertag-view-api-get-collection :relations))
-                 (refs-from '()))
-            (when (hash-table-p all-relations)
-              (maphash
-               (lambda (_ rel-data)
-                 (let* ((rel (if (hash-table-p rel-data)
-                                 (let (plist)
-                                   (maphash (lambda (k v)
-                                              (setq plist (plist-put plist k v)))
-                                            rel-data)
-                                   plist)
-                               rel-data)))
-                   (when (and (eq (plist-get rel :type) :reference)
-                              (equal (plist-get rel :to) node-id))
-                     (push (plist-get rel :from) refs-from))))
-               all-relations))
-            (setq refs-from (nreverse refs-from))
+          (let* ((refs-to-rels (supertag-relation-find-by-from node-id :reference))
+                 (refs-to (mapcar (lambda (rel) (plist-get rel :to)) refs-to-rels))
+                 (refs-from-rels (supertag-relation-find-by-to node-id :reference))
+                 (refs-from (mapcar (lambda (rel) (plist-get rel :from))
+                                    refs-from-rels)))
             ;; Build final state plist.
             (list :id node-id
                   :node node
@@ -397,8 +383,12 @@ Prompts for a title, destination file, and insert position."
   "Interactively select a reference to remove from a given node.
 FROM-NODE-ID is the ID of the node whose references are to be listed.
 Returns the ID of the selected node to unlink."
-  (let* ((source-node (supertag-node-get from-node-id))
-         (ref-to-ids (plist-get source-node :ref-to)))
+  (let ((ref-to-ids
+         (mapcar (lambda (relation) (plist-get relation :to))
+                 (cl-remove-if-not
+                  #'supertag-relation-document-link-p
+                  (supertag-relation-find-by-from
+                   from-node-id :reference)))))
     (if (not ref-to-ids)
         (progn (message "Node has no outgoing references.") nil)
       (let* ((candidates

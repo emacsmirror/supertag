@@ -1,6 +1,11 @@
 * Changelog
 * [Unreleased]
 ** Data safety
+- New references now write one forward Org link in the source node only.
+  Backlinks in Node/Table views are derived from the relation index; relation
+  and node-reference field operations never insert reciprocal text into target
+  files. Existing ambiguous reciprocal links are preserved for a separate,
+  confirmation-only migration.
 *** Breaking: database format version bump 5.0.0 -> 6.0.0
 - =supertag-data-version= is now =6.0.0=. A review of the git-sync S2
   canonical (line-per-entity) serialization found its "old versions can

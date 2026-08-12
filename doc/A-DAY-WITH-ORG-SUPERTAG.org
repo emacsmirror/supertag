@@ -359,14 +359,15 @@ links, I use:
 
 =M-x supertag-add-reference=
 
-This creates a bidirectional link between the current node and the chosen target node.
-The reference appears in both nodes' =Refs= column in the Table View.
+This writes one forward Org link in the current node.  The target's backlink is
+derived from that link, so the reference appears in both nodes' =Refs= views
+without inserting reciprocal text into the target file.
 
 #+begin_src emacs-lisp
-  ;; The reference is stored in the database as a :reference relation.
-  ;; It's separate from Org's [[links]] — which means:
-  ;;   1. It survives file reorganization
-  ;;   2. It's queryable (find all nodes referencing node X)
+  ;; The source Org [[link]] owns the reference.
+  ;; Org-SuperTag projects it as a queryable :reference relation:
+  ;;   1. The target file is never modified
+  ;;   2. Backlinks are derived by querying relations-to
   ;;   3. It appears in the Table View Refs column
   ;;   4. C-o in Table View jumps to the referenced node
 #+end_src

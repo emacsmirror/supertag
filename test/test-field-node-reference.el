@@ -1,10 +1,9 @@
-;;; test-field-node-reference.el --- ERT tests for :node-reference field side effects -*- lexical-binding: t -*-
+;;; test-field-node-reference.el --- ERT tests for node-reference projections -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
-;; Regression tests ensuring that `supertag-field-set' automatically
-;; maintains :reference relations and reciprocal backlinks for fields of
-;; type :node-reference.  Callers should not need to know the field type.
+;; `supertag-field-set' maintains :reference relations for fields of type
+;; :node-reference without writing relation data into Org documents.
 
 ;;; Code:
 
@@ -22,7 +21,6 @@
 (require 'supertag-ops-tag)
 (require 'supertag-ops-relation)
 (require 'supertag-ops-field)
-(require 'supertag-ui-commands)
 
 (defmacro field-node-reference-test--with-env (&rest body)
   "Run BODY with a clean store and two synced nodes in a temp Org file."
@@ -66,43 +64,41 @@
                              :type :node-reference
                              :required nil)))))
 
-(ert-deftest field-set-node-reference-creates-relation-and-backlink ()
-  "Setting a :node-reference field creates a relation and reciprocal backlink."
-  (field-node-reference-test--with-env
-    (field-node-reference-test--tag-with-ref-field)
-    (supertag-node-add-tag source-id "ref-tag")
-    (supertag-field-set source-id "ref-tag" "ref" target-id)
-    ;; Relation exists.
-    (let ((rels (supertag-relation-find-between source-id target-id :reference)))
-      (should (= 1 (length rels))))
-    ;; Backlink exists in target's content.
-    (with-current-buffer (find-file-noselect test-file)
-      (org-with-wide-buffer
-        (goto-char (point-min))
-        (org-next-visible-heading 1)
-        (org-end-of-meta-data t)
-        (should (re-search-forward (format "\\[\\[id:%s\\]\\[Source\\]\\]" source-id) nil t))))))
+(defun field-node-reference-test--file-hash (file)
+  "Return FILE's SHA-256 hash."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (secure-hash 'sha256 (current-buffer))))
 
-(ert-deftest field-set-node-reference-removes-relation-and-backlink ()
-  "Clearing a :node-reference field removes the relation and backlink."
+(ert-deftest field-set-node-reference-creates-derived-relation-only ()
+  "Setting a :node-reference field creates a relation without changing Org."
   (field-node-reference-test--with-env
     (field-node-reference-test--tag-with-ref-field)
     (supertag-node-add-tag source-id "ref-tag")
-    ;; Set, then clear.
-    (supertag-field-set source-id "ref-tag" "ref" target-id)
-    (supertag-field-set source-id "ref-tag" "ref" nil)
-    ;; Relation removed.
-    (should (null (supertag-relation-find-between source-id target-id :reference)))
-    ;; Backlink removed from target's content.
-    (with-current-buffer (find-file-noselect test-file)
-      (org-with-wide-buffer
-        (goto-char (point-min))
-        (org-next-visible-heading 1)
-        (org-end-of-meta-data t)
-        (should-not (re-search-forward (format "\\[\\[id:%s\\]" source-id) nil t))))))
+    (let ((file-hash (field-node-reference-test--file-hash test-file)))
+      (supertag-field-set source-id "ref-tag" "ref" target-id)
+      (let ((rels (supertag-relation-find-between source-id target-id :reference)))
+        (should (= 1 (length rels))))
+      (should (equal '("source-id")
+                     (mapcar (lambda (rel) (plist-get rel :from))
+                             (supertag-relation-find-by-to target-id :reference))))
+      (should (string= file-hash
+                       (field-node-reference-test--file-hash test-file))))))
+
+(ert-deftest field-set-node-reference-removes-relation-without-org-write ()
+  "Clearing a :node-reference field removes its relation without changing Org."
+  (field-node-reference-test--with-env
+    (field-node-reference-test--tag-with-ref-field)
+    (supertag-node-add-tag source-id "ref-tag")
+    (let ((file-hash (field-node-reference-test--file-hash test-file)))
+      (supertag-field-set source-id "ref-tag" "ref" target-id)
+      (supertag-field-set source-id "ref-tag" "ref" nil)
+      (should (null (supertag-relation-find-between source-id target-id :reference)))
+      (should (string= file-hash
+                       (field-node-reference-test--file-hash test-file))))))
 
 (ert-deftest field-set-node-reference-swap-target ()
-  "Changing the target of a :node-reference field updates relation/backlink."
+  "Changing a target updates relations without writing Org links."
   (field-node-reference-test--with-env
     (field-node-reference-test--tag-with-ref-field)
     ;; Create a second target in the same file.
@@ -116,26 +112,14 @@
       (org-back-to-heading t)
       (supertag-node-sync-at-point))
     (supertag-node-add-tag source-id "ref-tag")
-    ;; First target.
-    (supertag-field-set source-id "ref-tag" "ref" target-id)
-    ;; Swap to second target.
-    (supertag-field-set source-id "ref-tag" "ref" "target2-id")
-    ;; Old relation gone, new relation exists.
-    (should (null (supertag-relation-find-between source-id target-id :reference)))
-    (should (= 1 (length (supertag-relation-find-between source-id "target2-id" :reference))))
-    ;; Old backlink gone, new backlink exists.
-    (with-current-buffer (find-file-noselect test-file)
-      (org-with-wide-buffer
-        (goto-char (point-min))
-        (org-next-visible-heading 1)
-        (org-end-of-meta-data t)
-        (should-not (re-search-forward (format "\\[\\[id:%s\\]" source-id) (save-excursion (org-end-of-subtree t t)) t))))
-    (with-current-buffer (find-file-noselect test-file)
-      (org-with-wide-buffer
-        (goto-char (point-min))
-        (re-search-forward "Target2" nil t)
-        (org-end-of-meta-data t)
-        (should (re-search-forward (format "\\[\\[id:%s\\]\\[Source\\]\\]" source-id) nil t))))))
+    (let ((file-hash (field-node-reference-test--file-hash test-file)))
+      (supertag-field-set source-id "ref-tag" "ref" target-id)
+      (supertag-field-set source-id "ref-tag" "ref" "target2-id")
+      (should (null (supertag-relation-find-between source-id target-id :reference)))
+      (should (= 1 (length (supertag-relation-find-between
+                            source-id "target2-id" :reference))))
+      (should (string= file-hash
+                       (field-node-reference-test--file-hash test-file))))))
 
 (ert-deftest field-set-string-does-not-touch-relations ()
   "Setting a non-:node-reference field does not create or delete relations."
@@ -159,17 +143,20 @@
       (should (= 1 (length rels))))))
 
 (ert-deftest field-set-node-reference-global-field ()
-  "Global :node-reference fields also sync relations/backlinks."
+  "Global :node-reference fields sync relations without Org writes."
   (field-node-reference-test--with-env
     (require 'supertag-ops-global-field)
-    (let ((supertag-use-global-fields t))
+    (let ((supertag-use-global-fields t)
+          (file-hash (field-node-reference-test--file-hash test-file)))
       (supertag-global-field-create
        (list :id "ref" :name "Reference" :type :node-reference :required nil))
       (supertag-field-set source-id "any-tag" "ref" target-id)
       (let ((rels (supertag-relation-find-between source-id target-id :reference)))
         (should (= 1 (length rels))))
       (supertag-field-set source-id "any-tag" "ref" nil)
-      (should (null (supertag-relation-find-between source-id target-id :reference))))))
+      (should (null (supertag-relation-find-between source-id target-id :reference)))
+      (should (string= file-hash
+                       (field-node-reference-test--file-hash test-file))))))
 
 (provide 'test-field-node-reference)
 ;;; test-field-node-reference.el ends here

@@ -20,7 +20,6 @@
 (require 'supertag-ops-tag)
 (require 'supertag-ops-field)
 (require 'supertag-ops-relation)
-(require 'supertag-ui-commands) ; For backlink helpers
 (require 'supertag-services-formula)
 (require 'supertag-services-ui)
 (require 'supertag-view-helper)
@@ -1547,7 +1546,7 @@ COORDS is a plist with :entity-id and :col-index."
                     (new-value (supertag-ui-read-field-value col-def current-value))
                     (field-type (plist-get col-def :type)))
                (when new-value
-                 ;; For :node-reference fields, keep :reference relations and backlinks in sync.
+                 ;; For :node-reference fields, keep :reference relations in sync.
                  (when (eq field-type :node-reference)
                    (let* ((relation-targets (supertag-view-table--get-references entity-id))
                           (current-targets (if (eq col-key :refs)
@@ -1556,11 +1555,10 @@ COORDS is a plist with :entity-id and :col-index."
                           (new-targets (supertag-field-normalize-node-reference-list new-value))
                           (removed (cl-set-difference current-targets new-targets :test #'string=))
                           (added (cl-set-difference new-targets current-targets :test #'string=)))
-                     ;; Remove stale references and backlinks.
+                     ;; Remove stale references.
                      (dolist (target removed)
                        (dolist (rel (supertag-relation-find-between entity-id target :reference))
-                         (supertag-relation-delete (plist-get rel :id)))
-                       (supertag-ui--remove-link-under-node target entity-id))
+                         (supertag-relation-delete (plist-get rel :id))))
                      ;; Add new references via unified service.
                      (dolist (target added)
                        (supertag-relation-add-reference entity-id target))))

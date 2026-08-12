@@ -49,8 +49,8 @@ Document Link、field-reference 与 legacy reference 没有 ownership discrimina
 - projector 只补齐已部分分类为 Document Link/Org 的记录；完全无 owner 的 legacy relation
   保持不变，遇到明确冲突的 owner 时 fail closed，不覆盖数据。
 - orphan cleanup 只删除明确的 Org-owned Document Link。
-- `supertag-relation-add-reference` 保持不变；新 reference 的单一 forward link 行为属于
-  task009。
+- task007 先让 scanner 使用纯 Projection Interface；随后 task009 将
+  `supertag-relation-add-reference` 也改为 Store-only，并让交互命令只写 source forward link。
 
 ## Verification
 

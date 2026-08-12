@@ -1,5 +1,5 @@
 ;;; test-denote-reference.el --- file-node identity and link tests -*- lexical-binding: t; -*-
-;; Run: emacs --batch -Q --eval '(package-initialize)' -L . -l test/test-denote-reference.el
+;; Run: emacs --batch -Q -L . -l test/test-denote-reference.el -f ert-run-tests-batch-and-exit
 
 (require 'ert)
 (require 'cl-lib)
@@ -66,13 +66,14 @@
       (org-mode)
       (insert ":PROPERTIES:\n:ID:       roam-id\n:END:\n#+TITLE: Roam\n")
       (should (equal (supertag-sync--parse-file-header)
-                     '(:id "roam-id" :link-type id :title "Roam" :file-tags nil))))
+                     '(:id "roam-id" :link-type id :title "Roam"
+                       :file-tags nil :ref-to nil))))
     (with-temp-buffer
       (org-mode)
       (insert "#+TITLE: Denote\n#+IDENTIFIER: 20260705T120000\n")
       (should (equal (supertag-sync--parse-file-header)
                      '(:id "20260705T120000" :link-type denote
-                       :title "Denote" :file-tags nil))))))
+                       :title "Denote" :file-tags nil :ref-to nil))))))
 
 (ert-deftest file-node-link-format-comes-from-target-node ()
   "Mixed stores format links from node metadata, not a global mode."
@@ -87,8 +88,8 @@
     (should (string= (supertag-node-format-link "heading-id" "Heading")
                      "[[id:heading-id][Heading]]"))))
 
-(ert-deftest denote-file-node-backlink-uses-denote-link ()
-  "A materialized legacy backlink uses the source node's physical link type."
+(ert-deftest denote-reference-does-not-materialize-target-backlink ()
+  "A Denote source relation is queryable without changing target Org."
   (test-denote-reference--with-env
     (let ((source-file (expand-file-name "20260705T120000--source.org" tmp))
           (target-file (expand-file-name "target.org" tmp)))
@@ -104,13 +105,20 @@
         (org-id-update-id-locations nil t)
         (goto-char (point-min))
         (supertag-node-sync-at-point))
-      (should (supertag-relation-add-reference "20260705T120000" "target-id"))
+      (let ((target-text (with-temp-buffer
+                           (insert-file-contents target-file)
+                           (buffer-string))))
+        (should (supertag-relation-add-reference "20260705T120000" "target-id"))
+        (should (equal target-text
+                       (with-temp-buffer
+                         (insert-file-contents target-file)
+                         (buffer-string)))))
       (with-current-buffer (find-file-noselect target-file)
         (goto-char (point-min))
-        (should (re-search-forward
-                 "\\[\\[denote:20260705T120000\\]\\[Source\\]\\]" nil t))))))
-
-(when noninteractive
-  (ert-run-tests-batch-and-exit))
+        (should-not (re-search-forward "20260705T120000" nil t)))
+      (should (equal '("20260705T120000")
+                     (mapcar (lambda (relation) (plist-get relation :from))
+                             (supertag-relation-find-by-to
+                              "target-id" :reference)))))))
 
 (provide 'test-denote-reference)

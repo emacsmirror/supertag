@@ -133,7 +133,7 @@ View Data API 是 **内部公开（internal public）** 且 **UI 无关** 的数
 
 **Relations**
 
-- `(supertag-relation-add-reference FROM-ID TO-ID) -> relation-plist`  
+- `(supertag-relation-add-reference FROM-ID TO-ID) -> t-or-nil`（只写 Store，不修改 Org）
 - `(supertag-relation-delete RELATION-ID) -> deleted-relation-or-nil`
 
 写入约定：

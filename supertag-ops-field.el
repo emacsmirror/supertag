@@ -21,8 +21,6 @@
                   (&optional prompt use-cache with-preview))
 (declare-function supertag-ui-select-multiple-nodes "supertag-services-ui"
                   (&optional prompt use-cache initial with-preview))
-(declare-function supertag-ui--remove-link-under-node "supertag-ui-commands"
-                  (target-node-id link-node-id))
 
 (defcustom supertag-debug-log-field-events nil
   "When non-nil, log detailed field mutation events and automation processing.
@@ -138,22 +136,20 @@ When CREATE is non-nil, allocate and store a new table if absent."
 ;; 4.1 Field Value Operations
 
 (defun supertag-field--sync-node-references (node-id old-value new-value)
-  "Sync :reference relations/backlinks for a :node-reference field change.
+  "Sync :reference relations for a :node-reference field change.
 NODE-ID is the source node. OLD-VALUE and NEW-VALUE are the previous and
 new field values (any shape accepted by
 `supertag-field-normalize-node-reference-list').
-Removed targets have their relation and backlink deleted; added targets
-get a new relation with reciprocal backlink."
+This operation never modifies Org documents."
   (let* ((old-targets (supertag-field-normalize-node-reference-list old-value))
          (new-targets (supertag-field-normalize-node-reference-list new-value))
          (removed (cl-set-difference old-targets new-targets :test #'string=))
          (added (cl-set-difference new-targets old-targets :test #'string=)))
-    ;; Remove stale references and associated backlinks.
+    ;; Remove stale relations.
     (dolist (target removed)
       (dolist (rel (supertag-relation-find-between node-id target :reference))
-        (supertag-relation-delete (plist-get rel :id)))
-      (supertag-ui--remove-link-under-node target node-id))
-    ;; Add new references via the relation service (creates DB edge + backlink).
+        (supertag-relation-delete (plist-get rel :id))))
+    ;; Add new references via the Store-only relation service.
     (dolist (target added)
       (supertag-relation-add-reference node-id target))))
 
@@ -176,7 +172,7 @@ Returns the updated field value."
           (if (and (not (eq old supertag-field--missing))
                    (equal old value))
               old
-            ;; Sync :reference relations/backlinks when this is a node-reference field.
+            ;; Sync Store-only :reference relations for node-reference fields.
             (when (eq (plist-get field-def :type) :node-reference)
               (supertag-field--sync-node-references node-id old value))
             (supertag-node-set-global-field node-id fid value)
@@ -205,7 +201,7 @@ Returns the updated field value."
               (message "supertag-field-set SKIP %s/%s/%s unchanged=%S"
                        node-id tag-id field-name value))
             value)
-        ;; Sync :reference relations/backlinks when this is a node-reference field.
+        ;; Sync Store-only :reference relations for node-reference fields.
         (when (eq (plist-get (supertag-tag-get-field tag-id field-name) :type) :node-reference)
           (supertag-field--sync-node-references node-id old-value value))
         (supertag-ops-commit

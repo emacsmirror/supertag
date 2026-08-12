@@ -142,7 +142,7 @@ This batches notifications and makes the UI react once per logical change.
 
 **Relations**
 
-- `(supertag-relation-add-reference FROM-ID TO-ID) -> relation-plist`  
+- `(supertag-relation-add-reference FROM-ID TO-ID) -> t-or-nil` (Store-only; never writes Org)
 - `(supertag-relation-delete RELATION-ID) -> deleted-relation-or-nil`
 
 Data conventions for writes:

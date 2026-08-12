@@ -16,7 +16,6 @@
 (require 'supertag-ops-field)
 (require 'supertag-ops-global-field)
 (require 'supertag-ops-relation)
-(require 'supertag-ui-commands) ; For backlink helpers
 (require 'supertag-view-helper)
 (require 'supertag-services-ui)
 (require 'supertag-view-api)
@@ -377,22 +376,8 @@ Key Bindings:
 (defun supertag-view-node--get-referenced-by (node-id)
   "Get nodes that reference NODE-ID."
   (when node-id
-    (let ((relations (supertag-view-api-get-collection :relations))
-          (referencing-ids '()))
-      (maphash
-       (lambda (_ rel-data)
-         (let ((relation (if (hash-table-p rel-data)
-                             (let (plist)
-                               (maphash (lambda (k v)
-                                          (setq plist (plist-put plist k v)))
-                                        rel-data)
-                               plist)
-                           rel-data)))
-           (when (and (eq (plist-get relation :type) :reference)
-                      (equal (plist-get relation :to) node-id))
-             (push (plist-get relation :from) referencing-ids))))
-       relations)
-      (nreverse referencing-ids))))
+    (mapcar (lambda (relation) (plist-get relation :from))
+            (supertag-relation-find-by-to node-id :reference))))
 
 (defun supertag-view-node--format-display-value (value field-def)
   "Format VALUE for display with enhanced styling based on FIELD-DEF."

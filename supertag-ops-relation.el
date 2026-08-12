@@ -44,8 +44,8 @@ Value is a plist:
   :detail  optional low-level detail.")
 
 (defcustom supertag-reference-backlink-include-timestamp nil
-  "When non-nil, append an inactive Org timestamp to reciprocal backlinks.
-Example: [[id:abc][Title]] [2025-06-22 Sun 16:07]"
+  "Legacy option retained for compatibility.
+Reciprocal links are no longer written."
   :type 'boolean
   :group 'org-supertag)
 
@@ -157,16 +157,23 @@ Example: [[id:abc][Title]] [2025-06-22 Sun 16:07]"
         (let* ((rel-fields (supertag-reference--effective-fields rel))
                (new-fields (remove field-id rel-fields)))
           (if (null new-fields)
-              (progn
-                (supertag-relation-delete (plist-get rel :id))
-                (when (fboundp 'supertag-ui--remove-link-under-node)
-                  (supertag-ui--remove-link-under-node target from-id)))
+              (supertag-relation-delete (plist-get rel :id))
             (supertag-relation-update
              (plist-get rel :id)
              (lambda (old) (plist-put (copy-sequence old) :fields new-fields)))))))
     ;; Add references for new targets.
     (dolist (target added)
-      (supertag-relation-add-reference from-id target field-id))
+      (if-let* ((relation (car (supertag-relation-find-between
+                                from-id target :reference))))
+          (supertag-relation-update
+           (plist-get relation :id)
+           (lambda (old)
+             (plist-put (copy-sequence old) :fields
+                        (supertag-reference--merge-field-ids
+                         (plist-get old :fields) (list field-id)))))
+        (supertag-relation-create
+         (list :type :reference :from from-id :to target
+               :fields (list field-id)))))
     (supertag-reference--update-field-cache from-id field-id)
     desired))
 
@@ -383,13 +390,9 @@ legacy references remain unchanged until their ownership can be classified."
              (plist-get existing :id))))))
 
 (defun supertag-relation-add-reference (from-id to-id)
-  "Create a reference from FROM-ID to TO-ID at relation layer.
-
-This involves:
-1. Creating the relation in the database.
-2. Inserting a reciprocal link in the TO-ID node's file.
-
-Returns t on success, nil on failure."
+  "Create a reference from FROM-ID to TO-ID without modifying Org files.
+Returns t on success, nil on failure.  Document commands write their one
+physical forward link before projecting it through the scanner."
   (setq supertag-relation--last-error nil)
   (cond
    ((or (not (stringp from-id)) (string-empty-p from-id))
@@ -405,97 +408,18 @@ Returns t on success, nil on failure."
     (supertag-relation--set-last-error :to-node-missing
                                        (format "Failed to add reference: target node %s does not exist in store." to-id)))
    (t
-    (catch 'done
-      (condition-case rel-err
-          (let* ((existing-before (cl-find-if #'identity
-                                              (supertag-relation-find-between from-id to-id :reference)))
-                 ;; 1. Create relation in DB
-                 (relation-result (supertag-relation-create `(:type :reference :from ,from-id :to ,to-id)))
-                 (created-new (null existing-before)))
-            (unless relation-result
-              (throw 'done
-                     (supertag-relation--set-last-error :db-create-failed
-                                                        "Failed to add reference: relation creation returned nil.")))
-            ;; 2. DB write succeeded, now insert reciprocal link.
-            (let* ((from-node (supertag-node-get from-id))
-                   (relation-id (plist-get relation-result :id))
-                   ;; Prefer a cleaned title, fallback to raw/title/ID
-                   (from-title (or (plist-get from-node :title)
-                                   (plist-get from-node :raw-value)
-                                   from-id))
-                   (marker (supertag-ui--find-node-marker to-id))
-                   (backlink-pos nil))
-              (unless (and marker (marker-buffer marker))
-                (when (and created-new relation-id)
-                  (ignore-errors (supertag-relation-delete relation-id)))
-                (throw 'done
-                       (supertag-relation--set-last-error
-                        :backlink-target-unresolved
-                        (format "Failed to add reference: cannot locate target node %s in Org buffers." to-id))))
-              (condition-case backlink-err
-                  (with-current-buffer (marker-buffer marker)
-                    (org-with-wide-buffer
-                      (save-excursion
-                        (goto-char marker)
-                        (let* ((to-file-node-p (supertag-ui--file-node-p to-id))
-                               (pattern (supertag-node-link-pattern from-id))
-                               (ts (when supertag-reference-backlink-include-timestamp
-                                     (format-time-string " [%Y-%m-%d %a %H:%M]" (current-time)))))
-                          (if to-file-node-p
-                              (let ((content-start (point))
-                                    (content-end (point-max)))
-                                (goto-char content-start)
-                                (unless (re-search-forward pattern content-end t)
-                                  (goto-char content-start)
-                                  (unless (looking-at "\\s-*$")
-                                    (insert "\n"))
-                                  (setq backlink-pos (point))
-                                  (insert (supertag-node-format-link from-id from-title)
-                                          (or ts "") "\n")))
-                            (org-back-to-heading t)
-                            (unless (org-at-heading-p)
-                              (error "Target marker is not on an Org heading"))
-                            (org-end-of-meta-data t)
-                            (let ((content-start (point))
-                                  (content-end (save-excursion
-                                                 (if (re-search-forward org-outline-regexp nil t)
-                                                     (match-beginning 0)
-                                                   (org-end-of-subtree t t)
-                                                   (point)))))
-                              (goto-char content-start)
-                              (unless (re-search-forward pattern content-end t)
-                                (goto-char content-end)
-                                (unless (bolp) (insert "\n"))
-                                (setq backlink-pos (line-beginning-position -1))
-                                (insert (supertag-node-format-link from-id from-title)
-                                        (or ts "") "\n")))))
-                        ;; Mark as internal modification to prevent sync loop
-                        (when (fboundp 'supertag--mark-internal-modification)
-                          (supertag--mark-internal-modification (buffer-file-name)))
-                        (save-buffer)
-                        (when relation-id
-                          (supertag-relation-update relation-id
-                           (lambda (rel)
-                             (when (and rel backlink-pos)
-                               (let ((copy (copy-sequence rel)))
-                                 (plist-put copy :to-pos backlink-pos)
-                                 copy))))))))
-                (error
-                 (when (and created-new relation-id)
-                   (ignore-errors (supertag-relation-delete relation-id)))
-                 (throw 'done
-                        (supertag-relation--set-last-error
-                         :backlink-insert-failed
-                         (format "Failed to add reference: backlink insert failed for %s -> %s." from-id to-id)
-                         (error-message-string backlink-err)))))
-              ;; 3. Return t for success
-              (throw 'done t)))
-        (error
-         (throw 'done
-                (supertag-relation--set-last-error :exception
-                                                   (format "Failed to add reference: %s"
-                                                           (error-message-string rel-err))
-                                                   (error-message-string rel-err)))))))))
+    (condition-case rel-err
+        (if (supertag-relation-create
+             (list :type :reference :from from-id :to to-id))
+            t
+          (supertag-relation--set-last-error
+           :db-create-failed
+           "Failed to add reference: relation creation returned nil."))
+      (error
+       (supertag-relation--set-last-error
+        :exception
+        (format "Failed to add reference: %s" (error-message-string rel-err))
+        (error-message-string rel-err)))))))
 ;; 5.3 Relation Query Operations
 
 (defun supertag-relation-find-by-from (from-id &optional type)

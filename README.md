@@ -21,7 +21,7 @@ No external services. No Python. No lock-in. Your `.org` files stay yours — we
 |---|---|
 | Manually typing `:PROPERTIES:` drawers for every field | Type `#tag` once, define fields once, fill values in a Table View |
 | `grep` + regex to find "high priority tasks this week" | `M-x supertag-search` — structured query, instant results |
-| Copy-pasting between notes to link related items | `M-x supertag-add-reference` — one keystroke, bidirectional |
+| Copy-pasting between notes to link related items | `M-x supertag-add-reference` — one forward Org link, automatic backlinks |
 | Every new project means rebuilding your tracking system from scratch | Define a `#project` tag schema once, reuse forever |
 | "Where did I write that meeting note?" | Query `#meeting` by date, participant, or decision |
 
@@ -220,7 +220,7 @@ Define fields on `#meeting`: `date`, `participants`, `decisions`, `action-items`
 | Merge duplicate tags | Schema View: mark tags with `m m`, then press `m M` | Preview and merge into a new/existing tag; updates fields, nodes, references, and Org files atomically |
 | Capture new node | `M-x supertag-capture` | Quick entry with template, adds to your Org file |
 | Search | `M-x supertag-search` | Structured query. Save results to file |
-| Link related nodes | `M-x supertag-add-reference` | Bidirectional link between any two nodes |
+| Link related nodes | `M-x supertag-add-reference` | Writes one forward Org link; target backlinks are derived |
 | Promote selected text to a concept | `M-x supertag-promote-concept` | Creates/reuses a concept node, references it from the current node, and keeps the text plain |
 | Highlight concept mentions | `M-x supertag-concept-link-mode` | Shows concept title/alias mentions as amber semantic highlights, not stored links |
 | Act on the object at point | `M-x supertag-smart-key` | Runs the default action for the current tag, node, field, link, button, or table cell |

@@ -968,11 +968,11 @@ membership, and reference reconciliation cannot diverge."
 
 (defun supertag-sync--parse-file-header ()
   "Parse file header in current buffer for file node properties.
-Returns a plist with :id, :link-type, :title and :file-tags.
+Returns a plist with identity, title, tags, and top-level :ref-to links.
 Identity selection follows `org-supertag-file-id-source'."
   (save-excursion
     (goto-char (point-min))
-    (let (org-id denote-id id link-type title file-tags)
+    (let (org-id denote-id id link-type title file-tags ref-to)
       ;; A file-level Org ID must be in the drawer at the start of the file.
       (skip-chars-forward " \t\r\n")
       (when (looking-at "^:PROPERTIES:")
@@ -1011,7 +1011,22 @@ Identity selection follows `org-supertag-file-id-source'."
              (min 2000 (point-max)) t)
         (let ((raw (string-trim (match-string 1))))
           (setq file-tags (supertag-sync--parse-filetags raw))))
-      (list :id id :link-type link-type :title title :file-tags file-tags))))
+      ;; File-node content ends where the first heading begins.
+      (setq ref-to
+            (save-restriction
+              (narrow-to-region
+               (point-min)
+               (save-excursion
+                 (goto-char (point-min))
+                 (if (re-search-forward "^\\*+\\s-" nil t)
+                     (match-beginning 0)
+                   (point-max))))
+              (cl-delete-duplicates
+               (supertag--extract-refs
+                (org-element-contents (org-element-parse-buffer)))
+               :test #'equal)))
+      (list :id id :link-type link-type :title title :file-tags file-tags
+            :ref-to ref-to))))
 
 (defun supertag-sync--parse-filetags (raw)
   "Parse RAW #+FILETAGS: value into a list of tag strings.
@@ -1038,6 +1053,7 @@ Return its persistent ID, or nil when the selected policy finds none."
                         :link-type (or (plist-get file-header :link-type) 'id)
                         :title title
                         :tags file-tags
+                        :ref-to (plist-get file-header :ref-to)
                         :position 1
                         :content nil
                         :properties nil))

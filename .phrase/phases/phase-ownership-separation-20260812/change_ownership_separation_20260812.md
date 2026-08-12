@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task009 单一 forward Document Link 与派生 Backlink
+
+- Modify document commands：`supertag-add-reference`、create variant 与 remove command 只在 source 的 direct content 写入/删除一条 Org link，保存后通过既有 Document Projector 收敛；target Org 不再打开、写入或补偿回滚。
+- Delete reciprocal writer helpers 与 relation 层的 target marker/physical link/`:to-pos` 路径；`supertag-relation-add-reference`、node-reference field 与 Table edit 均成为 Store-only operation。
+- Modify file-node Projection：`supertag-sync--parse-file-header` 提取首个 heading 之前的 top-level `id:`/`denote:` links，并将 `:ref-to` 纳入 file-node upsert，避免新 forward link 在下一次同步消失。
+- Modify Backlink consumers：Node View 与共享 Node state 删除 raw `:relations` scan，和既有 Table View 一样统一调用 `supertag-relation-find-by-to`。
+- Modify docs/tests：README、day-in-the-life、plugin API 与 Unreleased Changelog 明确 forward-only/derived Backlink 契约；add-reference、Denote 与 field-reference tests 进入稳定测试集。
+- Complete `phase-sync-integrity-20251226/task013`：旧 reciprocal 与用户正向 link 语法不可区分，但该事实只阻塞自动删除，不再阻塞停止新增；遗留确认式迁移由 task010 负责。
+
+Behavior：用户在 heading 或 file-node 执行 `M-x supertag-add-reference` 时，只有 source Org 出现一条 forward link；target Node/Table 通过反向 relation index 立即显示 Backlink。删除 reference 只删除 source link。字段引用与 relation API 不写任一 Org 文件。
+
+Risk：旧 ambiguous reciprocal text 原样保留，因此在 task010 完成前可能同时投影成 legacy 反向 reference；系统不猜测 owner，也不自动清理。Document Link、field-reference 与 Semantic Edge 的完整分型仍由 task015 负责。
+
+Verification：红测先证明旧实现会改写 target；实现后 add-reference/Denote/field-reference 14/14，reference/Node/Table/ownership 17/17，concept 9/9，干净临时 clone 全量 ERT 437/437 通过；修改文件 byte-compile 成功，仅有既有 warning；`git diff --check` 与 runner shell syntax 通过。
+
 ## 2026-08-12 — task008 准确的 Org Reindex Module
 
 - Add `supertag-reindex-org`：只消费一个 complete Org snapshot，并返回 `complete`、`aborted` 或 `failed` report；snapshot partial/unavailable 时零写入、零删除。

@@ -330,13 +330,14 @@ Org-SuperTag 读取后：
 
 =M-x supertag-add-reference=
 
-这在当前节点和目标节点之间创建双向链接。引用会出现在两个节点的 Table View 的 =Refs= 列中。
+这只在当前节点写入一条正向 Org link。目标节点的 Backlink 由该 link 派生，
+所以两个节点的 =Refs= 视图都能看到引用，但 target 文件不会被插入 reciprocal 文本。
 
 #+begin_src emacs-lisp
-  ;; 引用在数据库中存储为 :reference 关系。
-  ;; 它独立于 Org 的 [[链接]]——这意味着：
-  ;;   1. 文件重组后仍然存在
-  ;;   2. 可查询（找到所有引用节点 X 的节点）
+  ;; source Org [[链接]]拥有该引用。
+  ;; Org-SuperTag 将它投影成可查询的 :reference relation：
+  ;;   1. target 文件不会被修改
+  ;;   2. Backlink 通过 relations-to 查询派生
   ;;   3. 出现在 Table View 的 Refs 列
   ;;   4. 在 Table View 中按 C-o 跳转到被引用节点
 #+end_src

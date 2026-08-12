@@ -1,5 +1,14 @@
 # Sync Integrity Change Log
 
+## 2026-08-12 — task013 / issue011
+
+- Stop all new reciprocal Org writes: document commands own one source forward link; relation and field operations are Store-only.
+- Derive target Backlinks through the relation-to index in Node View, Table View and shared Node state.
+- Preserve all existing ambiguous reciprocal text; ownership cannot be inferred safely, so preview/confirmation migration moves to ownership task010.
+- Add heading/file-node, Org-ID/Denote, source/target hash and derived-view regressions to the stable test runner.
+
+验证：add-reference/Denote/field-reference 14/14；reference/Node/Table/ownership 17/17；干净临时 clone 全量 ERT 437/437；旧 links 零自动删除。
+
 ## 2026-07-14 — task016 / issue015
 
 - Modify `supertag-services-sync.el`：file-node validation 改为读取节点自身的

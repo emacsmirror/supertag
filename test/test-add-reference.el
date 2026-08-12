@@ -1,10 +1,4 @@
-;;; add-reference-test.el --- ERT tests for supertag-add-reference -*- lexical-binding: t -*-
-
-;;; Commentary:
-
-;; Tests that `supertag-add-reference' inserts the forward link at the
-;; original cursor position even when the reciprocal backlink is inserted
-;; earlier in the same file (which shifts text positions).
+;;; test-add-reference.el --- Forward-only Document Link tests -*- lexical-binding: t; -*-
 
 ;;; Code:
 
@@ -14,22 +8,22 @@
 (require 'org-id)
 
 (when load-file-name
-  ;; This file lives in test/; add the project root (its parent) to
-  ;; load-path so the `require' calls below can find sibling modules
-  ;; even when invoked without an explicit `-L .' flag.
-  (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name))))
+  (add-to-list 'load-path
+               (expand-file-name ".." (file-name-directory load-file-name))))
 
 (require 'supertag-core-store)
 (require 'supertag-ops-node)
 (require 'supertag-ops-relation)
+(require 'supertag-services-ui)
+(require 'supertag-services-sync)
 (require 'supertag-ui-commands)
+(require 'supertag-view-node)
+(require 'supertag-view-table)
 
-;; File node support reads this variable from org-supertag.el, which pulls
-;; in UI dependencies we don't need for tests.
 (defvar org-supertag-file-id-source 'org-roam)
 
 (defmacro add-reference-test--with-clean-env (&rest body)
-  "Run BODY with a clean isolated store and temp directory."
+  "Run BODY with an isolated Store and temporary Org files."
   (declare (indent 0))
   `(let* ((tmp (make-temp-file "supertag-add-reference-test" t))
           (supertag-data-directory tmp)
@@ -38,171 +32,125 @@
           (supertag--store nil)
           (supertag--store-origin nil)
           (org-id-locations nil)
-          (org-id-files nil))
+          (org-id-files nil)
+          (org-id-locations-file (expand-file-name "org-id-locations" tmp)))
      (unwind-protect
          (progn
            (supertag--ensure-store)
            ,@body)
-       (ignore-errors
-         (delete-directory tmp t)))))
+       (dolist (buffer (buffer-list))
+         (when-let ((file (buffer-file-name buffer)))
+           (when (string-prefix-p tmp file)
+             (kill-buffer buffer))))
+       (ignore-errors (delete-directory tmp t)))))
 
-(ert-deftest add-reference-inserts-at-cursor-after-backlink-shift ()
-  "Forward link is inserted at cursor even if backlink shifts text."
+(defun add-reference-test--file-hash (file)
+  "Return FILE's SHA-256 hash."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (secure-hash 'sha256 (current-buffer))))
+
+(defun add-reference-test--sync-heading (file id)
+  "Visit FILE and project heading ID into the Store."
+  (with-current-buffer (find-file-noselect file)
+    (org-mode)
+    (org-id-update-id-locations nil t)
+    (goto-char (point-min))
+    (re-search-forward (format ":ID:[ \t]+%s" (regexp-quote id)))
+    (org-back-to-heading t)
+    (supertag-node-sync-at-point)))
+
+(ert-deftest add-reference-writes-source-only-and-derives-backlink ()
+  "A new Document Link changes only source Org; all backlink views query it."
   (add-reference-test--with-clean-env
-    (let* ((test-file (expand-file-name "test.org" supertag-data-directory))
-           (source-title "Source Node")
-           (target-title "Target Node"))
-      ;; Create a file where the target node appears BEFORE the source node.
-      (with-temp-file test-file
-        (org-mode)
-        (insert (format "* %s\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget content.\n\n* %s\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nSource content before cursor. Cursor here. After cursor.\n"
-                        target-title source-title)))
-      ;; Visit the file and register IDs with org-id.
-      (with-current-buffer (find-file-noselect test-file)
-        (org-mode)
-        (org-id-update-id-locations nil t)
-        ;; Sync both nodes into the store.
-        (goto-char (point-min))
-        (org-back-to-heading t)
-        (supertag-node-sync-at-point)
-        (goto-char (point-min))
-        (org-next-visible-heading 1)
-        (supertag-node-sync-at-point)
-        ;; Ensure source node exists in store.
-        (should (supertag-node-get "source-id"))
-        (should (supertag-node-get "target-id"))
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp)))
+      (with-temp-file source-file
+        (insert "* Source\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nCursor here.\n"))
+      (with-temp-file target-file
+        (insert "* Target\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget body.\n"))
+      (add-reference-test--sync-heading source-file "source-id")
+      (add-reference-test--sync-heading target-file "target-id")
+      (let ((target-hash (add-reference-test--file-hash target-file)))
+        (with-current-buffer (find-file-noselect source-file)
+          (goto-char (point-min))
+          (cl-letf (((symbol-function 'supertag-ui-select-node)
+                     (lambda (&rest _) "target-id")))
+            (supertag-add-reference)))
+        (should (string= target-hash
+                         (add-reference-test--file-hash target-file)))
+        (with-temp-buffer
+          (insert-file-contents target-file)
+          (should-not (re-search-forward "source-id" nil t)))
+        (with-temp-buffer
+          (insert-file-contents source-file)
+          (should (looking-at-p "\\* Source$"))
+          (should (re-search-forward "\\[\\[id:target-id\\]\\[Target\\]\\]" nil t)))
+        (let ((relation (car (supertag-relation-find-by-to
+                              "target-id" :reference))))
+          (should relation)
+          (should (equal "source-id" (plist-get relation :from)))
+          (should (supertag-relation-document-link-p relation)))
+        (should (equal '("source-id")
+                       (supertag-view-node--get-referenced-by "target-id")))
+        (should (equal '("source-id")
+                       (supertag-view-table--get-referenced-by "target-id")))
+        (should (equal '("source-id")
+                       (plist-get (supertag-view-build-node-state "target-id")
+                                  :refs-from)))))))
 
-        ;; Place cursor in source content at a known position.
-        (goto-char (point-min))
-        (re-search-forward "Cursor here" nil t)
-        ;; Mock node selection to return the target.
-        (cl-letf (((symbol-function 'supertag-ui-select-node)
-                   (lambda (&rest _) "target-id")))
-          (condition-case err
-              (supertag-add-reference)
-            (error (signal (car err) (cdr err)))))
-        ;; Verify forward link was inserted exactly at the original cursor.
-        (goto-char (point-min))
-        (re-search-forward "Cursor here" nil t)
-        (should (looking-at-p "\\[\\[id:target-id\\]\\["))
-        ;; Verify reciprocal backlink was inserted in target content.
-        (goto-char (point-min))
-        (should (re-search-forward "\\[\\[id:source-id\\]\\[" nil t))))))
-
-(ert-deftest add-reference-backlink-includes-timestamp-when-enabled ()
-  "When `supertag-reference-backlink-include-timestamp' is t, backlink carries a timestamp."
+(ert-deftest remove-reference-removes-source-only ()
+  "Removing a Document Link leaves target Org untouched and refreshes projection."
   (add-reference-test--with-clean-env
-    (let* ((test-file (expand-file-name "test.org" supertag-data-directory))
-           (supertag-reference-backlink-include-timestamp t)
-           (source-title "Source Node")
-           (target-title "Target Node"))
-      ;; Create a file where the target node appears BEFORE the source node.
-      (with-temp-file test-file
-        (org-mode)
-        (insert (format "* %s\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget content.\n\n* %s\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nSource content before cursor. Cursor here. After cursor.\n"
-                        target-title source-title)))
-      ;; Visit the file and register IDs with org-id.
-      (with-current-buffer (find-file-noselect test-file)
-        (org-mode)
-        (org-id-update-id-locations nil t)
-        ;; Sync both nodes into the store.
-        (goto-char (point-min))
-        (org-back-to-heading t)
-        (supertag-node-sync-at-point)
-        (goto-char (point-min))
-        (org-next-visible-heading 1)
-        (supertag-node-sync-at-point)
-        ;; Place cursor in source content at a known position.
-        (goto-char (point-min))
-        (re-search-forward "Cursor here" nil t)
-        ;; Mock node selection to return the target.
-        (cl-letf (((symbol-function 'supertag-ui-select-node)
-                   (lambda (&rest _) "target-id")))
-          (condition-case err
-              (supertag-add-reference)
-            (error (signal (car err) (cdr err)))))
-        ;; Verify reciprocal backlink includes a timestamp after the link.
-        (goto-char (point-min))
-        (should (re-search-forward
-                 "\\[\\[id:source-id\\]\\[Source Node\\]\\] \\[[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Za-z]\\{3\\} [0-9]\\{2\\}:[0-9]\\{2\\}\\]"
-                 nil t))))))
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp)))
+      (with-temp-file source-file
+        (insert "* Source\n:PROPERTIES:\n:ID:       source-id\n:END:\n\n[[id:target-id][Target]]\n"))
+      (with-temp-file target-file
+        (insert "* Target\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget body.\n"))
+      (add-reference-test--sync-heading target-file "target-id")
+      (add-reference-test--sync-heading source-file "source-id")
+      (let ((target-hash (add-reference-test--file-hash target-file)))
+        (with-current-buffer (find-file-noselect source-file)
+          (goto-char (point-max))
+          (cl-letf (((symbol-function 'supertag-ui-select-reference-to-remove)
+                     (lambda (_) "target-id")))
+            (supertag-remove-reference)))
+        (should (string= target-hash
+                         (add-reference-test--file-hash target-file)))
+        (with-temp-buffer
+          (insert-file-contents source-file)
+          (should-not (re-search-forward "target-id" nil t)))
+        (should-not (supertag-relation-find-between
+                     "source-id" "target-id" :reference))
+        (should-not (supertag-view-node--get-referenced-by "target-id"))))))
 
-(ert-deftest add-reference-file-node-as-source ()
-  "A file node can be the source of a reference to a heading."
+(ert-deftest add-reference-file-node-source-survives-reprojection ()
+  "A file-level forward link remains a Document Link after another projection."
   (add-reference-test--with-clean-env
-    (let* ((test-file (expand-file-name "test.org" supertag-data-directory)))
-      (with-temp-file test-file
-        (org-mode)
-        (insert ":PROPERTIES:\n:ID:       file-id\n:END:\n#+TITLE: Test File\n\n* Target Heading\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget content.\n"))
-      (with-current-buffer (find-file-noselect test-file)
-        (org-mode)
-        (org-id-update-id-locations nil t)
-        ;; Sync file node manually (test file is outside normal sync scope).
-        (goto-char (point-min))
-        (let ((file-header (supertag-sync--parse-file-header))
-              (counters '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0
-                          :references-created 0 :references-deleted 0)))
-          (supertag-sync--upsert-file-node test-file file-header counters))
-        (outline-next-visible-heading 1)
-        (supertag-node-sync-at-point)
-        ;; Place cursor at file level, before any heading.
-        (goto-char (point-min))
-        (re-search-forward "Test File" nil t)
-        (end-of-line)
-        ;; Mock node selection to return the heading.
-        (cl-letf (((symbol-function 'supertag-ui-select-node)
-                   (lambda (&rest _) "target-id")))
-          (condition-case err
-              (supertag-add-reference)
-            (error (signal (car err) (cdr err)))))
-        ;; Forward link should be inserted at file level.
-        (goto-char (point-min))
-        (should (re-search-forward "\\[\\[id:target-id\\]\\[" nil t))
-        ;; Reciprocal backlink should be in heading content.
-        (goto-char (point-min))
-        (outline-next-visible-heading 1)
-        (should (re-search-forward "\\[\\[id:file-id\\]\\[" nil t))))))
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp))
+          (org-supertag-file-id-source 'org-roam))
+      (with-temp-file source-file
+        (insert ":PROPERTIES:\n:ID:       file-id\n:END:\n#+TITLE: Source\n\nSource body.\n"))
+      (with-temp-file target-file
+        (insert "* Target\n:PROPERTIES:\n:ID:       target-id\n:END:\n\nTarget body.\n"))
+      (supertag-ui--ensure-file-node-synced source-file)
+      (add-reference-test--sync-heading target-file "target-id")
+      (let ((target-hash (add-reference-test--file-hash target-file)))
+        (with-current-buffer (find-file-noselect source-file)
+          (org-mode)
+          (goto-char (point-min))
+          (re-search-forward "Source body")
+          (cl-letf (((symbol-function 'supertag-ui-select-node)
+                     (lambda (&rest _) "target-id")))
+            (supertag-add-reference)))
+        (should (string= target-hash
+                         (add-reference-test--file-hash target-file)))
+        (supertag-ui--ensure-file-node-synced source-file)
+        (let ((relation (car (supertag-relation-find-between
+                              "file-id" "target-id" :reference))))
+          (should (supertag-relation-document-link-p relation)))))))
 
-(ert-deftest add-reference-file-node-as-target ()
-  "A heading can reference a file node, and the backlink goes to file metadata area."
-  (add-reference-test--with-clean-env
-    (let* ((test-file (expand-file-name "test.org" supertag-data-directory)))
-      (with-temp-file test-file
-        (org-mode)
-        (insert ":PROPERTIES:\n:ID:       file-id\n:END:\n#+TITLE: Test File\n\n* Source Heading\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nSource content.\n"))
-      (with-current-buffer (find-file-noselect test-file)
-        (org-mode)
-        (org-id-update-id-locations nil t)
-        ;; Sync file node manually (test file is outside normal sync scope).
-        (goto-char (point-min))
-        (let ((file-header (supertag-sync--parse-file-header))
-              (counters '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0
-                          :references-created 0 :references-deleted 0)))
-          (supertag-sync--upsert-file-node test-file file-header counters))
-        (outline-next-visible-heading 1)
-        (supertag-node-sync-at-point)
-        ;; Place cursor in heading content.
-        (goto-char (point-min))
-        (re-search-forward "Source content" nil t)
-        ;; Mock node selection to return the file node.
-        (cl-letf (((symbol-function 'supertag-ui-select-node)
-                   (lambda (&rest _) "file-id")))
-          (condition-case err
-              (supertag-add-reference)
-            (error (signal (car err) (cdr err)))))
-        ;; Forward link should be in heading content.
-        (goto-char (point-min))
-        (outline-next-visible-heading 1)
-        (should (re-search-forward "\\[\\[id:file-id\\]\\[" nil t))
-        ;; Reciprocal backlink should be after file metadata and before heading.
-        (goto-char (point-min))
-        (re-search-forward "#\\+IDENTIFIER: file-id" nil t)
-        (end-of-line)
-        (should (re-search-forward "\\[\\[id:source-id\\]\\["
-                                  (save-excursion
-                                    (goto-char (point-min))
-                                    (re-search-forward "\\* Source Heading" nil t))
-                                  t))))))
-
-(provide 'add-reference-test)
-;;; add-reference-test.el ends here
+(provide 'test-add-reference)
+;;; test-add-reference.el ends here

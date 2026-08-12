@@ -1,5 +1,6 @@
 # CHANGE Index
 
+- 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task009 forward-only references + derived backlinks
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task008 accurate Org Reindex Module
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task007 pure Document Link projection
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task006 Tag Occurrence / Semantic Tag separation

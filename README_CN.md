@@ -20,7 +20,7 @@ Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库
 |---|---|
 | 每个字段都要手写 `:PROPERTIES:` 抽屉 | 打一次 `#tag`，定义一次字段，之后在表格视图里填 |
 | `grep` + 正则找"高优先级本周任务" | `M-x supertag-search`，结构化查询，秒出结果 |
-| 不同笔记之间靠复制粘贴关联 | `M-x supertag-add-reference`，一键建立双向链接 |
+| 不同笔记之间靠复制粘贴关联 | `M-x supertag-add-reference`，只写一条正向 Org link，自动显示 Backlink |
 | 每开一个新项目都要从零搭跟踪系统 | 定义一次 `#project` 的字段模板，终身复用 |
 | "那个会议记录到底写在哪了？" | 按日期、参与人、决议查 `#meeting` |
 
@@ -219,7 +219,7 @@ rating   →  数字（1–5）
 | 合并重复标签 | Schema View 中用 `m m` 标记，再按 `m M` | 预览后合并到新/已有 tag；原子更新字段、节点、引用和 Org 文件 |
 | 快速捕获新节点 | `M-x supertag-capture` | 模板化快速录入，自动写入 Org 文件 |
 | 搜索 | `M-x supertag-search` | 结构化查询，结果可导出到文件 |
-| 关联节点 | `M-x supertag-add-reference` | 任意两节点间建立双向链接 |
+| 关联节点 | `M-x supertag-add-reference` | 只写 source 的正向 Org link；target Backlink 由查询派生 |
 | 将选中文本提升为概念 | `M-x supertag-promote-concept` | 创建/复用概念节点，从当前节点建立 reference，原文保持普通文本 |
 | 高亮概念提及 | `M-x supertag-concept-link-mode` | 将概念 title/alias 的提及显示为琥珀色语义高亮，不落库为链接 |
 | 操作光标下的对象 | `M-x supertag-smart-key` | 执行当前 tag、node、field、link、button 或 table cell 的默认动作 |
