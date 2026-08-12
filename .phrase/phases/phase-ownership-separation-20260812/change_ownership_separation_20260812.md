@@ -364,3 +364,16 @@ Behavior：查询结果与顺序语义不变（tag id 列表统一为排序输�
 Risk：`get-entity :automations` 从 O(1) 变为 O(N)（automation 数量极小）；view-api 不再 require automation，消除了 view-api→automation→service-org→view-helper→view-api 的 require 环。
 
 Verification：`rg` 证明 UI/View/Completion/Automation 无 `supertag-store-get-collection/entity`、无 `supertag-view-api-get-collection`、无 generic `supertag-query :...` 调用（剩余调用仅在 services-query 自身、migration、diagnostics 等 infra 层与 `supertag-automation-get` ops CRUD）；干净临时 worktree（HEAD + task026 patch）全量 ERT 490/490；12 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
+
+## 2026-08-13 — task027 Queries/Views 迁入 semantic store
+
+- Add `supertag-core-store.el`：`:queries` 与 `:views` 加入 durable root collections（自动获得 task003 的保存/重读验证与 canonical 序列化）。
+- Modify `supertag-query-library.el`：`supertag-query-saved` defcustom 降级为一次性导入源；新增 `supertag-query-saved-list`（Store 读取，懒触发导入）与 `supertag-query-saved--maybe-import-legacy`（Store 空 + defcustom 非空时事务性导入，先 `supertag-save-store` 成功再清空 defcustom，失败回滚保留 legacy 值）；`supertag-query-save` 改写入 `:queries`（store-put-entity + save-store）；所有读取路径（map-forms/completing-read/annotate/saved-query-string）改走 Store。
+- Modify `supertag-view-framework.el`：新增 `supertag-view-config-save-to-store`（排除不可序列化的 `:render-fn`）与 `supertag-view-config-restore-from-store`；`supertag-view-framework-init` 清空后从 `:views` 恢复。
+- Modify `test/query-library-test.el`：saved-query 测试从 custom-file 契约改为 Store 契约，新增 legacy 导入幂等测试；run-saved 渲染测试 cl-letf save-store 避免触盘。
+
+Behavior：重启后 saved queries 与 view configs 从 Store 恢复；Tag rename/Git merge 走 semantic store 既有机制；迁移失败可回滚（defcustom 未清空）。
+
+Risk：`supertag-query-saved-list` 是带幂等副作用的读取（导入守卫严格：Store 空 + defcustom 非空），ownership fixture 直接引用 defcustom 的测试不受影响（不触发导入）。
+
+Verification：query/query-model 定向 29/29、ownership 26/26；干净临时 worktree（HEAD + task027 patch）全量 ERT 491/491；4 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
