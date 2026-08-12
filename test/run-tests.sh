@@ -58,6 +58,7 @@ TEST_FILES=(
     "test/tag-path-test.el"
     "test/test-smart-key.el"
     "test/embed-cache-test.el"
+    "test/ownership-separation-test.el"
 )
 
 # Allow filtering by keyword
@@ -91,8 +92,9 @@ if [ $# -gt 0 ]; then
             tag-merge) FILTER="$FILTER test/tag-merge-test.el" ;;
             tag-path)  FILTER="$FILTER test/tag-path-test.el" ;;
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
+            ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge tag-path embed all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref persist restore canon query tx merge git conflicts cl-block sync-worker smart-key tag-merge tag-path embed ownership all"; exit 1 ;;
         esac
     done
     TEST_FILES=($FILTER)

@@ -8,10 +8,11 @@
   - 影响范围：仅文档，不修改 runtime 或用户数据
   - 完成：2026-08-12；验证结论见 `change_ownership_separation_20260812.md`
 
-- task002 [ ] 建立最小 Vault fixture 与 Semantic Fact fingerprint
+- task002 [x] 建立最小 Vault fixture 与 Semantic Fact fingerprint
   - 产出：两文件 fixture，覆盖 node、Tag Occurrence、schema、field value、Document Link、Semantic Edge、Board、Automation 与 saved query；提供重扫前后 semantic snapshot helper
   - 验证方式：fixture 可重复创建；snapshot 能检测任一 semantic collection 被修改或丢失
   - 影响范围：`test/`、测试 helper
+  - 完成：2026-08-12；3 项 ownership ERT、新增文件 byte-compile、提交态临时 clone 全量 416 项 ERT 全部通过
 
 - task003 [ ] 正式声明 durable roots 并强化持久化验证
   - 产出：将 `:automations`、`:sync-conflicts` 等真实 durable roots 纳入 Store contract；保存重读验证覆盖全部 semantic-owned collections
