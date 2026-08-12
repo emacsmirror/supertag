@@ -18,6 +18,7 @@
 (require 'supertag-ops-relation)
 (require 'supertag-view-helper)
 (require 'supertag-services-ui)
+(require 'supertag-services-query)
 (require 'supertag-view-api)
 (require 'supertag-view-framework)
 (declare-function supertag-view--resolve-node-tags "supertag-services-ui" (node-id))
@@ -358,7 +359,7 @@ Key Bindings:
            (seen (make-hash-table :test 'equal))
            (count 0))
       (dolist (tag-id tag-ids)
-        (dolist (field (supertag-tag-get-all-fields tag-id))
+        (dolist (field (supertag-query-resolved-fields tag-id))
           (let* ((fid (or (plist-get field :id) (plist-get field :name)))
                  (slug (and fid (supertag-sanitize-field-id fid)))
                  (dedupe slug))
@@ -370,14 +371,14 @@ Key Bindings:
 (defun supertag-view-node--get-references (node-id)
   "Get references from NODE-ID to other nodes."
   (when node-id
-    (let ((relations (supertag-relation-find-by-from node-id :reference)))
+    (let ((relations (supertag-query-relations-from node-id :reference)))
       (mapcar (lambda (rel) (plist-get rel :to)) relations))))
 
 (defun supertag-view-node--get-referenced-by (node-id)
   "Get nodes that reference NODE-ID."
   (when node-id
     (mapcar (lambda (relation) (plist-get relation :from))
-            (supertag-relation-find-by-to node-id :reference))))
+            (supertag-query-relations-to node-id :reference))))
 
 (defun supertag-view-node--format-display-value (value field-def)
   "Format VALUE for display with enhanced styling based on FIELD-DEF."
@@ -454,7 +455,7 @@ Only strips keywords if `supertag-view-node-strip-todo-keywords' is non-nil."
       (supertag-view-helper-insert-section-title "Metadata" "🏷️")
       (let ((seen (make-hash-table :test 'equal)))
         (dolist (tag-id (sort valid-tags #'string<))
-          (let* ((fields (supertag-tag-get-all-fields tag-id))
+          (let* ((fields (supertag-query-resolved-fields tag-id))
                  (filtered (cl-loop for f in (or fields '())
                                     for fid = (or (plist-get f :id) (plist-get f :name))
                                     for slug = (and fid (supertag-sanitize-field-id fid))
@@ -528,8 +529,8 @@ Groups relations by type, showing outgoing and incoming with display names."
         ;; First pass: check if there are any semantic relations
         (dolist (entry semantic-types)
           (let* ((rel-type (car entry))
-                 (outgoing (supertag-relation-find-by-from node-id rel-type))
-                 (incoming (supertag-relation-find-by-to node-id rel-type)))
+                 (outgoing (supertag-query-relations-from node-id rel-type))
+                 (incoming (supertag-query-relations-to node-id rel-type)))
             (when (or outgoing incoming)
               (setq has-any t))))
         (when has-any
@@ -539,8 +540,8 @@ Groups relations by type, showing outgoing and incoming with display names."
                    (meta (cdr entry))
                    (name (plist-get meta :name))
                    (inverse-name (or (plist-get meta :inverse-name) name))
-                   (outgoing (supertag-relation-find-by-from node-id rel-type))
-                   (incoming (supertag-relation-find-by-to node-id rel-type)))
+                   (outgoing (supertag-query-relations-from node-id rel-type))
+                   (incoming (supertag-query-relations-to node-id rel-type)))
               ;; Outgoing relations
               (when outgoing
                 (insert (format "  %s (%d)\n" name (length outgoing)))
@@ -695,7 +696,7 @@ Field-type-specific side effects (e.g., :node-reference) are handled by
     (when field-def
       (other-window 1)
       (condition-case err
-          (let* ((current-value (supertag-field-get-with-default node-id tag-id field-name))
+          (let* ((current-value (supertag-query-field-value node-id tag-id field-name))
                  (new-value (supertag-ui-read-field-value field-def current-value)))
 
             ;; Set the field value.  :node-reference side effects (relations +

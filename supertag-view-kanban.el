@@ -59,7 +59,7 @@ Returns hash table where keys are field values and values are lists of (id . nod
     (dolist (node-pair nodes)
       (let* ((node-id (car node-pair))
              (field-value
-              (supertag-field-get node-id base-tag group-field))
+              (supertag-query-field-value node-id base-tag group-field t))
              (key (or field-value "Uncategorized")))
         (push node-pair (gethash key grouped '()))))
     grouped))
@@ -68,7 +68,7 @@ Returns hash table where keys are field values and values are lists of (id . nod
   "Get column values in the correct order."
   (let* ((base-tag (plist-get config :base-tag))
          (group-field (plist-get config :group-field))
-         (all-fields (supertag-tag-get-all-fields base-tag))
+         (all-fields (supertag-query-resolved-fields base-tag))
          (field-def (cl-find-if (lambda (f) (string= (plist-get f :name) group-field)) all-fields))
          (predefined-options (if (and field-def (eq (plist-get field-def :type) :options))
                                  (plist-get field-def :options)

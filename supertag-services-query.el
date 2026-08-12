@@ -62,9 +62,12 @@ When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' children."
   "Return inherited field definitions resolved for TAG-ID."
   (supertag-tag-get-all-fields tag-id))
 
-(defun supertag-query-field-value (node-id tag-id field-name)
-  "Return NODE-ID's FIELD-NAME value in TAG-ID's resolved schema."
-  (supertag-field-get-with-default node-id tag-id field-name))
+(defun supertag-query-field-value (node-id tag-id field-name &optional raw-p)
+  "Return NODE-ID's FIELD-NAME value in TAG-ID's resolved schema.
+When RAW-P is non-nil, return the stored value without schema default."
+  (if raw-p
+      (supertag-field-get node-id tag-id field-name)
+    (supertag-field-get-with-default node-id tag-id field-name)))
 
 (defun supertag-query-relations-from (entity-id &optional type kind)
   "Return relations from ENTITY-ID, optionally filtered by TYPE and KIND."

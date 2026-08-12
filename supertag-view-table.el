@@ -22,6 +22,7 @@
 (require 'supertag-ops-relation)
 (require 'supertag-services-formula)
 (require 'supertag-services-ui)
+(require 'supertag-services-query)
 (require 'supertag-view-helper)
 (require 'supertag-view-api)
 (require 'supertag-view-framework)
@@ -489,7 +490,7 @@ If called interactively without DATA-SOURCE, prompts for data source selection."
                                              (substring field-name 1)
                                            field-name)))
                    (when (and node-id tag-id)
-                     (supertag-field-get-with-default node-id tag-id clean-field-name))))
+                     (supertag-query-field-value node-id tag-id clean-field-name))))
                 (_
                  ;; For other query types, try properties first
                  (let ((props (plist-get entity-data :properties)))
@@ -601,7 +602,7 @@ Automatically detects virtual databases and uses their database fields."
   (let ((tag-id (supertag-tag-get-id-by-name tag-name)))
     (if (not tag-id)
         (supertag-view-table--default-columns)
-      (let* ((fields (supertag-tag-get-all-fields tag-id)) ; Includes inherited fields.
+      (let* ((fields (supertag-query-resolved-fields tag-id)) ; Includes inherited fields.
              (base-columns '((:name "Title" :key :title :width 40)))
              (refs-field (cl-find supertag-view-table--refs-field-id fields
                                   :key (lambda (f)
@@ -879,14 +880,14 @@ Uses improved styling from old version."
 (defun supertag-view-table--get-referenced-by (node-id)
   "Return node IDs that reference NODE-ID."
   (when node-id
-    (let ((relations (supertag-relation-find-by-to node-id :reference)))
+    (let ((relations (supertag-query-relations-to node-id :reference)))
       (cl-remove-if-not #'stringp
                         (mapcar (lambda (rel) (plist-get rel :from)) relations)))))
 
 (defun supertag-view-table--get-references (node-id)
   "Return node IDs referenced by NODE-ID."
   (when node-id
-    (let ((relations (supertag-relation-find-by-from node-id :reference)))
+    (let ((relations (supertag-query-relations-from node-id :reference)))
       (cl-remove-if-not #'stringp
                         (mapcar (lambda (rel) (plist-get rel :to)) relations)))))
 
@@ -1529,7 +1530,7 @@ COORDS is a plist with :entity-id and :col-index."
                      (when (eq col-key :refs)
                        (supertag-view-table--ensure-refs-field tag-id)))
                     (field-name (supertag-view-table--field-name-for-column col-def col-key))
-                    (base-value (supertag-field-get-with-default entity-id
+                    (base-value (supertag-query-field-value entity-id
                                                                  tag-id
                                                                  field-name))
                     (current-value (if (eq col-key :refs)
