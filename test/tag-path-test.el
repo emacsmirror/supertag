@@ -30,6 +30,17 @@
      (supertag--ensure-store)
      ,@body))
 
+(defmacro tag-path-test--with-file-buffer (&rest body)
+  "Run BODY in an Org buffer backed by a disposable file."
+  (declare (indent 0))
+  `(let ((file (make-temp-file "supertag-tag-path" nil ".org")))
+     (unwind-protect
+         (with-temp-buffer
+           (org-mode)
+           (setq buffer-file-name file)
+           ,@body)
+       (delete-file file))))
+
 (defun tag-path-test--put-tag (id &optional parent)
   "Put a minimal tag entity with ID and optional PARENT into the test store."
   (supertag-store-put-entity
@@ -370,7 +381,7 @@
              (candidates (all-completions "diary" table))
              (child (cl-find "diary/happy" candidates
                              :key #'substring-no-properties :test #'equal))
-             recorded)
+             persisted)
         (should child)
         (should (equal "happy"
                        (get-text-property 0 'supertag-tag-id child)))
@@ -378,17 +389,18 @@
         (insert child)
         (cl-letf (((symbol-function 'org-id-get-create) (lambda () "node"))
                   ((symbol-function 'supertag-node-get) (lambda (_) '(:id "node")))
-                  ((symbol-function 'supertag-ops-add-tag-to-node)
-                   (lambda (_node tag &rest _) (setq recorded tag) t)))
+                  ((symbol-function
+                    'supertag-service-org-save-and-project-current-node)
+                   (lambda (node-id) (setq persisted node-id))))
           (supertag-completion--post-completion-action child))
-        (should (equal "happy" recorded))
+        (should (equal "node" persisted))
         (should (equal "#happy " (buffer-string)))))))
 
 (ert-deftest tag-path-completion-creates-child-through-slash-operator ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
-    (with-temp-buffer
+    (tag-path-test--with-file-buffer
       (org-mode)
       (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
       (goto-char (point-min))
@@ -483,7 +495,7 @@
     (tag-path-test--put-tag "diary")
     (tag-path-test--put-tag "happy" "diary")
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
-    (with-temp-buffer
+    (tag-path-test--with-file-buffer
       (org-mode)
       (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
       (goto-char (point-min))
@@ -516,7 +528,7 @@
     (tag-path-test--put-tag "work")
     (tag-path-test--put-tag "project" "work")
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
-    (with-temp-buffer
+    (tag-path-test--with-file-buffer
       (org-mode)
       (insert "* Node #work/project/active\n:PROPERTIES:\n:ID: node-1\n:END:\n")
       (goto-char (point-min))
@@ -581,11 +593,11 @@
           (should-not (supertag-relation-find-by-from "node-1" :node-tag))
           (should-not (supertag-tag-get "diary/happy")))))))
 
-(ert-deftest tag-path-completion-rolls-back-child-creation-on-relation-failure ()
+(ert-deftest tag-path-completion-keeps-source-on-projection-failure ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
-    (with-temp-buffer
+    (tag-path-test--with-file-buffer
       (org-mode)
       (insert "* Node #diary/happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
       (goto-char (point-min))
@@ -608,13 +620,16 @@
         (should-error
          (funcall (plist-get (nthcdr 3 capf) :exit-function)
                   candidate 'finished))
-        (should (equal "* Node #diary/happy"
+        (should (equal "* Node #happy "
                        (car (split-string (buffer-string) "\n"))))
-        (should-not (supertag-tag-get "happy"))
+        (should (supertag-tag-get "happy"))
         (should-not (plist-get (supertag-node-get "node-1") :tags))
-        (should-not (supertag-relation-find-by-from "node-1" :node-tag))))))
+        (should-not (supertag-relation-find-by-from "node-1" :node-tag)))
+      (goto-char (point-min))
+      (supertag-node-sync-at-point)
+      (should (member "happy" (plist-get (supertag-node-get "node-1") :tags))))))
 
-(ert-deftest tag-path-completion-removes-new-org-id-after-store-failure ()
+(ert-deftest tag-path-completion-keeps-saved-org-id-after-projection-failure ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
     (let ((file (make-temp-file "supertag-inline-child-failure" nil ".org")))
@@ -643,14 +658,46 @@
               (should-error
                (funcall (plist-get (nthcdr 3 capf) :exit-function)
                         candidate 'finished))
-              (should (equal "* Node #diary/happy\n" (buffer-string)))
-              (should-not (org-id-get))
-              (should-not (supertag-tag-get "happy"))
+              (should (string-prefix-p "* Node #happy \n" (buffer-string)))
+              (should (org-id-get))
+              (should (supertag-tag-get "happy"))
               (should (= 0 (hash-table-count
-                            (supertag-store-get-collection :nodes))))))
+                            (supertag-store-get-collection :nodes)))))
+            (goto-char (point-min))
+            (supertag-node-sync-at-point)
+            (should (= 1 (hash-table-count
+                          (supertag-store-get-collection :nodes)))))
         (delete-file file)))))
 
-(ert-deftest tag-path-completion-rolls-back-store-after-buffer-write-failure ()
+(ert-deftest tag-path-completion-keeps-normalized-edit-after-save-failure ()
+  (tag-path-test--with-clean-store
+    (tag-path-test--put-tag "diary")
+    (tag-path-test--with-file-buffer
+      (insert "* Node #diary/happy\n")
+      (goto-char (point-min))
+      (search-forward "#diary/happy")
+      (let* ((completion-styles '(basic))
+             (capf (supertag-completion-at-point))
+             (candidate
+              (cl-find-if
+               (lambda (item) (get-text-property 0 'is-new-tag item))
+               (all-completions "diary/happy" (nth 2 capf)))))
+        (should candidate)
+        (delete-region (nth 0 capf) (nth 1 capf))
+        (insert candidate)
+        (cl-letf (((symbol-function 'save-buffer)
+                   (lambda (&rest _) (error "simulated save failure"))))
+          (should-error
+           (funcall (plist-get (nthcdr 3 capf) :exit-function)
+                    candidate 'finished)))
+        (should (string-prefix-p "* Node #happy \n" (buffer-string)))
+        (goto-char (point-min))
+        (should (org-id-get))
+        (should (supertag-tag-get "happy"))
+        (should (= 0 (hash-table-count
+                      (supertag-store-get-collection :nodes))))))))
+
+(ert-deftest tag-path-completion-keeps-semantic-tag-after-buffer-write-failure ()
   (tag-path-test--with-clean-store
     (tag-path-test--put-tag "diary")
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
@@ -681,7 +728,7 @@
                   candidate 'finished))
         (should (equal "* Node #diary/happy"
                        (car (split-string (buffer-string) "\n"))))
-        (should-not (supertag-tag-get "happy"))
+        (should (supertag-tag-get "happy"))
         (should-not (plist-get (supertag-node-get "node-1") :tags))
         (should-not (supertag-relation-find-by-from "node-1" :node-tag))))))
 
@@ -744,7 +791,7 @@
 (ert-deftest tag-path-completion-preserves-flat-new-tag-flow ()
   (tag-path-test--with-clean-store
     (supertag-node-create '(:id "node-1" :title "Node" :tags nil))
-    (with-temp-buffer
+    (tag-path-test--with-file-buffer
       (org-mode)
       (insert "* Node #happy\n:PROPERTIES:\n:ID: node-1\n:END:\n")
       (goto-char (point-min))
@@ -812,7 +859,7 @@
                        sorted))
              (new (cadr sorted))
              committed
-             create-if-needed)
+             projected)
         (should (equal "diary" (funcall table "dia" nil nil)))
         (should-not (funcall table "dia" nil 'lambda))
         (should (equal '("diary" "dia" "diary/happy") visible))
@@ -827,7 +874,8 @@
           (funcall exit new nil))
         (should-not committed)
         (insert " ")
-        (cl-letf (((symbol-function 'supertag-ops-add-tag-to-node)
+        (cl-letf (((symbol-function
+                    'supertag-service-org-save-and-project-current-node)
                    (lambda (&rest _) (setq committed t))))
           (supertag-completion--auto-record-on-boundary))
         (should-not committed)
@@ -835,16 +883,13 @@
         (cl-letf (((symbol-function 'org-id-get-create) (lambda () "node"))
                   ((symbol-function 'supertag-node-get)
                    (lambda (_) '(:id "node")))
-                  ((symbol-function 'supertag-ops-add-tag-to-node)
-                   (lambda (_node _tag &rest args)
-                     (setq create-if-needed
-                           (plist-get args :create-if-needed))
-                     t)))
+                  ((symbol-function
+                    'supertag-service-org-save-and-project-current-node)
+                   (lambda (node-id) (push node-id projected))))
           (supertag-completion--post-completion-action new)
-          (should create-if-needed)
-          (setq create-if-needed 'unset)
+          (should (supertag-tag-get "dia"))
           (supertag-completion--post-completion-action (car sorted)))
-        (should-not create-if-needed)))))
+        (should (equal '("node" "node") projected))))))
 
 (ert-deftest tag-path-capf-filters-unrelated-root-tags-below-namespace ()
   (cl-letf (((symbol-function 'supertag-completion--get-all-tags)

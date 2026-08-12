@@ -1,5 +1,20 @@
 # change_ownership_separation_20260812
 
+## 2026-08-12 — task011 Tag membership 的 Org-first 写入
+
+- Modify `supertag-service-org.el` / sync：唯一顺序改为 edit Org → save → current-node projection；heading 与 file-node 都从保存后的 `#tag` / `#+FILETAGS` 重建 occurrence、resolved membership 与 `:node-tag` relation。
+- Modify UI、Automation、Completion 与 Capture：删除生产入口的 Store-first membership 写入，统一调用 Org service；显式 Semantic Tag creation 保持独立，Org 保存失败时允许保留 definition，但不产生 membership。
+- Delete UI 中三份重复 add-tag transaction/文件写入分支与专用插入器；add/remove/change 的正文编辑、批量位置和 file-node 行为由共享 service 承担。
+- Modify field lifecycle：复用提取后的 initialize/clear helpers，在 projection 成功后按 membership delta 处理既有字段行为；投影失败不提前改字段值。
+- Modify save marker 与 node-local text edit：internal modification key 使用 canonical path 并在成功/失败后清理；remove/replace 只触及当前 node direct section，不再误改嵌套 child heading。
+- Modify completion failure contract tests：已经保存的 Org 与新 Org ID 不因后续 Projection 失败而回滚；移除故障后 point reindex 可收敛。Semantic Tag definition 与 derived membership 不再作为一个跨介质事务处理。
+
+Behavior：用户通过命令、补全、Capture 或 Automation 增删 Tag 时，文件保存成功前 Store membership 保持原样；保存成功后只投影目标 node，并产生一次 node change。保存失败时 buffer 保留可见的未保存编辑，磁盘与 Projection 不变。
+
+Risk：选择补全或 Automation Tag action 现在会保存对应 Org buffer，这是保证 Org 主权的必要行为。多文件批量操作不伪装成跨文件原子事务；前面已成功保存的文件保持有效，失败文件仍保留未保存编辑。全局 Tag delete/rename 与 legacy migration 仍由各自迁移边界处理。
+
+Verification：Org-first focused ERT 4/4、node/tag-path 定向 ERT 58/58、`check-parens` 与 `git diff --check` 通过；修改文件 byte-compile 成功（仅既有 warning）；干净临时 clone 全量 ERT 446/446 通过。
+
 ## 2026-08-12 — task010 旧 reciprocal link 确认式迁移
 
 - Add read-only `supertag-migration-preview-reciprocal-links`：从一个 complete Vault snapshot 扫描实际 Org link occurrence；互相指向只生成候选，不推断 owner、不默认选择。

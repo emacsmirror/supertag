@@ -41,6 +41,7 @@
 (require 'supertag-ops-tag)
 (require 'supertag-ops-node)
 (require 'supertag-services-query)
+(require 'supertag-service-org)
 
 (declare-function supertag-ui-read-tag "supertag-services-ui"
                   (prompt &optional tag-ids allow-new allow-empty allow-namespace))
@@ -273,6 +274,7 @@ Display aliases are replaced with their real Tag ID after a successful write."
                        (get-text-property 0 'new-tag-name selected-string)
                        selected-name))
          (original-node-id (org-id-get))
+         (normalized-token-p nil)
          (heading-position
           (save-excursion
             (when (ignore-errors (org-back-to-heading t) t)
@@ -283,40 +285,29 @@ Display aliases are replaced with their real Tag ID after a successful write."
     (condition-case err
         (when-let* ((node-id (and (supertag-tag-path-valid-p tag-name)
                                   (or original-node-id (org-id-get-create)))))
-          (let ((result
-                 (supertag-with-transaction
-                   ;; Sync can only resolve a display path after its leaf exists.
-                   (when (and is-new parent-id (not (supertag-tag-get tag-name)))
-                     (supertag-tag-create
-                      `(:name ,tag-name :id ,tag-name :extends ,parent-id)))
-                   (unless (supertag-node-get node-id)
-                     (when (fboundp 'supertag-node-sync-at-point)
-                       (save-excursion
-                         (org-back-to-heading t)
-                         (supertag-node-sync-at-point))))
-                   (let ((added
-                          (when (fboundp 'supertag-ops-add-tag-to-node)
-                            (supertag-ops-add-tag-to-node
-                             node-id tag-name
-                             :create-if-needed (and is-new t)
-                             :extends parent-id))))
-                     (when added
-                       (unless (equal selected-name tag-name)
-                         (when-let* ((bounds
-                                      (supertag-completion--get-prefix-bounds)))
-                           (delete-region (car bounds) (cdr bounds))
-                           (goto-char (car bounds))
-                           (insert tag-name)))
-                       (insert " "))
-                     added))))
-            (when result
-              (if is-new
-                  (message "New tag '%s' created and added to node %s"
-                           tag-name node-id)
-                (message "Tag '%s' added to node %s" tag-name node-id)))))
+          ;; Semantic Tag creation may precede the write, but membership never does.
+          (when (and is-new (not (supertag-tag-get tag-name)))
+            (supertag-tag-create
+             `(:name ,tag-name :id ,tag-name :extends ,parent-id)))
+          (unless (supertag-tag-get tag-name)
+            (user-error "Tag '%s' does not exist" tag-name))
+          (unless (equal selected-name tag-name)
+            (when-let* ((bounds (supertag-completion--get-prefix-bounds)))
+              (delete-region (car bounds) (cdr bounds))
+              (goto-char (car bounds))
+              (insert tag-name)))
+          (setq normalized-token-p t)
+          (insert " ")
+          (supertag-service-org-save-and-project-current-node node-id)
+          (if is-new
+              (message "New tag '%s' created and added to node %s"
+                       tag-name node-id)
+            (message "Tag '%s' added to node %s" tag-name node-id)))
       (error
-       (supertag-completion--restore-display-path display-path)
-       (when (and (not original-node-id) heading-position)
+       (unless normalized-token-p
+         (supertag-completion--restore-display-path display-path))
+       (when (and (not original-node-id) heading-position
+                  (not normalized-token-p))
          (save-excursion
            (goto-char heading-position)
            (org-entry-delete (point) "ID")))
@@ -481,14 +472,10 @@ CAPF `[New]' candidate."
         (condition-case err
             (let ((node-id (org-id-get-create)))
               (when node-id
-                (unless (supertag-node-get node-id)
-                  (when (fboundp 'supertag-node-sync-at-point)
-                    (supertag-node-sync-at-point)))
                 (let ((node-tags (supertag-completion--get-node-tags node-id)))
                   (unless (member prefix node-tags)
-                    (when (fboundp 'supertag-ops-add-tag-to-node)
-                      (supertag-ops-add-tag-to-node
-                       node-id prefix :create-if-needed nil))))))
+                    (supertag-service-org-save-and-project-current-node
+                     node-id)))))
           (error
            (message "supertag-completion: auto-record failed: %S" err)))))))
 
@@ -554,14 +541,12 @@ RET creates and records the tag immediately."
       (unless (supertag-tag-path-valid-p input)
         (user-error "Tag paths cannot contain empty segments"))
       (let ((is-new (not (member input all))))
-        (unless (supertag-node-get node-id)
-          (when (fboundp 'supertag-node-sync-at-point)
-            (supertag-node-sync-at-point)))
         (when (looking-back "[^#]" 1)
           (insert "#"))
         (insert input " ")
-        (when (fboundp 'supertag-ops-add-tag-to-node)
-          (supertag-ops-add-tag-to-node node-id input :create-if-needed t))
+        (when is-new
+          (supertag-tag-create `(:name ,input :id ,input)))
+        (supertag-service-org-save-and-project-current-node node-id)
         (message "%s tag '%s' added to node %s"
                  (if is-new "New" "Existing") input node-id)))))
 

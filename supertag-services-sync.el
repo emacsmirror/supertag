@@ -263,15 +263,21 @@ This allows special behavior, like one-time import of legacy tags.")
 FILE should be an absolute path. This function records the current time
 to prevent sync from re-parsing the file we just modified."
   (when file
-    (let ((abs-file (expand-file-name file)))
+    (let ((abs-file (file-truename (expand-file-name file))))
       (puthash abs-file (current-time) supertag-sync--internal-modifications))))
+
+(defun supertag--clear-internal-modification (file)
+  "Forget the internal modification marker for FILE."
+  (when file
+    (remhash (file-truename (expand-file-name file))
+             supertag-sync--internal-modifications)))
 
 (defun supertag--is-internal-modification-p (file)
   "Check if FILE was recently modified internally by Supertag.
 Returns t if the file's modification time is within 1 second of the last
 internal modification timestamp, indicating this save is from Supertag code."
   (when file
-    (let* ((abs-file (expand-file-name file))
+    (let* ((abs-file (file-truename (expand-file-name file)))
            (last-internal (gethash abs-file supertag-sync--internal-modifications))
            (file-mtime (when (file-exists-p abs-file)
                         (file-attribute-modification-time (file-attributes abs-file)))))
@@ -2347,6 +2353,22 @@ Parses the current state of the headline and updates the store."
     (let ((props (supertag--parse-node-at-point)))
       (when props
         (supertag-sync--reconcile-node props)))))
+
+(defun supertag-node-sync-current-buffer (node-id)
+  "Re-sync NODE-ID from its authoritative Org text in the current buffer."
+  (let ((node (supertag-node-get node-id)))
+    (if (zerop (or (plist-get node :level) 1))
+        (supertag-sync--upsert-file-node
+         (buffer-file-name) (supertag-sync--parse-file-header) nil)
+      (unless (and (org-at-heading-p)
+                   (equal node-id (org-entry-get nil "ID")))
+        (goto-char (point-min))
+        (unless (re-search-forward
+                 (concat "^[ \t]*:ID:[ \t]*"
+                         (regexp-quote node-id) "[ \t]*$") nil t)
+          (user-error "Node '%s' was not found in %s" node-id (buffer-name)))
+        (org-back-to-heading t))
+      (supertag-node-sync-at-point))))
 
 ;;;###autoload
 (defun supertag-migrate-org-files-to-database (path &optional counters allow-no-id)

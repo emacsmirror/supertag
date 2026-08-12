@@ -1,0 +1,241 @@
+;;; tag-membership-org-first-test.el --- Org-first Tag membership tests -*- lexical-binding: t; -*-
+
+;;; Code:
+
+(require 'ert)
+(require 'cl-lib)
+
+(when load-file-name
+  (add-to-list 'load-path (file-name-directory load-file-name))
+  (add-to-list 'load-path (expand-file-name ".." (file-name-directory load-file-name))))
+
+(require 'ownership-fixture)
+(require 'supertag-service-org)
+(require 'supertag-ui-commands)
+(require 'supertag-automation)
+
+(defun supertag-tag-membership-test--file-hash (file)
+  "Return a byte-exact hash for FILE."
+  (with-temp-buffer
+    (insert-file-contents-literally file)
+    (secure-hash 'sha256 (current-buffer))))
+
+(defmacro supertag-tag-membership-test--with-vault (&rest body)
+  "Run BODY with a projected ownership fixture and isolated notifications."
+  (declare (indent 0) (debug t))
+  `(supertag-ownership-test-with-vault
+     (let ((supertag-sync--state
+            (list :sync-state (make-hash-table :test 'equal)))
+           (supertag-sync--state-source
+            (expand-file-name "sync-state.el" supertag-data-directory))
+           (supertag-sync--deferred-files (make-hash-table :test 'equal))
+           (supertag-sync--internal-modifications (make-hash-table :test 'equal))
+           (supertag--subscribers (make-hash-table :test 'equal)))
+       (cl-letf (((symbol-function 'supertag-sync-save-state) #'ignore))
+         (should (eq 'complete (plist-get (supertag-reindex-org) :status))))
+       (dolist (tag '("extra" "replacement" "automated"))
+         (supertag-tag-create (list :id tag :name tag)))
+       ,@body)))
+
+(defun supertag-tag-membership-test--goto-node (file node-id)
+  "Visit FILE and move to NODE-ID's heading."
+  (let ((buffer (find-file-noselect file)))
+    (with-current-buffer buffer
+      (goto-char (point-min))
+      (should (re-search-forward
+               (format "^:ID:\\s-*%s$" (regexp-quote node-id)) nil t))
+      (org-back-to-heading t))
+    buffer))
+
+(defun supertag-tag-membership-test--record-node-events (node-id order-cell)
+  "Subscribe ORDER-CELL to projection events for NODE-ID."
+  (supertag-subscribe
+   :store-changed
+   (lambda (path _old _new)
+     (when (equal path (list :nodes node-id))
+       (setcar order-cell (append (car order-cell) '(projection)))))))
+
+(ert-deftest supertag-tag-membership-save-failure-leaves-projection-unchanged ()
+  "A failed Org save never creates membership or node-tag projection."
+  (supertag-tag-membership-test--with-vault
+    (let* ((file (car files))
+           (before-file (supertag-tag-membership-test--file-hash file))
+           (before-node (supertag-node-get supertag-ownership-test-node-a))
+           (before-occurrences (copy-sequence
+                                (plist-get before-node :tag-occurrences)))
+           (before-tags (copy-sequence (plist-get before-node :tags)))
+           (buffer (supertag-tag-membership-test--goto-node
+                    file supertag-ownership-test-node-a)))
+      (unwind-protect
+          (progn
+            (with-current-buffer buffer
+              (should-error
+               (cl-letf (((symbol-function 'save-buffer)
+                          (lambda (&rest _) (error "deliberate save failure"))))
+                 (supertag-service-org-add-tag
+                  supertag-ownership-test-node-a "extra")))
+              (should (buffer-modified-p))
+              (should (search-forward "#extra" (line-end-position) t)))
+            (should (equal before-file
+                           (supertag-tag-membership-test--file-hash file)))
+            (should-not
+             (gethash (file-truename file)
+                      supertag-sync--internal-modifications))
+            (let ((after-node
+                   (supertag-node-get supertag-ownership-test-node-a)))
+              (should (equal before-occurrences
+                             (plist-get after-node :tag-occurrences)))
+              (should (equal before-tags (plist-get after-node :tags))))
+            (should-not
+             (supertag-relation-find-between
+              supertag-ownership-test-node-a "extra" :node-tag)))
+        (with-current-buffer buffer (set-buffer-modified-p nil))
+        (kill-buffer buffer)))))
+
+(ert-deftest supertag-tag-membership-service-saves-before-one-projection-event ()
+  "Add/change/remove save Org first and each project one node change."
+  (supertag-tag-membership-test--with-vault
+    (let* ((file (car files))
+           (buffer (supertag-tag-membership-test--goto-node
+                    file supertag-ownership-test-node-a))
+           (order (list nil))
+           (real-save (symbol-function 'save-buffer)))
+      (unwind-protect
+          (progn
+            (supertag-tag-membership-test--record-node-events
+             supertag-ownership-test-node-a order)
+            (cl-letf (((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-service-org-add-tag
+               supertag-ownership-test-node-a "extra"))
+            (should (equal '(save projection) (car order)))
+            (should (member "extra"
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tag-occurrences)))
+            (should (member "extra"
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tags)))
+
+            (setcar order nil)
+            (cl-letf (((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-service-org-replace-tag
+               supertag-ownership-test-node-a "extra" "replacement"))
+            (should (equal '(save projection) (car order)))
+            (should-not (member "extra"
+                                (plist-get
+                                 (supertag-node-get supertag-ownership-test-node-a)
+                                 :tags)))
+            (should (member "replacement"
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tags)))
+
+            (setcar order nil)
+            (cl-letf (((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-service-org-remove-tag
+               supertag-ownership-test-node-a "replacement"))
+            (should (equal '(save projection) (car order)))
+            (should-not (member "replacement"
+                                (plist-get
+                                 (supertag-node-get supertag-ownership-test-node-a)
+                                 :tag-occurrences)))
+            (should-not
+             (supertag-relation-find-between
+              supertag-ownership-test-node-a "replacement" :node-tag)))
+        (kill-buffer buffer)))))
+
+(ert-deftest supertag-tag-membership-ui-commands-use-org-first-path ()
+  "Interactive add/change/remove retain one save-before-projection path."
+  (supertag-tag-membership-test--with-vault
+    (let* ((file (car files))
+           (buffer (supertag-tag-membership-test--goto-node
+                    file supertag-ownership-test-node-a))
+           (order (list nil))
+           (real-save (symbol-function 'save-buffer)))
+      (unwind-protect
+          (with-current-buffer buffer
+            (supertag-tag-membership-test--record-node-events
+             supertag-ownership-test-node-a order)
+            (cl-letf (((symbol-function 'supertag-ui-read-tag)
+                       (lambda (&rest _) "extra"))
+                      ((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-add-tag))
+            (should (equal '(save projection) (car order)))
+
+            (setcar order nil)
+            (cl-letf (((symbol-function 'supertag-ui-select-tag-on-node)
+                       (lambda (_node-id) "extra"))
+                      ((symbol-function 'supertag-ui-read-tag)
+                       (lambda (&rest _) "replacement"))
+                      ((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-change-tag-at-point))
+            (should (equal '(save projection) (car order)))
+
+            (setcar order nil)
+            (cl-letf (((symbol-function 'supertag-ui-select-tag-on-node)
+                       (lambda (_node-id) "replacement"))
+                      ((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-remove-tag-from-node))
+            (should (equal '(save projection) (car order))))
+        (kill-buffer buffer)))))
+
+(ert-deftest supertag-tag-membership-automation-actions-project-once-after-save ()
+  "Automation Tag actions use the same Org-first membership path."
+  (supertag-tag-membership-test--with-vault
+    (let* ((file (car files))
+           (buffer (supertag-tag-membership-test--goto-node
+                    file supertag-ownership-test-node-a))
+           (order (list nil))
+           (real-save (symbol-function 'save-buffer)))
+      (unwind-protect
+          (progn
+            (supertag-tag-membership-test--record-node-events
+             supertag-ownership-test-node-a order)
+            (cl-letf (((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-automation-action-add-tag
+               supertag-ownership-test-node-a '(:tag "automated")))
+            (should (equal '(save projection) (car order)))
+            (should (member "automated"
+                            (plist-get
+                             (supertag-node-get supertag-ownership-test-node-a)
+                             :tags)))
+
+            (setcar order nil)
+            (cl-letf (((symbol-function 'save-buffer)
+                       (lambda (&rest args)
+                         (setcar order (append (car order) '(save)))
+                         (apply real-save args))))
+              (supertag-automation-action-remove-tag
+               supertag-ownership-test-node-a '(:tag "automated")))
+            (should (equal '(save projection) (car order)))
+            (should-not (member "automated"
+                                (plist-get
+                                 (supertag-node-get supertag-ownership-test-node-a)
+                                 :tags))))
+        (kill-buffer buffer)))))
+
+(provide 'tag-membership-org-first-test)
+
+;;; tag-membership-org-first-test.el ends here

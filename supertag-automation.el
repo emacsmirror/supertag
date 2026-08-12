@@ -774,60 +774,28 @@ PARAMS should contain :state with the new TODO keyword (e.g., \"DONE\")."
 
 (defun supertag-automation-action-add-tag (node-id params)
   "Add a tag to the node.
-Restore original behavior: append inline #tag at end of headline line
-if not already present."
-  (require 'supertag-ops-tag)
-  (require 'supertag-view-helper)
+Append inline #tag at the end of the headline when it is not present."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
       (let* ((node (supertag-node-get node-id))
              (tags (plist-get node :tags)))
         (if (member tag-name tags)
             (supertag-automation--log "SKIP(add-tag): tag '%s' already on node %s" tag-name node-id)
-          ;; 1) Update datastore first
-          (supertag-ops-add-tag-to-node node-id tag-name :create-if-needed t)
-          ;; 2) Update buffer text: end-of-line append if missing
-          (supertag-service-org--with-node-buffer node-id
-            (lambda ()
-              (let ((line-content (buffer-substring (line-beginning-position)
-                                                    (line-end-position))))
-                (unless (string-match (concat "#" (regexp-quote tag-name) "\\b") line-content)
-                  (end-of-line)
-                  (insert (concat " #" tag-name))))
-              (when (buffer-file-name)
-                (supertag--mark-internal-modification (buffer-file-name)))
-              (let ((inhibit-message t))
-                (save-buffer))))
+          (unless (supertag-tag-get tag-name)
+            (supertag-tag-create `(:name ,tag-name :id ,tag-name)))
+          (supertag-service-org-add-tag node-id tag-name 'end)
           (supertag-automation--log "Automation: Added tag '%s' to node %s" tag-name node-id))))))
 
 (defun supertag-automation-action-remove-tag (node-id params)
   "Remove a tag from the node.
-Uses the same data-first approach as UI commands for consistency."
-  (require 'supertag-ops-relation)
-  (require 'supertag-ops-node)
+Uses the same Org-first path as UI commands."
   (when (and node-id)
     (when-let ((tag-name (plist-get params :tag)))
       (let* ((node (supertag-node-get node-id))
              (tags (plist-get node :tags)))
         (if (not (member tag-name tags))
             (supertag-automation--log "SKIP(remove-tag): tag '%s' not present on node %s" tag-name node-id)
-          ;; 1. Delete relationship from database (same as UI command)
-          (let* ((relations (supertag-relation-find-between node-id tag-name :node-tag))
-                 (relation-to-delete (car relations)))
-            (when relation-to-delete
-              (supertag-relation-delete (plist-get relation-to-delete :id))))
-          ;; 2. Remove tag from node's tags list
-          (supertag-node-remove-tag node-id tag-name)
-          ;; 3. Update file text
-          (supertag-service-org--with-node-buffer node-id
-            (lambda ()
-              (let ((tag-regexp (concat "\\s-?#" (regexp-quote tag-name) "\\b")))
-                (when (re-search-forward tag-regexp (line-end-position) t)
-                  (replace-match "")))
-              (when (buffer-file-name)
-                (supertag--mark-internal-modification (buffer-file-name)))
-              (let ((inhibit-message t))
-                (save-buffer))))
+          (supertag-service-org-remove-tag node-id tag-name)
           (supertag-automation--log "Automation: Removed tag '%s' from node %s" tag-name node-id))))))
 
 (defun supertag-automation-action-call-function (node-id params context)

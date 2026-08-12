@@ -769,7 +769,8 @@ This function works in any location within a node - heading or content area."
 TAG-NAME is the tag name to remove."
   (save-excursion
     (org-back-to-heading t)
-    (let ((subtree-end (save-excursion (org-end-of-subtree t t) (point)))
+    (let ((subtree-end (save-excursion
+                         (if (outline-next-heading) (point) (point-max))))
           (case-fold-search nil)
           (removed-count 0))
       (beginning-of-line)
@@ -795,25 +796,25 @@ Returns the tag name (without #) if found, nil otherwise."
               (throw 'tag (substring (match-string-no-properties 0) 1)))))))))
 
 (defun supertag-view-helper-rename-tag-text-in-node (old-tag-name new-tag-name)
-  "Rename all occurrences of #OLD-TAG-NAME to #NEW-TAG-NAME within the current node's subtree.
-This provides a granular rename, scoped only to the current node."
+  "Rename #OLD-TAG-NAME to #NEW-TAG-NAME within the current node."
   (save-excursion
     (org-back-to-heading t)
     (let ((beg (point))
-          (end (save-excursion (org-end-of-subtree t t) (point)))
-          (renamed-count 0)
-          (regex (concat "#" (regexp-quote old-tag-name) "\\b")))
+          (end (save-excursion
+                 (if (outline-next-heading) (point) (point-max))))
+          (renamed-count 0))
       (narrow-to-region beg end)
       (goto-char (point-min))
-      (while (re-search-forward regex nil t)
-        (unless (or (save-excursion
-                      (goto-char (match-beginning 0))
-                      (org-in-src-block-p))
-                    (save-excursion
-                      (goto-char (match-beginning 0))
-                      (beginning-of-line)
-                      (looking-at-p "^[ \t]*#\\+")))
-          (replace-match (concat "#" new-tag-name) t t)
+      (while (re-search-forward supertag-inline-tag-regexp nil t)
+        (when (and (equal old-tag-name (match-string-no-properties 2))
+                   (not (or (save-excursion
+                              (goto-char (match-beginning 0))
+                              (org-in-src-block-p))
+                            (save-excursion
+                              (goto-char (match-beginning 0))
+                              (beginning-of-line)
+                              (looking-at-p "^[ \t]*#\\+")))))
+          (replace-match new-tag-name t t nil 2)
           (setq renamed-count (1+ renamed-count))))
       (widen)
       renamed-count)))

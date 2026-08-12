@@ -44,6 +44,8 @@
 2. 系统先修改并保存 Org。
 3. 保存成功后只重新投影受影响的文件或节点。
 4. Org 写入失败时，Projection 不提前变化。
+5. Tag add/remove/change、`#tag` completion、Capture prompt 与 Automation Tag action 均遵循同一顺序；`node.:tags` 与 `:node-tag` relation 只能由保存后的 Org occurrence 重新派生。
+6. 显式创建 Semantic Tag 是独立的 semantic write；后续 Org 保存失败时可以保留该 Tag definition，但不得产生 membership。
 
 ### Semantic edit
 
@@ -86,6 +88,7 @@
 - Reindex 不修改任何 Org buffer 或文件。
 - Document Projection 与 Query Projection 均可清空并冷重建。
 - 一个新 reference 只有一个物理 forward Document Link；Backlink 由查询产生。
+- Tag membership 命令必须先保存 Org，再单点 reindex；保存失败时 occurrence/membership Projection 不变，成功时 node change 事件只触发一次。
 - 旧 reciprocal migration 只处理用户明确确认的 occurrence；dry-run/abort 零写入，失败可恢复。
 - Node projection 不再依赖 unknown-key merge 保存 Semantic Facts。
 - Semantic Tag 使用稳定 ID；rename 不要求重写所有引用集合和 Org 文件。

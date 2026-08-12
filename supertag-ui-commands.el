@@ -19,6 +19,7 @@
 (require 'supertag-view-kanban)    ; For Kanban board view
 (require 'supertag-services-sync) ; For sync services
 (require 'supertag-services-capture) ; For capture services
+(require 'supertag-service-org)
 (require 'supertag-core-store)
 
 ;; Forward declarations for view-node
@@ -624,12 +625,14 @@ new tag name, bypassing fuzzy completion matching."
      (list (region-beginning) (region-end))))
 
   (let* ((batch-mode (and beg end))
-         (current-point (point))  ; Save current cursor position for single mode
+         (current-marker (copy-marker (point)))
          (node-ids (if batch-mode
                        ;; Batch mode: get all nodes in region
                        (supertag-ui--get-nodes-in-region beg end)
                      ;; Single mode: get node at point
                      (let ((node-id (supertag-ui--get-containing-node-at-point)))
+                       (unless node-id
+                         (user-error "Point is not inside a Supertag node"))
                        ;; Ensure the node exists in the database before proceeding.
                        (unless (supertag-node-get node-id)
                          (supertag-node-sync-at-point))
@@ -650,67 +653,27 @@ new tag name, bypassing fuzzy completion matching."
                           (substring raw-name 1) ; Remove the '=' prefix
                         raw-name))
              (tag-id (supertag-sanitize-tag-name tag-name)))
-        (if literal-tag
-            ;; Direct creation for literal tag names
-            (when (yes-or-no-p (format "Create new tag '%s' and add to %d node(s)? "
-                                       tag-id (length node-ids)))
-              (require 'supertag-ops-batch)
-              (require 'supertag-view-helper)
-              (supertag-with-transaction
-                (dolist (node-id node-ids)
-                  ;; Ensure node exists
-                  (unless (supertag-node-get node-id)
-                    (let* ((marker (supertag-ui--find-node-marker node-id)))
-                      (when marker
-                        (with-current-buffer (marker-buffer marker)
-                          (goto-char (marker-position marker))
-                          (supertag-node-sync-at-point)))))
-
-                  (when (supertag-ops-add-tag-to-node node-id tag-id :create-if-needed t)
-                    (let* ((marker (supertag-ui--find-node-marker node-id)))
-                      (supertag-ui--insert-tag-text-at-node node-id marker tag-id batch-mode current-point)))))
-              (message "Tag '%s' created and added to %d node(s)." tag-id (length node-ids)))
-          ;; Original behavior for fuzzy matching
-          (let ((tag-exists (supertag-tag-get tag-id)))
-            (cond
-             ;; If tag already exists, use it directly
-             (tag-exists
-              (require 'supertag-ops-batch)
-              (require 'supertag-view-helper)
-              (supertag-with-transaction
-                (dolist (node-id node-ids)
-                  ;; Ensure node exists
-                  (unless (supertag-node-get node-id)
-                    (let* ((marker (supertag-ui--find-node-marker node-id)))
-                      (when marker
-                        (with-current-buffer (marker-buffer marker)
-                          (goto-char (marker-position marker))
-                          (supertag-node-sync-at-point)))))
-
-                  (when (supertag-ops-add-tag-to-node node-id tag-id :create-if-needed nil)
-                    (let* ((marker (supertag-ui--find-node-marker node-id)))
-                      (supertag-ui--insert-tag-text-at-node node-id marker tag-id batch-mode current-point)))))
-              (message "Tag '%s' added to %d node(s)." tag-id (length node-ids)))
-             ;; If tag doesn't exist, create it
-             (t
-              (when (yes-or-no-p (format "Tag '%s' does not exist. Create it and add to %d node(s)? "
-                                         tag-id (length node-ids)))
-                (require 'supertag-ops-batch)
-                (require 'supertag-view-helper)
-                (supertag-with-transaction
-                  (dolist (node-id node-ids)
-                    ;; Ensure node exists
-                    (unless (supertag-node-get node-id)
-                      (let* ((marker (supertag-ui--find-node-marker node-id)))
-                        (when marker
-                          (with-current-buffer (marker-buffer marker)
-                            (goto-char (marker-position marker))
-                            (supertag-node-sync-at-point)))))
-
-                    (when (supertag-ops-add-tag-to-node node-id tag-id :create-if-needed t)
-                      (let* ((marker (supertag-ui--find-node-marker node-id)))
-                        (supertag-ui--insert-tag-text-at-node node-id marker tag-id batch-mode current-point)))))
-                  (message "Tag '%s' created and added to %d node(s)." tag-id (length node-ids)))))))))))
+        (when (or (supertag-tag-get tag-id)
+                  (yes-or-no-p
+                   (if literal-tag
+                       (format "Create new tag '%s' and add to %d node(s)? "
+                               tag-id (length node-ids))
+                     (format "Tag '%s' does not exist. Create and add it to %d node(s)? "
+                             tag-id (length node-ids)))))
+          (unless (supertag-tag-get tag-id)
+            (supertag-tag-create `(:name ,tag-id :id ,tag-id)))
+          (dolist (node-id node-ids)
+            (unless (supertag-node-get node-id)
+              (when-let* ((marker (supertag-ui--find-node-marker node-id)))
+                (with-current-buffer (marker-buffer marker)
+                  (goto-char marker)
+                  (supertag-node-sync-at-point))))
+            (supertag-service-org-add-tag
+             node-id tag-id
+             (if batch-mode
+                 supertag-batch-tag-insert-position
+               current-marker)))
+          (message "Tag '%s' added to %d node(s)." tag-id (length node-ids)))))))
 
 (defun supertag-remove-tag-from-node ()
   "Interactively remove a tag from the current node.
@@ -719,19 +682,8 @@ Can be used both at headings and within node content areas."
   (let* ((node-id (supertag-ui--get-containing-node-at-point))
      (tag-id (supertag-ui-select-tag-on-node node-id)))
       (when tag-id
-        ;; 1. Clean up database state inside a single transaction
-        (supertag-with-transaction
-          ;; Remove any node-tag relations
-          (let ((relations (supertag-relation-find-between node-id tag-id :node-tag)))
-            (dolist (relation relations)
-              (supertag-relation-delete (plist-get relation :id))))
-          ;; Remove the tag from the node's :tags list (also clears field data)
-          (supertag-node-remove-tag node-id tag-id))
-
-        ;; 2. Remove tag text using view-helper
-        (require 'supertag-view-helper)
-        (let ((removed-count (supertag-view-helper-remove-tag-text tag-id)))
-          (message "Tag '%s' removed from node %s (%d instances removed)." tag-id node-id removed-count)))))
+        (supertag-service-org-remove-tag node-id tag-id)
+        (message "Tag '%s' removed from node %s." tag-id node-id))))
 
 ;;; --- Enhanced Tag Management Commands ---
 
@@ -798,31 +750,7 @@ This command reads the authoritative list of tags from the database."
             (supertag-tag-create `(:name ,new-tag :id ,new-tag))))
 
         (when (supertag-tag-get new-tag)
-          ;; 2. Update database relationships and node data
-          (supertag-with-transaction
-            ;; Remove old relation
-            (let* ((old-relations (supertag-relation-find-between node-id current-tag :node-tag))
-                   (old-relation (car old-relations)))
-              (when old-relation
-                (supertag-relation-delete (plist-get old-relation :id))))
-            ;; Remove old tag from node's list
-            (supertag-node-remove-tag node-id current-tag)
-
-            ;; Clear all field values associated with the removed tag to avoid
-            ;; stale values leaking into future tag re-adds and triggering automation.
-            (when-let ((old-fields (ignore-errors (supertag-tag-get-all-fields current-tag))))
-              (dolist (f old-fields)
-                (when-let ((fname (plist-get f :name)))
-                  (ignore-errors (supertag-field-remove node-id current-tag fname)))))
-
-            ;; Add new relation
-            (supertag-relation-create `(:type :node-tag :from ,node-id :to ,new-tag))
-            ;; Add new tag to node's list
-            (supertag-node-add-tag node-id new-tag))
-
-          ;; 3. Replace all instances of the old tag text with the new one in the buffer
-          (supertag-view-helper-rename-tag-text-in-node current-tag new-tag)
-
+          (supertag-service-org-replace-tag node-id current-tag new-tag)
           (message "Tag changed from '%s' to '%s'." current-tag new-tag))))))
 
 ;;; --- Tag Inheritance Model ---
@@ -1298,48 +1226,6 @@ For file nodes, positions after file-level metadata (keywords + :PROPERTIES:)."
                     (file (plist-get node :file))
                     ((file-exists-p file)))
           (org-id-find-id-in-file node-id file t)))))
-
-(defun supertag-ui--insert-tag-text-at-node (node-id marker tag-id &optional batch-mode current-point)
-  "Insert #TAG-ID text at MARKER for NODE-ID.
-For heading nodes, inserts per existing batch/single mode logic.
-For file nodes, appends to #+FILETAGS: line."
-  (when marker
-    (with-current-buffer (marker-buffer marker)
-      (if (supertag-ui--file-node-p node-id)
-          (save-excursion
-            (org-with-wide-buffer
-             (goto-char (point-min))
-             (if (re-search-forward "^#\\+FILETAGS:\\s-*" nil t)
-                 (progn
-                   (end-of-line)
-                   (let ((colon-style (string-suffix-p ":" (string-trim (buffer-substring (line-beginning-position) (point))))))
-                     (if colon-style
-                         ;; Org colon-style: preceding : acts as separator, append "tag:"
-                         (insert (format "%s:" (supertag-sanitize-tag-name tag-id)))
-                       ;; Space-separated: just append
-                       (unless (looking-back "\\s-" (line-beginning-position))
-                         (insert " "))
-                       (insert (supertag-sanitize-tag-name tag-id)))))
-               (goto-char (point-min))
-               (while (looking-at "#\\+\\w+:")
-                 (forward-line 1))
-               (insert (format "#+FILETAGS: :%s:\n" (supertag-sanitize-tag-name tag-id)))))
-            (save-buffer))
-        (if batch-mode
-            (progn
-              (goto-char (marker-position marker))
-              (when (org-at-heading-p)
-                (if (eq supertag-batch-tag-insert-position 'beginning)
-                    (progn
-                      (org-back-to-heading t)
-                      (forward-word)
-                      (when (org-get-todo-state) (forward-word))
-                      (supertag-view-helper-insert-tag-text tag-id))
-                  (end-of-line)
-                  (supertag-view-helper-insert-tag-text tag-id))))
-          (goto-char current-point)
-          (supertag-view-helper-insert-tag-text tag-id))
-        (save-buffer)))))
 
 (defun supertag-ui--heading-title-at-point ()
   "Return the plain title of the heading at point, or nil."

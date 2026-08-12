@@ -270,21 +270,19 @@ preventing data loss from incorrect position calculations."
     (when (listp tags) tags)))
 
 (defun supertag-service-org--with-node-buffer (node-id func)
-  "Find the buffer and position for NODE-ID using robust org-id-goto
-  and execute FUNC there.
-  Uses save-window-excursion to avoid disrupting user's view."
+  "Find NODE-ID's Org buffer and execute FUNC at its source position."
   (let* ((node-info (supertag-node-get node-id))
          (file-path (plist-get node-info :file)))
-    (when (and file-path (file-exists-p file-path))
-      (save-window-excursion
-        (let ((buffer (find-file-noselect file-path)))
-          (with-current-buffer buffer
-            (save-excursion
-              ;; DO NOT trust the :position property. It can be stale.
-              ;; Instead, use the canonical way to find a node by its ID.
-              (org-id-goto node-id)
-              (when (org-at-heading-p)
-                (funcall func)))))))))
+    (unless (and file-path (file-exists-p file-path))
+      (user-error "Node '%s' has no readable Org source" node-id))
+    (save-window-excursion
+      (with-current-buffer (find-file-noselect file-path)
+        (save-excursion
+          (if (zerop (or (plist-get node-info :level) 1))
+              (goto-char (point-min))
+            (unless (supertag-service-org--goto-id-in-current-buffer node-id)
+              (user-error "Node '%s' was not found in %s" node-id file-path)))
+          (funcall func))))))
 
 (defun supertag-service-org--parent-title (node-id)
   "Return the direct parent's title for NODE-ID, or nil.
@@ -304,7 +302,7 @@ If NODE-ID is already a top-level heading, return nil."
     result))
 
 (defun supertag-service-org--update-buffer-and-resync (node-id buffer-update-func)
-  "Generic function to run a buffer-updating function and then trigger a resync."
+  "Edit NODE-ID with BUFFER-UPDATE-FUNC, save Org, then reproject it."
   (supertag-service-org--with-node-buffer
    node-id
    (lambda ()
@@ -312,14 +310,46 @@ If NODE-ID is already a top-level heading, return nil."
        (funcall buffer-update-func)
        ;; Only sync/save when buffer actually changed, to avoid noisy no-op runs.
        (unless (eq before-tick (buffer-chars-modified-tick))
-         ;; Sync to update memory from the modified buffer.
-         (when (fboundp 'supertag-node-sync-at-point)
-           (supertag-node-sync-at-point))
          ;; Mark internal modification BEFORE save so after-save hook can skip.
-         (when (buffer-file-name)
-           (supertag--mark-internal-modification (buffer-file-name)))
-         (let ((inhibit-message t))
-           (save-buffer)))))))
+         (supertag-service-org-save-and-project-current-node node-id))))))
+
+(defun supertag-service-org-save-and-project-current-node (node-id)
+  "Save the current Org buffer, then rebuild NODE-ID's projection once."
+  (unless (buffer-file-name)
+    (user-error "NODE-ID must belong to a file-backed Org buffer"))
+  (let* ((file (buffer-file-name))
+         (before-tags (copy-sequence
+                       (plist-get (supertag-node-get node-id) :tags)))
+         result)
+    (supertag--mark-internal-modification file)
+    (unwind-protect
+        (progn
+          (let ((inhibit-message t))
+            (save-buffer))
+          (setq result (supertag-node-sync-current-buffer node-id)))
+      (supertag--clear-internal-modification file))
+    (let ((after-tags (plist-get (supertag-node-get node-id) :tags)))
+      (dolist (tag-id (cl-set-difference after-tags before-tags :test #'equal))
+        (supertag-node-initialize-tag-fields node-id tag-id))
+      (dolist (tag-id (cl-set-difference before-tags after-tags :test #'equal))
+        (supertag-node-clear-tag-fields node-id tag-id)))
+    result))
+
+(defun supertag-service-org--filetags ()
+  "Return the current buffer's file-level tag tokens."
+  (plist-get (supertag-sync--parse-file-header) :file-tags))
+
+(defun supertag-service-org--set-filetags (tags)
+  "Replace the current buffer's #+FILETAGS value with TAGS."
+  (goto-char (point-min))
+  (let ((value (mapconcat (lambda (tag) (concat ":" tag)) tags "")))
+    (if (re-search-forward "^#\\+FILETAGS:\\s-*.*$" nil t)
+        (if tags
+            (replace-match (concat "#+FILETAGS: " value ":") t t)
+          (delete-region (line-beginning-position)
+                         (min (point-max) (1+ (line-end-position)))))
+      (when tags
+        (insert (concat "#+FILETAGS: " value ":\n"))))))
 
 (defun supertag-service-org-set-todo-state (node-id state)
   "Set the TODO STATE for NODE-ID in the buffer and trigger a resync."
@@ -332,20 +362,54 @@ If NODE-ID is already a top-level heading, return nil."
        (unless (equal current state)
          (org-todo state))))))
 
-(defun supertag-service-org-add-tag (node-id tag-name)
-  "Adds #TAG-NAME text to the headline for NODE-ID and triggers a resync."
-  (supertag-service-org--update-buffer-and-resync node-id
-                                                  (lambda ()
-                                                    (end-of-line)
-                                                    (insert (concat " #" tag-name)))))
+(defun supertag-service-org-add-tag (node-id tag-name &optional position)
+  "Add TAG-NAME to NODE-ID's Org source, save, then reproject.
+POSITION may be `beginning', `end', or a marker in the node buffer."
+  (supertag-service-org--update-buffer-and-resync
+   node-id
+   (lambda ()
+     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+         (let ((tags (supertag-service-org--filetags)))
+           (unless (member tag-name tags)
+             (supertag-service-org--set-filetags (append tags (list tag-name)))))
+       (unless (member tag-name
+                       (plist-get (supertag--parse-node-at-point)
+                                  :tag-occurrences))
+         (pcase position
+           ('beginning
+            (org-back-to-heading t)
+            (forward-word)
+            (when (org-get-todo-state) (forward-word)))
+           ((pred markerp)
+            (when (eq (marker-buffer position) (current-buffer))
+              (goto-char position)
+              (when (org-at-heading-p)
+                (end-of-line))))
+           (_ (end-of-line)))
+         (supertag-view-helper-insert-tag-text tag-name))))))
 
 (defun supertag-service-org-remove-tag (node-id tag-name)
-  "Removes #TAG-NAME text from the headline for NODE-ID and triggers a resync."
-  (supertag-service-org--update-buffer-and-resync node-id
-                                                  (lambda ()
-                                                    (let ((tag-regexp (concat "\\s-?#" (regexp-quote tag-name) "\\b")))
-                                                      (when (re-search-forward tag-regexp (line-end-position) t)
-                                                        (replace-match ""))))))
+  "Remove TAG-NAME from NODE-ID's Org source, save, then reproject."
+  (supertag-service-org--update-buffer-and-resync
+   node-id
+   (lambda ()
+     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+         (supertag-service-org--set-filetags
+          (remove tag-name (supertag-service-org--filetags)))
+       (supertag-view-helper-remove-tag-text tag-name)))))
+
+(defun supertag-service-org-replace-tag (node-id old-tag-name new-tag-name)
+  "Replace OLD-TAG-NAME with NEW-TAG-NAME in Org, then reproject NODE-ID."
+  (supertag-service-org--update-buffer-and-resync
+   node-id
+   (lambda ()
+     (if (zerop (or (plist-get (supertag-node-get node-id) :level) 1))
+         (supertag-service-org--set-filetags
+          (mapcar (lambda (tag)
+                    (if (equal tag old-tag-name) new-tag-name tag))
+                  (supertag-service-org--filetags)))
+       (supertag-view-helper-rename-tag-text-in-node
+        old-tag-name new-tag-name)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Field export helpers (DB -> Org properties)

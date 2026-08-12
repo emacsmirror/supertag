@@ -65,10 +65,11 @@
   - 影响范围：migration command、reference docs/tests
   - 完成：2026-08-12；read-only preview、空选择/拒绝确认零写入、confirmed-only 精确删除、投影中途失败恢复文件与 Store 均由 4 项稳定 ERT 覆盖；干净临时 clone 全量 ERT 441/441 通过
 
-- task011 [ ] 统一 Tag membership 的 Org-first 写入
+- task011 [x] 统一 Tag membership 的 Org-first 写入
   - 产出：add/remove/change Tag 及 Automation Tag action 先保存 Org，再 point reindex；Store 不提前写 membership
   - 验证方式：Org 写失败时 Projection 不变；成功后 occurrence/membership 收敛且事件只触发一次
-  - 影响范围：UI commands、service-org、automation、sync
+  - 影响范围：UI commands、service-org、automation、completion、capture、sync
+  - 完成：2026-08-12；UI/Automation/Completion/Capture 共用 save→point reindex 路径，heading 与 file-node 均由 Org occurrence 驱动；保存失败不写 Projection 且清理 internal-save marker，成功 membership/field lifecycle 收敛并只发一次 node event；4 项 Org-first ERT 与既有 Tag path 失败恢复语义覆盖，干净临时 clone 全量 ERT 446/446 通过
 
 ## M2 — Semantic Separation
 

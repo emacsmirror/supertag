@@ -16,6 +16,7 @@
 (require 'supertag-services-ui)
 (require 'supertag-services-query)
 (require 'supertag-services-sync)
+(require 'supertag-service-org)
 
 ;;; --- Sync Helper Function ---
 
@@ -647,9 +648,10 @@ capture DSL."
                          (sanitized (mapcar #'supertag-sanitize-tag-name chosen))
                          (unique-tags (cl-delete-duplicates sanitized :test #'string=)))
                     (when unique-tags
-                      ;; Update DB tags (create tag entities if needed)
+                      ;; Create Semantic Tags first; Org still owns membership.
                       (dolist (tag-id unique-tags)
-                        (supertag-ops-add-tag-to-node node-id tag-id :create-if-needed t))
+                        (unless (supertag-tag-get tag-id)
+                          (supertag-tag-create `(:name ,tag-id :id ,tag-id))))
                       ;; Update inline #tag on the Org headline
                       (org-back-to-heading t)
                       (let* ((title (org-get-heading t t t t))
@@ -666,7 +668,8 @@ capture DSL."
                                    tag-string
                                  (concat bare-title " " tag-string)))))
                         (org-edit-headline new-title)
-                        (supertag-node-sync-at-point)))))
+                        (supertag-service-org-save-and-project-current-node
+                         node-id)))))
                   (when move-spec
                     (let* ((raw-move move-spec)
                            ;; Normalize move-spec:
