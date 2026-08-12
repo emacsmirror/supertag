@@ -347,3 +347,20 @@ Behavior：materialized rollup 结果不存在——全部 rollup 都是派生�
 Risk：Automation `average` 空列表结果从 0.0 变为 0（数值相等，无实际影响）；`{{...}}` 公式中数字字段值的 literal 嵌入与旧 string 嵌入在算术语义下等价，字符串字段行为更正确。
 
 Verification：formula/aggregate/vc/view-table 定向 42/42；干净临时 worktree（HEAD + task025 patch）全量 ERT 490/490；4 个修改 Elisp byte-compile 零新增 warning、`git diff --check` 通过。
+
+## 2026-08-13 — task026 封住 raw Store read seam
+
+- Add `supertag-services-query.el`：新增具体读取 `supertag-query-tags`（(id . tag-plist) 对）、`supertag-query-tag-children`（显式直接子 tag）、`supertag-query-field-definitions`/`-ids`、`supertag-query-tag-field-associations`、`supertag-query-relations`（带 filter）。
+- Delete `supertag-view-api.el` 的 `supertag-view-api-get-collection`（全库零 caller）；`list-entity-ids` 的通用分支改走具体读取（:nodes/:tags/:relations/:automations），legacy :embeds/:behaviors/:databases 返回空；`get-entity` 的 :tags/:relations 走 ops getter、:automations 走 `supertag-query-automations` id 过滤（避免 require automation 造成 require 环）。
+- Modify `supertag-ui-search.el`、`supertag-concept.el`、`supertag-services-ui.el`（node candidates）：maphash raw `:nodes` 改为 `supertag-query-nodes` 同语义 filter。
+- Modify `supertag-view-schema.el`：schema 树/own-fields/绑定字段/选父 tag 全部改走具体读取；`supertag-query-tags` 保持 (id . plist) 形状与防御性 :id 补齐。
+- Modify `supertag-ui-commands.el`：ghost tag 扫描移入 ops 层 `supertag-tag-find-ghosts`（`supertag-ops-tag.el`），UI 命令只消费结果。
+- Modify `supertag-services-capture.el`、`supertag-automation-templates.el`、`supertag-query-library.el`：`(mapcar #'car (supertag-query :tags))` 全部改为 `supertag-view-api-list-tag-ids`；field 名候选改走 `supertag-query-field-definitions`。
+- Modify `supertag-automation.el`：recalculate-all-rollups 与 sync-all-fields 改走 `supertag-query-relations` filter；`supertag-automation-get` 保留为 :automations ops 层 CRUD（与 board-ops 同类）。
+- Subscriptions：UI/Board/Graph 已订阅 `:store-changed` 等语义 keyword 事件（task019 前的现状审计确认），无需改动；细粒度语义失效的进一步优化不在本 task 范围。
+
+Behavior：查询结果与顺序语义不变（tag id 列表统一为排序输出）。
+
+Risk：`get-entity :automations` 从 O(1) 变为 O(N)（automation 数量极小）；view-api 不再 require automation，消除了 view-api→automation→service-org→view-helper→view-api 的 require 环。
+
+Verification：`rg` 证明 UI/View/Completion/Automation 无 `supertag-store-get-collection/entity`、无 `supertag-view-api-get-collection`、无 generic `supertag-query :...` 调用（剩余调用仅在 services-query 自身、migration、diagnostics 等 infra 层与 `supertag-automation-get` ops CRUD）；干净临时 worktree（HEAD + task026 patch）全量 ERT 490/490；12 个修改文件 byte-compile 零新增 warning、`git diff --check` 通过。
