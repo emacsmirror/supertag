@@ -269,3 +269,17 @@ Behavior：读路径开始收敛到具体接口；`supertag-query-resolved-field
 Risk：`supertag-query-sexp` 兼容 wrapper 覆盖 query-library/diagnostics 既有调用；task023 前该兼容入口保留。
 
 Verification：query-model ERT 6/6、ownership 26/26 通过；干净临时 worktree（HEAD + task019 patch + query-model-test.el）全量 ERT 488/488；5 个修改文件 byte-compile 无 error/warning（仅仓库既有 obsolete/docstring 提示）、check-parens 与 `git diff --check` 通过；工作树中用户未提交的 Dashboard/TextUI 实验未进入本 task 提交。
+
+## 2026-08-12 — task020 Completion、Tag picker 与 Stream 迁移
+
+- Add `supertag-services-query.el`：新增具体投影读取 `supertag-query-tag-occurrences`（跨 projected nodes 收集唯一 Org Tag Occurrence token）。
+- Modify `supertag-ui-completion.el`：`supertag-completion--get-all-tags` 改为消费 `supertag-query-tag-paths`（删除 raw `:tags` maphash 与 node 扫描 fallback）；`supertag-completion--get-node-tags` 改为 `supertag-query-node-tags`；`supertag-completion--get-all-tag-occurrences` 改为消费 `supertag-query-tag-occurrences`，函数名与 advice/cl-letf 兼容点全部保留。
+- Modify `supertag-services-ui.el`：`supertag-ui-read-tag` 候选构建改为一次 `supertag-query-tag-paths` 查表（id→name），不再逐 ID `supertag-tag-get`；显式 TAG-IDS 路径保持原语义（不在 store 的虚拟 ID 仍原样展示）。
+- Modify `test/query-model-test.el`：新增 completion helpers 与具体 query 接口的 parity 测试。
+- Stream：task019 已通过 `supertag-view-api-nodes-by-tag`/`get-entities` 间接消费具体接口，本 task 无需改动。
+
+Behavior：Completion、Tag picker、Stream 不再直读 raw collection；未解析 occurrence 仍进入 completion 候选（[Unresolved] 标记），显式 tag-ids 的虚拟 ID 兼容语义不变。
+
+Risk：`get-all-tags` 顺序由 ID 排序改为 display-path 排序；completion 候选顺序变化但三处既有测试（inline-tag-filter self-check、completion-newtag self-check、tag-path cl-letf/order 断言）全部通过。
+
+Verification：smart-key + tag-path 55/55、view-stream/table/kanban/node 定向回归、ownership 26/26、query-model 7/7 通过；`test-inline-tag-filter.el` 与 `test-completion-newtag.el` 两个 self-check 通过；干净临时 worktree（HEAD + task020 patch）全量 ERT 489/489；4 个修改文件 byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
