@@ -69,6 +69,36 @@ Query text supports three dynamic variables, expanded before parsing:
 They are meant for date operators: `(and (task "TODO") (after "<%today%>"))`
 is the same as `(and (task "TODO") (after "today"))`.
 
+## Aggregation
+
+Aggregate and grouping modifiers live inside `and` like other clauses but
+never filter; they shape the result.  Use `supertag-query-evaluate` (the
+query block does this automatically):
+
+| Modifier | Meaning |
+|---|---|
+| `(sum FIELD)` | sum of non-empty FIELD values; nil when any value is non-numeric |
+| `(count)` | number of matching nodes (no arguments) |
+| `(avg FIELD)` | average; nil when any value is non-numeric |
+| `(min FIELD)` / `(max FIELD)` | minimum / maximum value |
+| `(first FIELD)` / `(last FIELD)` | first / last value in result order |
+| `(unique-count FIELD)` | number of distinct values |
+| `(concat FIELD)` | values joined with `", "` |
+| `(group-by FIELD)` | group results before aggregating |
+
+```elisp
+(and (tag "book") (sum "pages"))                    ;; a scalar
+(and (tag "book") (group-by "genre") (sum "pages")) ;; ((genre . sum) ...)
+(and (sort-by "pages" desc) (first "title"))        ;; sort feeds aggregate order
+```
+
+- Without an aggregate, `supertag-query-evaluate` returns node IDs (same
+  shape as `supertag-query-node-ids`).
+- At most one aggregate and one group-by are allowed; `group-by` requires
+  an aggregate; nodes missing the group key land in `"__ungrouped__"`.
+- `supertag-query-node-ids` signals on aggregate queries; use
+  `supertag-query-evaluate`.
+
 ## Date formats
 
 `after`, `before`, and `between` all resolve their date arguments the same

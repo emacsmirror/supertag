@@ -68,3 +68,22 @@ Verification：`./test/run-tests.sh query` 36/36；`git diff --check` 通过。
   无关文本不受影响、parse 日期参数归一化）。
 
 Verification：`./test/run-tests.sh query` 37/37；`git diff --check` 通过。
+
+## 2026-08-13 — task006 聚合/分组尾部修饰符
+
+- Modify `supertag-services-query.el`：parser 新增 sum/avg/min/max/first/
+  last/unique-count/concat（单字段参数）、count（零参数）、group-by（单
+  字段参数）分支，全部作为结果修饰符被 `and` 剥离到 `:modifiers`；
+  `--apply-modifiers` 重写为固定管线 sort-by → group-by → aggregate，
+  新增 `--aggregate-values`（count=记录数；sum/avg 非数值集返回 nil；
+  其余委托 `supertag-rollup-apply`）与 `--group-values`（缺失键归入
+  "__ungrouped__"）；新增公开入口 `supertag-query-evaluate`（返回完整
+  结果：ID 列表/标量/分组 alist）；`supertag-query-node-ids` 对聚合修饰符
+  显式报错；services-query 显式 require services-formula（无环）。
+- Modify `doc/QUERY.md`：新增 Aggregation 节（语法采用单 form
+  `(and ... (sum ...))`，与提案的双 form 示例不同——单 form 与解析器
+  契约一致）。
+- Modify `test/query-block-test.el`：新增 2 项定向 ERT（标量/分组表/
+  count/非数值 nil/组合 guard/排序→聚合顺序）。
+
+Verification：`./test/run-tests.sh query` 39/39；`git diff --check` 通过。

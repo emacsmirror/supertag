@@ -437,6 +437,56 @@ Returns the list of created node ids, in creation order."
                              (supertag-query-expand "(after <%today%>)"))))
                       :date))))))
 
+(ert-deftest query-block-aggregate-modifiers ()
+  "Aggregate modifiers reduce results; group-by yields an alist."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "a"))
+    (supertag-store-put-entity
+     :nodes "n2" (list :id "n2" :title "b"))
+    (supertag-store-put-entity
+     :nodes "n3" (list :id "n3" :title "c"))
+    (supertag-store-put-field-value "n1" "pages" 100)
+    (supertag-store-put-field-value "n2" "pages" 200)
+    (supertag-store-put-field-value "n1" "genre" "tech")
+    (supertag-store-put-field-value "n2" "genre" "novel")
+    (supertag-store-put-field-value "n3" "pages" 50)
+    (supertag-store-put-field-value "n3" "genre" "tech")
+    (let ((total (supertag-query-evaluate '(and (sum "pages"))))
+          (count (supertag-query-evaluate '(and (count))))
+          (grouped (supertag-query-evaluate
+                    '(and (group-by "genre") (sum "pages")))))
+      (should (= 350 total))
+      (should (= 3 count))
+      (should (equal '(("novel" . 200) ("tech" . 150)) grouped))))
+  ;; Non-numeric sum is nil, not an error.
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "a"))
+    (supertag-store-put-field-value "n1" "note" "hello")
+    (should-not (supertag-query-evaluate '(and (sum "note"))))))
+
+(ert-deftest query-block-aggregate-guards ()
+  "Malformed aggregate queries signal clearly."
+  (query-block-test--with-clean-store
+    ;; group-by without aggregate
+    (should-error (supertag-query-evaluate '(and (group-by "genre"))))
+    ;; two aggregates
+    (should-error (supertag-query-evaluate
+                   '(and (sum "pages") (count))))
+    ;; node-ids refuses aggregates
+    (should-error (supertag-query-node-ids '(and (sum "pages"))))
+    ;; count takes no arguments
+    (should-error (supertag-query-evaluate '(and (count "pages"))))
+    ;; sort runs before aggregate: sorted order feeds grouping order only;
+    ;; scalar aggregate is order-independent.
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "a"))
+    (supertag-store-put-field-value "n1" "pages" 100)
+    (should (= 100
+               (supertag-query-evaluate
+                '(and (sort-by "title" asc) (sum "pages")))))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here

@@ -15,6 +15,7 @@
 (require 'supertag-ops-node)
 (require 'supertag-ops-tag)
 (require 'supertag-ops-field)
+(require 'supertag-services-formula)
 
 ;;; --- Query System ---
 
@@ -260,9 +261,27 @@ Returns a list of (id . node-data) pairs."
 (defun supertag-query-node-ids (query-sexp)
   "Execute QUERY-SEXP and return matching node IDs.
 QUERY-SEXP is an S-expression like (and (tag \"foo\") (term \"bar\")).
-Result modifiers (sort-by, aggregates) are applied in order, so the
-returned IDs are sorted when the query carries sort-by.
+sort-by modifiers are applied in order, so the returned IDs are sorted
+when the query carries sort-by.  Aggregate queries must use
+`supertag-query-evaluate' instead and signal here.
 Returns a list of node IDs matching the query."
+  (let* ((ast (supertag-query--parse-sexp query-sexp))
+         (modifiers (supertag-query--ast-modifiers ast))
+         (node-ids (supertag-query--execute-ast ast)))
+    (when (cl-some
+           (lambda (modifier)
+             (memq (plist-get modifier :type)
+                   '(sum count avg min max first last unique-count concat
+                         group-by)))
+           modifiers)
+      (error "Aggregate queries use `supertag-query-evaluate', not `supertag-query-node-ids'"))
+    (supertag-query--apply-modifiers node-ids modifiers)))
+
+(defun supertag-query-evaluate (query-sexp)
+  "Execute QUERY-SEXP and return the full result.
+Without aggregate modifiers this is the matching node-ID list; with an
+aggregate it is a scalar, or an alist of (group-key . value) when the
+query also carries group-by."
   (let* ((ast (supertag-query--parse-sexp query-sexp))
          (node-ids (supertag-query--execute-ast ast)))
     (supertag-query--apply-modifiers
@@ -347,6 +366,20 @@ This function is compatible with the old query syntax."
                      ((and (stringp order-arg) (string= order-arg "desc")) 'desc)
                      (t (error "Invalid sort-by order: %S" order-arg)))))
         `(:type sort-by :key ,key :order ,order)))
+     ((memq op '(sum avg min max first last unique-count concat))
+      (unless (= (length args) 1)
+        (error "'%s' operator expects exactly one field key, but got %S" op args))
+      `(:type ,op :key ,(if (stringp (car args)) (car args)
+                          (symbol-name (car args)))))
+     ((eq op 'count)
+      (unless (null args)
+        (error "'count' operator takes no arguments, but got %S" args))
+      '(:type count :key nil))
+     ((eq op 'group-by)
+      (unless (= (length args) 1)
+        (error "'group-by' operator expects exactly one field key, but got %S" args))
+      `(:type group-by :key ,(if (stringp (car args)) (car args)
+                                 (symbol-name (car args)))))
      ((eq op 'task)
       ;; Zero or more states; zero states match no node (identity of OR).
       `(:type task
@@ -562,18 +595,87 @@ Nodes missing the sort key are always placed last, regardless of ORDER."
     (when (eq order 'desc) (setq with-key (nreverse with-key)))
     (append (mapcar #'car with-key) without-key)))
 
+(defun supertag-query--aggregate-values (nodes type key)
+  "Aggregate NODES (list of node plists) with TYPE over KEY.
+count ignores KEY; sum/avg return nil for non-numeric value sets."
+  (if (eq type 'count)
+      (length nodes)
+    (let ((values
+           (cl-remove-if-not
+            #'identity
+            (mapcar (lambda (node)
+                      (supertag-query--sort-value
+                       (plist-get node :id) node key))
+                    nodes))))
+      (if (and (memq type '(sum avg))
+               (not (cl-every #'numberp values)))
+          nil
+        (supertag-rollup-apply type values)))))
+
+(defun supertag-query--group-values (node-ids group-key)
+  "Group NODE-IDS by GROUP-KEY into a (group-key . node-plists) alist."
+  (let ((groups (make-hash-table :test 'equal)))
+    (dolist (id node-ids)
+      (let* ((node (supertag-query-node id))
+             (key (and node
+                       (supertag-query--sort-value id node group-key)))
+             (bucket (or key "__ungrouped__")))
+        (let ((existing (gethash bucket groups)))
+          (puthash bucket (cons node existing) groups))))
+    (let (result)
+      (maphash (lambda (key value)
+                 (push (cons key (nreverse value)) result))
+               groups)
+      (sort result
+            (lambda (a b)
+              (string< (format "%s" (car a))
+                       (format "%s" (car b))))))))
+
 (defun supertag-query--apply-modifiers (node-ids modifiers)
-  "Apply result MODIFIERS to NODE-IDS in order.
-Sorting runs before aggregation; aggregation arrives in task006."
-  (let ((result node-ids))
-    (dolist (modifier modifiers)
-      (pcase (plist-get modifier :type)
+  "Apply result MODIFIERS to NODE-IDS.
+Pipeline: sort-by (if any) -> group-by (if any) -> aggregate (if any).
+Returns node IDs without aggregates, a scalar with an aggregate, or an
+alist of (group-key . value) with group-by + aggregate."
+  (let* ((sorts (cl-remove-if-not
+                 (lambda (modifier) (eq (plist-get modifier :type) 'sort-by))
+                 modifiers))
+         (groups (cl-remove-if-not
+                  (lambda (modifier) (eq (plist-get modifier :type) 'group-by))
+                  modifiers))
+         (aggregates
+          (cl-remove-if-not
+           (lambda (modifier)
+             (memq (plist-get modifier :type)
+                   '(sum count avg min max first last unique-count concat)))
+           modifiers))
+         (sorted node-ids))
+    (dolist (sort modifiers)
+      (pcase (plist-get sort :type)
         ('sort-by
-         (setq result
+         (setq sorted
                (supertag-query--sort-node-ids
-                result (plist-get modifier :key) (plist-get modifier :order))))
-        (_ (error "Unsupported query modifier: %S" (plist-get modifier :type)))))
-    result))
+                sorted (plist-get sort :key) (plist-get sort :order))))))
+    (when (> (length groups) 1)
+      (error "Only one group-by modifier is allowed"))
+    (when (> (length aggregates) 1)
+      (error "Only one aggregate modifier is allowed"))
+    (when (and groups (null aggregates))
+      (error "group-by requires an aggregate modifier"))
+    (if (null aggregates)
+        sorted
+      (let* ((group-field (and groups (plist-get (car groups) :key)))
+             (aggregate (car aggregates))
+             (agg-type (plist-get aggregate :type))
+             (agg-key (plist-get aggregate :key)))
+        (if group-field
+            (mapcar
+             (lambda (entry)
+               (cons (car entry)
+                     (supertag-query--aggregate-values
+                      (cdr entry) agg-type agg-key)))
+             (supertag-query--group-values sorted group-field))
+          (supertag-query--aggregate-values
+           (mapcar #'supertag-query-node sorted) agg-type agg-key))))))
 
 (defun supertag-query-modifiers (query-sexp)
   "Return the result modifiers of QUERY-SEXP, in order."
