@@ -50,10 +50,11 @@
 
 ## M4 — Automation 条件统一与验收
 
-- task008 [ ] Automation 条件语法直接切换
+- task008 [x] Automation 条件语法直接切换
   - 产出：`:condition` 直接接受查询语法；旧条件语法（has-tag/has-any-tag/field-equals/property-equals）在 rule 规范化时确定性转换为查询语法；`property-equals` keyword 分支与 `property-changed` 保留专用评估路径；不留长期兼容期
   - 验证方式：转换 parity（新旧 rule 触发集合一致）、事件条件不变、trigger 恰好一次
   - 影响范围：automation condition evaluator、rule normalize、automation tests、AUTOMATION-SYSTEM-GUIDE
+  - 完成：2026-08-13；automation-condition 定向 4/4；转换发生在评估时（纯函数），旧数据无需迁移
 
 - task009 [ ] 文档收尾与 phase 验收
   - 产出：`doc/QUERY.md` 全量新语法；`QUERY-SYNTAX-PROPOSAL.md` 标记拍板结果；change 索引；用户验收后关闭 phase
