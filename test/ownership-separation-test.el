@@ -831,9 +831,9 @@
       (should (equal (list supertag-ownership-test-node-a)
                      (supertag-query-sexp '(tag "project"))))
       (should
-       (supertag-automation--eval-single-condition
-        '(has-tag "project")
-        (supertag-node-get supertag-ownership-test-node-a)))
+       (supertag-automation--evaluate-condition
+        '(tag "project")
+        supertag-ownership-test-node-a))
       (should (equal before-store
                      (mapcar
                       (lambda (collection)
