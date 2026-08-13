@@ -87,3 +87,14 @@ Verification：`./test/run-tests.sh query` 37/37；`git diff --check` 通过。
   count/非数值 nil/组合 guard/排序→聚合顺序）。
 
 Verification：`./test/run-tests.sh query` 39/39；`git diff --check` 通过。
+
+## 2026-08-13 — task007 query block 聚合结果渲染
+
+- Modify `supertag-ui-query-block.el`：新增 `--aggregate-headers-and-rows`
+  （标量 → 单列 "Aggregate" 一行；分组 → "Group"/"Aggregate" 两列）；
+  `--headers-and-rows` 检测聚合修饰符时分流到聚合渲染（`supertag-query-evaluate`），
+  非聚合路径不变。
+- Modify `test/query-block-test.el`：新增 1 项定向 ERT（标量表/分组表形状
+  与值断言）。
+
+Verification：`./test/run-tests.sh query` 40/40；`git diff --check` 通过。

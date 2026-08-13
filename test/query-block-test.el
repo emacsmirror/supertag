@@ -487,6 +487,31 @@ Returns the list of created node ids, in creation order."
                (supertag-query-evaluate
                 '(and (sort-by "title" asc) (sum "pages")))))))
 
+(ert-deftest query-block-aggregate-renders-scalar-and-grouped-tables ()
+  "Aggregate queries render a scalar row or a group/aggregate table."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "a"))
+    (supertag-store-put-entity
+     :nodes "n2" (list :id "n2" :title "b"))
+    (supertag-store-put-field-value "n1" "pages" 100)
+    (supertag-store-put-field-value "n2" "pages" 200)
+    (supertag-store-put-field-value "n1" "genre" "tech")
+    (supertag-store-put-field-value "n2" "genre" "novel")
+    ;; Scalar aggregate renders one Aggregate column with the value.
+    (let ((table (org-babel-execute:org-supertag-query-block
+                  "(and (sum \"pages\"))" nil)))
+      (should (string-match-p "|[ \t]*Aggregate[ \t]*|" table))
+      (should (string-match-p "300" table)))
+    ;; Grouped aggregate renders Group + Aggregate columns.
+    (let ((table (org-babel-execute:org-supertag-query-block
+                  "(and (group-by \"genre\") (sum \"pages\"))" nil)))
+      (should (string-match-p "|[ \t]*Group[ \t]*|[ \t]*Aggregate[ \t]*|" table))
+      (should (string-match-p "novel" table))
+      (should (string-match-p "tech" table))
+      (should (string-match-p "200" table))
+      (should (string-match-p "100" table)))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here

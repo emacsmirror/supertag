@@ -160,6 +160,25 @@ Nodes missing the sort key are always placed last, regardless of ORDER."
                         (if val (format "%s" val) "")))
                     columns))))
 
+(defun supertag-query-block--aggregate-headers-and-rows (query-sexp)
+  "Return (HEADERS . ROWS) for an aggregate QUERY-SEXP.
+Scalar aggregates render as one row; grouped aggregates as one row per
+group (group key first, then the aggregate value)."
+  (let* ((result (supertag-query-evaluate query-sexp))
+         (modifiers (supertag-query-modifiers query-sexp))
+         (grouped-p (cl-some
+                     (lambda (modifier)
+                       (eq (plist-get modifier :type) 'group-by))
+                     modifiers)))
+    (if grouped-p
+        (cons '("Group" "Aggregate")
+              (mapcar (lambda (entry)
+                        (list (format "%s" (car entry))
+                              (format "%s" (cdr entry))))
+                      result))
+      (cons '("Aggregate")
+            (list (list (format "%s" result)))))))
+
 (defun supertag-query-block--headers-and-rows (query-str opts)
   "Execute QUERY-STR (an S-expression query string) with OPTS.
 OPTS is a plist with optional :sort, :order, :limit, :columns keys, using
@@ -168,26 +187,36 @@ Returns (HEADERS . ROWS). Signals an error on malformed input; callers
 that must never signal should go through `supertag-query-block--render'."
   (let* ((query-sexp (car (read-from-string
                             (supertag-query-expand (string-trim query-str)))))
-         (node-ids (supertag-query-node-ids query-sexp))
-         (auto-fields (supertag-query-fields query-sexp))
-         (columns (or (supertag-query-block--parse-columns (plist-get opts :columns))
-                      auto-fields))
-         (sort-key (supertag-query-block--normalize-sort-key (plist-get opts :sort)))
-         (order (supertag-query-block--normalize-order (plist-get opts :order)))
-         (limit (supertag-query-block--normalize-limit (plist-get opts :limit)))
-         ;; In-query sort-by wins over the :sort header: the engine already
-         ;; returned sorted IDs, so skip the header sort entirely.
-         (syntax-sorts (cl-remove-if-not
-                        (lambda (modifier) (eq (plist-get modifier :type) 'sort-by))
-                        (supertag-query-modifiers query-sexp)))
-         (nodes (delq nil (mapcar #'supertag-node-get node-ids)))
-         (nodes (if syntax-sorts
-                    nodes
-                  (supertag-query-block--apply-sort nodes sort-key order))))
-    (when limit
-      (setq nodes (cl-subseq nodes 0 (min limit (length nodes)))))
-    (cons (append '("Node" "Tags") columns)
-          (mapcar (lambda (node) (supertag-query-block--row node columns)) nodes))))
+         (modifiers (supertag-query-modifiers query-sexp))
+         (aggregate-p
+          (cl-some
+           (lambda (modifier)
+             (memq (plist-get modifier :type)
+                   '(sum count avg min max first last unique-count concat)))
+           modifiers)))
+    (if aggregate-p
+        (supertag-query-block--aggregate-headers-and-rows query-sexp)
+      (let* ((node-ids (supertag-query-node-ids query-sexp))
+             (auto-fields (supertag-query-fields query-sexp))
+             (columns (or (supertag-query-block--parse-columns (plist-get opts :columns))
+                          auto-fields))
+             (sort-key (supertag-query-block--normalize-sort-key (plist-get opts :sort)))
+             (order (supertag-query-block--normalize-order (plist-get opts :order)))
+             (limit (supertag-query-block--normalize-limit (plist-get opts :limit)))
+             ;; In-query sort-by wins over the :sort header: the engine already
+             ;; returned sorted IDs, so skip the header sort entirely.
+             (syntax-sorts (cl-remove-if-not
+                            (lambda (modifier) (eq (plist-get modifier :type) 'sort-by))
+                            modifiers))
+             (nodes (delq nil (mapcar #'supertag-node-get node-ids)))
+             (nodes (if syntax-sorts
+                        nodes
+                      (supertag-query-block--apply-sort nodes sort-key order))))
+        (when limit
+          (setq nodes (cl-subseq nodes 0 (min limit (length nodes)))))
+        (cons (append '("Node" "Tags") columns)
+              (mapcar (lambda (node) (supertag-query-block--row node columns))
+                      nodes))))))
 
 (defun supertag-query-block--render (query-str opts)
   "Render QUERY-STR/OPTS to a table string, or a one-line \"Error: ...\" string.
