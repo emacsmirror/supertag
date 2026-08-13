@@ -28,10 +28,11 @@
   - 影响范围：parser/executor、`supertag-ui-query-block.el` 协调、docs/tests
   - 完成：2026-08-13；query 定向 36/36；排序核心提升到 services-query 并供 query block 复用
 
-- task005 [ ] 动态变量日期三件套
+- task005 [x] 动态变量日期三件套
   - 产出：`<%today%>` `<%yesterday%>` `<%tomorrow%>` 在查询解析前替换为日期符号；替换覆盖 query block/saved query/library 入口
   - 验证方式：替换正确性、与日期操作符组合、不误伤普通文本
   - 影响范围：query 入口文本预处理、docs/tests
+  - 完成：2026-08-13；query 定向 37/37；date 参数 symbol 归一化补齐
 
 ## M3 — 聚合
 
