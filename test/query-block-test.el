@@ -300,7 +300,9 @@ Returns the list of created node ids, in creation order."
     (should (equal '("n1" "n4")
                    (sort (supertag-query-node-ids '(priority "A"))
                          #'string<)))
-    (should (equal '("n4") (supertag-query-node-ids '(priority "#a"))))))
+    (should (equal '("n1" "n4")
+                   (sort (supertag-query-node-ids '(priority "#a"))
+                         #'string<)))))
 
 (ert-deftest query-block-not-accepts-multiple-arguments ()
   "(not a b ...) excludes the union of its children."
