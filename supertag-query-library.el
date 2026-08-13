@@ -117,7 +117,8 @@ Uses the real reader and the real parser (`supertag-query-validate')
 so an invalid query is rejected the same way the engine would reject it."
   (let (sexp)
     (condition-case err
-        (setq sexp (car (read-from-string query-string)))
+        (setq sexp (car (read-from-string
+                         (supertag-query-expand query-string))))
       (error (user-error "Could not read query `%s': %s"
                           query-string (error-message-string err))))
     (condition-case err

@@ -410,6 +410,33 @@ Returns the list of created node ids, in creation order."
       (should (< (string-match-p (regexp-quote "A") table)
                  (string-match-p (regexp-quote "B") table))))))
 
+(ert-deftest query-block-dynamic-variables-expand-to-day-symbols ()
+  "<%today%>/<%yesterday%>/<%tomorrow%> expand before parsing."
+  (should (equal "(after \"today\")"
+                 (supertag-query-expand "(after \"<%today%>\")")))
+  (should (equal "(between \"yesterday\" \"today\")"
+                 (supertag-query-expand
+                  "(between \"<%yesterday%>\" \"<%today%>\")")))
+  (should (equal "(before tomorrow)"
+                 (supertag-query-expand "(before <%tomorrow%>)")))
+  ;; Unrelated text stays untouched.
+  (should (equal "(tag \"<%monday%>\")"
+                 (supertag-query-expand "(tag \"<%monday%>\")")))
+  ;; End to end: a dynamic variable resolves to the day's midnight.
+  (cl-letf (((symbol-function 'current-time)
+             (lambda () (encode-time 0 30 15 13 8 2026))))
+    (let ((sexp (car (read-from-string
+                      (supertag-query-expand "(after \"<%today%>\")")))))
+      (should (equal '(after "today") sexp))
+      ;; A bare variable (no quotes around it) normalizes to a string
+      ;; date argument in the parser.
+      (should (equal "today"
+                     (plist-get
+                      (supertag-query--parse-sexp
+                       (car (read-from-string
+                             (supertag-query-expand "(after <%today%>)"))))
+                      :date))))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here

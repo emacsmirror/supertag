@@ -287,6 +287,22 @@ Signals the same error the executor would raise on malformed input."
   "Return non-nil when DATE-STR is accepted by the engine's date resolver."
   (and (supertag-query--resolve-date-string date-str) t))
 
+(defun supertag-query-expand (query-string)
+  "Expand dynamic variables in QUERY-STRING.
+`<%today%>', `<%yesterday%>' and `<%tomorrow%>' become the bare day
+symbols today/yesterday/tomorrow, which the date resolver turns into the
+local midnight of that day.  Run this before reading the string as a sexp."
+  (replace-regexp-in-string
+   "<%today%>\\|<%yesterday%>\\|<%tomorrow%>"
+   (lambda (variable)
+     (substring variable 2 -2))
+   query-string t t))
+
+(defun supertag-query--date-arg (arg)
+  "Normalize a date argument ARG to a string.
+Symbols (e.g. from dynamic variables like <%today%>) become their name."
+  (if (stringp arg) arg (symbol-name arg)))
+
 (defun supertag-query--modifier-ast-p (ast)
   "Return non-nil when AST is a result modifier (sort-by/aggregate)."
   (memq (plist-get ast :type)
@@ -351,15 +367,16 @@ This function is compatible with the old query syntax."
      ((eq op 'after)
       (unless (= (length args) 1)
         (error "'after' operator expects one date string argument, but got %S" args))
-      `(:type after :date ,(car args)))
+      `(:type after :date ,(supertag-query--date-arg (car args))))
      ((eq op 'before)
       (unless (= (length args) 1)
         (error "'before' operator expects one date string argument, but got %S" args))
-      `(:type before :date ,(car args)))
+      `(:type before :date ,(supertag-query--date-arg (car args))))
      ((eq op 'between)
       (unless (= (length args) 2)
         (error "'between' operator expects two date string arguments, but got %S" args))
-      `(:type between :start-date ,(car args) :end-date ,(cadr args)))
+      `(:type between :start-date ,(supertag-query--date-arg (car args))
+              :end-date ,(supertag-query--date-arg (cadr args))))
      ((eq op 'term)
       (unless (= (length args) 1)
         (error "'term' operator expects exactly one argument, but got %S" args))

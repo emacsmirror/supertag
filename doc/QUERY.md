@@ -56,6 +56,19 @@ Notes on argument types, verified against `supertag-query--parse-sexp`:
   case-insensitive match. Use `term` if you want fuzzy/substring matching
   over title and content instead.
 
+## Dynamic variables
+
+Query text supports three dynamic variables, expanded before parsing:
+
+| Variable | Expands to |
+|---|---|
+| `<%today%>` | `today` (local midnight) |
+| `<%yesterday%>` | `yesterday` |
+| `<%tomorrow%>` | `tomorrow` |
+
+They are meant for date operators: `(and (task "TODO") (after "<%today%>"))`
+is the same as `(and (task "TODO") (after "today"))`.
+
 ## Date formats
 
 `after`, `before`, and `between` all resolve their date arguments the same

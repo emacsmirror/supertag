@@ -54,3 +54,17 @@ Verification：`./test/run-tests.sh query` 34/34；`git diff --check` 通过。
   desc/内置键与字段/缺失最后/裸 sort-by/与过滤组合/header 优先级）。
 
 Verification：`./test/run-tests.sh query` 36/36；`git diff --check` 通过。
+
+## 2026-08-13 — task005 动态变量日期三件套
+
+- Modify `supertag-services-query.el`：新增公开 `supertag-query-expand`
+  （`<%today%>/<%yesterday%>/<%tomorrow%>` → 裸符号 today/yesterday/
+  tomorrow，保留外层引号）；parser 的 after/before/between 分支经新增
+  `supertag-query--date-arg` 把 symbol 日期参数归一化为字符串。
+- Modify `supertag-query-library.el`：`--read-query-sexp` 读取前展开变量。
+- Modify `supertag-ui-query-block.el`：`--headers-and-rows` 读取前展开变量。
+- Modify `doc/QUERY.md`：新增 Dynamic variables 节。
+- Modify `test/query-block-test.el`：新增 1 项定向 ERT（带/不带引号替换、
+  无关文本不受影响、parse 日期参数归一化）。
+
+Verification：`./test/run-tests.sh query` 37/37；`git diff --check` 通过。

@@ -166,7 +166,8 @@ OPTS is a plist with optional :sort, :order, :limit, :columns keys, using
 the same semantics documented at the top of this file.
 Returns (HEADERS . ROWS). Signals an error on malformed input; callers
 that must never signal should go through `supertag-query-block--render'."
-  (let* ((query-sexp (car (read-from-string (string-trim query-str))))
+  (let* ((query-sexp (car (read-from-string
+                            (supertag-query-expand (string-trim query-str)))))
          (node-ids (supertag-query-node-ids query-sexp))
          (auto-fields (supertag-query-fields query-sexp))
          (columns (or (supertag-query-block--parse-columns (plist-get opts :columns))
