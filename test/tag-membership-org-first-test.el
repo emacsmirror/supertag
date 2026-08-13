@@ -262,6 +262,81 @@
                                  :tags))))
         (kill-buffer buffer)))))
 
+;;; --- Region-scoped Tag Occurrence reader ---
+
+(defmacro supertag-tag-membership-test--with-org-file (text &rest body)
+  "Visit a temp Org file containing TEXT and run BODY in its buffer.
+An isolated Store is installed so projection has somewhere to resolve
+occurrence tokens against."
+  (declare (indent 1) (debug t))
+  `(let* ((file (make-temp-file "supertag-occurrences" nil ".org" ,text))
+          (supertag--store nil)
+          (buffer (find-file-noselect file)))
+     (unwind-protect
+         (with-current-buffer buffer
+           (org-mode)
+           (supertag--ensure-store)
+           ,@body)
+       (with-current-buffer buffer (set-buffer-modified-p nil))
+       (kill-buffer buffer)
+       (delete-file file))))
+
+(ert-deftest supertag-tag-membership-occurrences-match-whole-file-reader ()
+  "The region reader agrees with the whole-file reader on every node.
+
+`supertag-node-tag-occurrences-at-point' exists only to avoid projecting
+the whole file for one node's occurrences, so on files where the slow
+reader is correct -- every `:ID:' distinct -- the two must not diverge."
+  (supertag-tag-membership-test--with-org-file
+      (concat "* Alpha #one\n:PROPERTIES:\n:ID: ID-A\n:END:\nbody with #two here\n"
+              "** Beta :native:\n:PROPERTIES:\n:ID: ID-B\n:END:\nplain body\n"
+              "* Gamma\n:PROPERTIES:\n:ID: ID-C\n:END:\ntrailing #three\n")
+    (goto-char (point-min))
+    (let ((seen 0))
+      (org-map-entries
+       (lambda ()
+         (setq seen (1+ seen))
+         (should (equal (plist-get (supertag--parse-node-at-point) :tag-occurrences)
+                        (supertag-node-tag-occurrences-at-point))))
+       nil 'file)
+      (should (= seen 3)))
+    ;; And the values themselves are the node's own, not its neighbours'.
+    (goto-char (point-min))
+    (should (equal '("one" "two") (supertag-node-tag-occurrences-at-point)))))
+
+(ert-deftest supertag-tag-membership-occurrences-read-the-node-under-point ()
+  "Occurrences come from the heading at point even when `:ID:' is duplicated.
+
+The whole-file reader resolves a node by searching the parsed file for its
+ID, so with a duplicated `:ID:' it answers for whichever copy comes first
+and every copy reports the same tags.  Reading only the region at point is
+what makes the two copies distinguishable."
+  (supertag-tag-membership-test--with-org-file
+      (concat "* First copy #alpha\n:PROPERTIES:\n:ID: DUP-ID\n:END:\n"
+              "* Second copy #beta\n:PROPERTIES:\n:ID: DUP-ID\n:END:\n")
+    (goto-char (point-min))
+    (should (equal '("alpha") (supertag-node-tag-occurrences-at-point)))
+    (should (search-forward "Second copy" nil t))
+    (org-back-to-heading t)
+    (should (equal '("beta") (supertag-node-tag-occurrences-at-point)))
+    ;; The reader this replaced answers "alpha" for both copies.
+    (should (equal '("alpha") (plist-get (supertag--parse-node-at-point)
+                                         :tag-occurrences)))))
+
+(ert-deftest supertag-tag-membership-occurrences-stop-at-the-next-heading ()
+  "A node owns its title line and its own body, and nothing past that."
+  (supertag-tag-membership-test--with-org-file
+      (concat "* Parent\n:PROPERTIES:\n:ID: ID-P\n:END:\nparent body\n"
+              "** Child #childtag\n:PROPERTIES:\n:ID: ID-K\n:END:\nchild body\n")
+    (goto-char (point-min))
+    (should-not (supertag-node-tag-occurrences-at-point))
+    (should (search-forward "Child" nil t))
+    (org-back-to-heading t)
+    (should (equal '("childtag") (supertag-node-tag-occurrences-at-point)))
+    ;; Off a heading there is no node to read, matching the old reader.
+    (goto-char (point-max))
+    (should-not (supertag-node-tag-occurrences-at-point))))
+
 (provide 'tag-membership-org-first-test)
 
 ;;; tag-membership-org-first-test.el ends here

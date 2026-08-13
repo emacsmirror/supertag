@@ -2292,10 +2292,46 @@ external modifications (by user/other tools) to avoid unnecessary re-parsing."
   "Add hooks for real-time node synchronization."
   (add-hook 'after-save-hook #'supertag-sync--run-on-save nil t))
 
+(defun supertag--project-node-from-org-text (node-id current-file source-text)
+  "Return NODE-ID's projection from SOURCE-TEXT, Org source for CURRENT-FILE.
+SOURCE-TEXT is projected in a scratch buffer, so the destructive embed-block
+stripping `supertag--parse-org-nodes-from-current-buffer' performs never
+reaches the caller's buffer.  Org syntax that the source buffer configures
+per-buffer -- TODO keywords and the regexps derived from them -- is carried
+over so the projection reads the text the same way its own buffer does."
+  (let ((source-todo-keywords-1 org-todo-keywords-1)
+        (source-todo-regexp org-todo-regexp)
+        (source-not-done-regexp org-not-done-regexp)
+        (source-complex-heading-regexp org-complex-heading-regexp)
+        (source-todo-line-regexp org-todo-line-regexp))
+    (with-temp-buffer
+      (let ((org-mode-hook nil)
+            (org-inhibit-startup t)
+            (org-agenda-inhibit-startup t)
+            (inhibit-modification-hooks t))
+        (insert source-text)
+        (org-mode)
+        (setq-local org-element-use-cache nil)
+        (setq-local org-todo-keywords-1 source-todo-keywords-1)
+        (setq-local org-todo-regexp source-todo-regexp)
+        (setq-local org-not-done-regexp source-not-done-regexp)
+        (setq-local org-complex-heading-regexp source-complex-heading-regexp)
+        (setq-local org-todo-line-regexp source-todo-line-regexp)
+        (setq-local tab-width 8)
+        (cl-find node-id
+                 (supertag--parse-org-nodes-from-current-buffer current-file)
+                 :key (lambda (node) (plist-get node :id))
+                 :test #'equal)))))
+
 (defun supertag--parse-node-at-point ()
   "Parse the Org heading at point and return its property list.
 The current unsaved buffer is parsed through the same projector as file sync,
-preserving outline path, file parent, and absolute positions."
+preserving outline path, file parent, and absolute positions.
+
+Every node in the file is projected to produce one node's plist, so this
+costs time proportional to file size.  Callers that only need node-local
+data should use `supertag-node-tag-occurrences-at-point' or another
+region-scoped reader instead."
   (when (org-at-heading-p)
     (save-excursion
       (org-back-to-heading t)
@@ -2305,34 +2341,44 @@ preserving outline path, file parent, and absolute positions."
                     (current-file (and source-file
                                        (file-truename
                                         (expand-file-name source-file)))))
-          (let* ((source-text
-                  (save-restriction
-                    (widen)
-                    (buffer-substring-no-properties (point-min) (point-max))))
-                 ;; Capture TODO keywords and relevant regexps from the source buffer
-                 (source-todo-keywords-1 org-todo-keywords-1)
-                 (source-todo-regexp org-todo-regexp)
-                 (source-not-done-regexp org-not-done-regexp)
-                 (source-complex-heading-regexp org-complex-heading-regexp)
-                 (source-todo-line-regexp org-todo-line-regexp))
-            (with-temp-buffer
-              (let ((org-mode-hook nil)
-                    (org-inhibit-startup t)
-                    (org-agenda-inhibit-startup t)
-                    (inhibit-modification-hooks t))
-                (insert source-text)
-                (org-mode)
-                (setq-local org-element-use-cache nil)
-                (setq-local org-todo-keywords-1 source-todo-keywords-1)
-                (setq-local org-todo-regexp source-todo-regexp)
-                (setq-local org-not-done-regexp source-not-done-regexp)
-                (setq-local org-complex-heading-regexp source-complex-heading-regexp)
-                (setq-local org-todo-line-regexp source-todo-line-regexp)
-                (setq-local tab-width 8)
-                (cl-find node-id
-                         (supertag--parse-org-nodes-from-current-buffer current-file)
-                         :key (lambda (node) (plist-get node :id))
-                         :test #'equal)))))))))
+          (supertag--project-node-from-org-text
+           node-id current-file
+           (save-restriction
+             (widen)
+             (buffer-substring-no-properties (point-min) (point-max)))))))))
+
+(defun supertag-node-tag-occurrences-at-point ()
+  "Return the Org Tag Occurrences of the heading at point, or nil.
+
+Same list as (plist-get (supertag--parse-node-at-point) :tag-occurrences),
+including nil when point is not on a heading, but only the heading's own
+region is projected -- its title line plus the body it owns before the next
+heading.  That is the exact scope `supertag--extract-inline-tags' reads, so
+the surrounding nodes cannot contribute occurrences and parsing them is
+pure cost: it makes every tag edit scale with the file rather than with the
+node being edited.
+
+Only `:tag-occurrences' is returned because the rest of a region-scoped
+projection is not comparable to a whole-file one -- `:olp', `:parent-id'
+and the positions are all relative to the region."
+  (when (org-at-heading-p)
+    (save-excursion
+      (org-back-to-heading t)
+      (let* ((source-buffer (or (buffer-base-buffer) (current-buffer)))
+             (source-file (buffer-local-value 'buffer-file-name source-buffer)))
+        (when-let* ((node-id (org-entry-get nil "ID"))
+                    (current-file (and source-file
+                                       (file-truename
+                                        (expand-file-name source-file)))))
+          (plist-get
+           (supertag--project-node-from-org-text
+            node-id current-file
+            (save-restriction
+              (widen)
+              (buffer-substring-no-properties
+               (point)
+               (save-excursion (outline-next-heading) (point)))))
+           :tag-occurrences))))))
 
 ;;;###autoload
 (defun supertag-node-sync-at-point ()

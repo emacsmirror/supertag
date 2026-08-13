@@ -390,9 +390,7 @@ POSITION may be `beginning', `end', or a marker in the node buffer."
            (let ((tags (supertag-service-org--filetags)))
              (unless (member token tags)
                (supertag-service-org--set-filetags (append tags (list token)))))
-         (unless (member token
-                         (plist-get (supertag--parse-node-at-point)
-                                    :tag-occurrences))
+         (unless (member token (supertag-node-tag-occurrences-at-point))
            (pcase position
              ('beginning
               (org-back-to-heading t)
@@ -419,8 +417,7 @@ POSITION may be `beginning', `end', or a marker in the node buffer."
              (lambda (token)
                (supertag-service-org--token-identifies-p token tag-id))
              (supertag-service-org--filetags)))
-         (dolist (token (plist-get (supertag--parse-node-at-point)
-                                   :tag-occurrences))
+         (dolist (token (supertag-node-tag-occurrences-at-point))
            (when (supertag-service-org--token-identifies-p token tag-id)
              (supertag-view-helper-remove-tag-text token))))))))
 
@@ -439,8 +436,7 @@ POSITION may be `beginning', `end', or a marker in the node buffer."
                           new-token
                         tag))
                     (supertag-service-org--filetags)))
-         (dolist (token (plist-get (supertag--parse-node-at-point)
-                                   :tag-occurrences))
+         (dolist (token (supertag-node-tag-occurrences-at-point))
            (when (supertag-service-org--token-identifies-p token old-id)
              (supertag-view-helper-rename-tag-text-in-node
               token new-token))))))))
