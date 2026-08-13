@@ -8,10 +8,11 @@
   - 影响范围：`supertag-services-query.el`（parser/executor）、query docs/tests
   - 完成：2026-08-13；query 定向 31/31（含 2 项新增）；全量回归见 task009
 
-- task002 [ ] `not` 多参数
+- task002 [x] `not` 多参数
   - 产出：`(not a b ...)` = `(not (or a b ...))`；单参数行为不变
   - 验证方式：ERT 单/多参数、嵌套 not、与 tag/field 组合
   - 影响范围：parser、query docs/tests
+  - 完成：2026-08-13；query 定向 32/32；AST `:child`→`:children` 三处同步适配
 
 ## M2 — simple query 补齐二
 
