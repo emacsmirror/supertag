@@ -293,9 +293,9 @@ This function is compatible with the old query syntax."
      ((eq op 'and) `(:type and :children ,(mapcar #'supertag-query--parse-sexp args)))
      ((eq op 'or) `(:type or :children ,(mapcar #'supertag-query--parse-sexp args)))
      ((eq op 'not)
-      (unless (= (length args) 1)
-        (error "'not' operator expects exactly one argument, but got %S" args))
-      `(:type not :child ,(supertag-query--parse-sexp (car args))))
+      (unless (>= (length args) 1)
+        (error "'not' operator expects at least one argument, but got %S" args))
+      `(:type not :children ,(mapcar #'supertag-query--parse-sexp args)))
      ((eq op 'tag)
       (unless (= (length args) 1)
         (error "'tag' operator expects exactly one argument, but got %S" args))
@@ -385,8 +385,14 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
         (cl-reduce #'cl-union child-results :initial-value '())))
 
      ((eq ast-type 'not)
+      ;; (not a b ...) excludes the union of the children, i.e.
+      ;; (not (or a b ...)).  A single child keeps the old behavior.
       (let ((all-node-ids (supertag-query--get-all-node-ids))
-            (nodes-to-exclude (supertag-query--execute-ast (plist-get ast :child))))
+            (nodes-to-exclude
+             (cl-reduce #'cl-union
+                        (mapcar #'supertag-query--execute-ast
+                                (plist-get ast :children))
+                        :initial-value '())))
         (cl-set-difference (or all-node-ids '()) nodes-to-exclude :test #'equal)))
 
      ;; Fast index-based lookups below
@@ -513,7 +519,7 @@ Used for generating table headers in Org Babel output."
                      ((member type '(and or))
                       (dolist (child (plist-get sub-ast :children)) (walk child)))
                      ((eq type 'not)
-                      (walk (plist-get sub-ast :child)))
+                      (dolist (child (plist-get sub-ast :children)) (walk child)))
                      ((eq type 'field)
                       (push (plist-get sub-ast :key) fields))))))
       (walk ast))

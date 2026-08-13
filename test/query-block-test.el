@@ -294,6 +294,30 @@ Returns the list of created node ids, in creation order."
     (should-not (supertag-query-node-ids '(priority "C")))
     (should-not (supertag-query-node-ids '(priority)))))
 
+(ert-deftest query-block-not-accepts-multiple-arguments ()
+  "(not a b ...) excludes the union of its children."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "a" :tags (list "x")))
+    (supertag-store-put-entity
+     :nodes "n2" (list :id "n2" :title "b" :tags (list "y")))
+    (supertag-store-put-entity
+     :nodes "n3" (list :id "n3" :title "c" :tags (list "z")))
+    ;; Multi-arg not = (not (or (tag "x") (tag "y"))).
+    (should (equal '("n3")
+                   (supertag-query-node-ids '(not (tag "x") (tag "y")))))
+    ;; Single-arg behavior unchanged.
+    (should (equal '("n2" "n3")
+                   (sort (supertag-query-node-ids '(not (tag "x")))
+                         #'string<)))
+    ;; Zero args still signal.
+    (should-error (supertag-query-node-ids '(not)))
+    ;; Nested: (not (task "TODO") (priority "A")) excludes both sets.
+    (supertag-store-put-entity
+     :nodes "n4" '(:id "n4" :title "d" :todo "TODO"))
+    (should-not (member "n4" (supertag-query-node-ids
+                              '(not (task "TODO") (tag "x")))))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here
