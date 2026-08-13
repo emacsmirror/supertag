@@ -121,3 +121,16 @@ Behavior：同一条查询在 query block 与 automation 条件中匹配同一�
 
 Verification：`./test/run-tests.sh automation-condition` 4/4、query 40/40；
 `git diff --check` 通过。全量回归见 task009 验收。
+
+## 2026-08-13 — task009 文档收尾与 phase 验收
+
+- Add `doc/QUERY-SYNTAX-PROPOSAL.md`：状态更新为已落地，记录五个拍板结果。
+- Modify `test/ownership-separation-test.el`：tag rename 测试的 has-tag
+  断言改为统一条件语法（`--evaluate-condition '(tag ...)`），因为 task008
+  删除了 has-tag 的旧评估分支。
+- Modify `doc/QUERY.md`：全量新语法（task/priority/not 多参数/日期符号/
+  h-min/sort-by/动态变量/聚合）已随各 task 收录。
+
+Verification：干净临时 worktree（HEAD 最新 + 全部 phase 提交）全量 ERT
+509/509；6 个修改 Elisp byte-compile 零新增 warning；`git diff --check` 通过。
+Phase 关闭待用户验收。
