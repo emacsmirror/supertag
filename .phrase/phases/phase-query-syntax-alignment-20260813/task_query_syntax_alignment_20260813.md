@@ -36,10 +36,11 @@
 
 ## M3 — 聚合
 
-- task006 [ ] 聚合/分组尾部修饰符
+- task006 [x] 聚合/分组尾部修饰符
   - 产出：尾部 `(sum|count|avg|min|max|first|last|unique-count|concat FIELD)` 与 `(group-by FIELD)`；复用 `supertag-query-aggregate` + `supertag-rollup-apply`；结果形状 = 标量 或 (分组键 . 值) 列表；过滤语法不变
   - 验证方式：各函数、缺失/非数值语义、非法位置报错、与既有 filter/sort 回归
   - 影响范围：parser/executor 公开入口、docs/tests
+  - 完成：2026-08-13；query 定向 39/39；语法采用单 form（与提案双 form 示例不同，已在文档与 change log 说明）
 
 - task007 [ ] query block 聚合结果渲染
   - 产出：聚合查询在 query block 渲染为标量行/分组小表；无聚合行为不变
