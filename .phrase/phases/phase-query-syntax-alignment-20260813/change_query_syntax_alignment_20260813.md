@@ -24,3 +24,15 @@ warning；`git diff --check` 通过。全量回归见 task009 验收。
   零参数报错、与 task/priority 嵌套）。
 
 Verification：`./test/run-tests.sh query` 32/32；`git diff --check` 通过。
+
+## 2026-08-13 — task003 日期符号与 h/min 单位
+
+- Modify `supertag-services-query.el`：`supertag-query--resolve-date-string`
+  新增 today/yesterday/tomorrow 符号（decode-time 取本地日期，encode-time
+  自动归一化 ±1 天溢出，解析为本地 00:00）与 `h`（3600s）/`min`（60s）
+  相对单位；所有日期操作符（after/before/between/recent-days 等）受益。
+- Modify `doc/QUERY.md`：日期格式表新增两行，并说明 today 的 00:00 边界语义。
+- Modify `test/query-block-test.el`：新增 2 项定向 ERT（cl-letf 固定
+  current-time，断言 00:00 边界、±1 天 86400s 间隔、h/min 偏移、既有单位回归）。
+
+Verification：`./test/run-tests.sh query` 34/34；`git diff --check` 通过。

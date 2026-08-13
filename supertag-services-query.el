@@ -471,15 +471,30 @@ This is much faster than the old approach that scanned the entire link table."
 
 (defun supertag-query--resolve-date-string (date-str)
   "Resolve a date string into an absolute time value.
-Handles absolute dates ('YYYY-MM-DD'), 'now', and relative dates ('-7d', '+1m', etc.).
+Handles absolute dates ('YYYY-MM-DD'), 'now', the day symbols
+today/yesterday/tomorrow (resolved to local midnight), and relative
+dates ('-7d', '+2w', '-4h', '+30min', etc.).
 Compatible with the old query engine date format."
   (let ((now (current-time)))
     (cond
      ;; Case 1: "now"
      ((string= date-str "now") now)
 
-     ;; Case 2: Relative date like "-7d", "+2w", "-1y"
-     ((string-match "^\\([+-]\\)?\\([0-9]+\\)\\([dwmy]\\)$" date-str)
+     ;; Case 1b: day symbols, resolved to local midnight.
+     ((member date-str '("today" "yesterday" "tomorrow"))
+      (let* ((decoded (decode-time now))
+             (day (nth 3 decoded))
+             (month (nth 4 decoded))
+             (year (nth 5 decoded))
+             (delta (pcase date-str
+                      ("today" 0)
+                      ("yesterday" -1)
+                      ("tomorrow" 1))))
+        ;; encode-time normalizes day overflow (0, 32, ...) itself.
+        (encode-time 0 0 0 (+ day delta) month year)))
+
+     ;; Case 2: Relative date like "-7d", "+2w", "-4h", "+30min"
+     ((string-match "^\\([+-]\\)?\\([0-9]+\\)\\(d\\|w\\|m\\|y\\|h\\|min\\)$" date-str)
       (let* ((sign (if (match-string 1 date-str) (match-string 1 date-str) "+"))
              (num (string-to-number (match-string 2 date-str)))
              (unit (match-string 3 date-str))
@@ -492,7 +507,9 @@ Compatible with the old query engine date format."
                    ;; Approximation: 30 days for a month
                    ("m" (* 30 seconds-per-day))
                    ;; Approximation: 365.25 days for a year
-                   ("y" (* 365.25 seconds-per-day))))))
+                   ("y" (* 365.25 seconds-per-day))
+                   ("h" 3600)
+                   ("min" 60)))))
         (if (string= sign "-")
             (time-subtract now (seconds-to-time delta-seconds))
           (time-add now (seconds-to-time delta-seconds)))))

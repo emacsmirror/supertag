@@ -64,8 +64,9 @@ around lines 214-247):
 | Format | Example | Meaning |
 |---|---|---|
 | `"now"` | `(after "now")` | the current moment |
+| Day symbol | `"today"`, `"yesterday"`, `"tomorrow"` | local midnight of that day (`"today"` = today 00:00; `(after "today")` covers from midnight, `(before "today")` excludes today entirely) |
 | Absolute date | `"2025-06-01"` | `YYYY-MM-DD`, exactly four digits, two digits, two digits |
-| Relative offset | `"-7d"`, `"+2w"`, `"-1m"`, `"1y"` | a signed (or unsigned) integer followed by `d`/`w`/`m`/`y` |
+| Relative offset | `"-7d"`, `"+2w"`, `"-4h"`, `"30min"` | a signed (or unsigned) integer followed by `d`/`w`/`m`/`y`/`h`/`min` |
 
 Relative-offset details:
 

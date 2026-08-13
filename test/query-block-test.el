@@ -318,6 +318,54 @@ Returns the list of created node ids, in creation order."
     (should-not (member "n4" (supertag-query-node-ids
                               '(not (task "TODO") (tag "x")))))))
 
+(ert-deftest query-block-day-symbols-resolve-to-local-midnight ()
+  "today/yesterday/tomorrow resolve to local midnight boundaries."
+  ;; Fix "now" to a known moment: 2026-08-13 15:30:00 local.
+  (cl-letf (((symbol-function 'current-time)
+             (lambda () (encode-time 0 30 15 13 8 2026))))
+    (let* ((today (supertag-query--resolve-date-string "today"))
+           (yesterday (supertag-query--resolve-date-string "yesterday"))
+           (tomorrow (supertag-query--resolve-date-string "tomorrow"))
+           (decoded-today (decode-time today))
+           (decoded-yesterday (decode-time yesterday)))
+      ;; today is 2026-08-13 00:00:00 local.
+      (should (equal '(0 0 0 13 8 2026)
+                     (cl-subseq decoded-today 0 6)))
+      ;; yesterday is exactly one day earlier at midnight.
+      (should (equal '(0 0 0 12 8 2026)
+                     (cl-subseq decoded-yesterday 0 6)))
+      ;; today - yesterday = 86400 seconds.
+      (should (= 86400 (time-to-seconds
+                        (time-subtract today yesterday))))
+      ;; tomorrow is one day ahead.
+      (should (= 86400 (time-to-seconds
+                        (time-subtract tomorrow today))))
+      ;; Day symbols work inside query operators.
+      (should (time-less-p yesterday today))
+      (should (time-less-p today tomorrow)))))
+
+(ert-deftest query-block-hour-and-minute-units ()
+  "Relative h/min units resolve to the expected offsets."
+  (cl-letf (((symbol-function 'current-time)
+             (lambda () (encode-time 0 0 0 13 8 2026))))
+    (should (= 14400 (time-to-seconds
+                      (time-subtract
+                       (supertag-query--resolve-date-string "now")
+                       (supertag-query--resolve-date-string "-4h")))))
+    (should (= 1800 (time-to-seconds
+                     (time-subtract
+                      (supertag-query--resolve-date-string "now")
+                      (supertag-query--resolve-date-string "-30min")))))
+    (should (= 1800 (time-to-seconds
+                     (time-subtract
+                      (supertag-query--resolve-date-string "+30min")
+                      (supertag-query--resolve-date-string "now")))))
+    ;; Existing units keep working.
+    (should (= 604800 (time-to-seconds
+                       (time-subtract
+                        (supertag-query--resolve-date-string "now")
+                        (supertag-query--resolve-date-string "-1w")))))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here
