@@ -11,6 +11,20 @@
 (require 'supertag-view-framework)
 (require 'supertag-ui-search)
 
+(defun supertag-view-runtime-test--require-demo-dashboard (example-dir)
+  "Load the demo dashboard from EXAMPLE-DIR, or skip the calling test.
+
+The dashboard under doc/examples is documentation, not part of the
+package, so it may depend on libraries that are not installed here.  A
+missing dependency says nothing about the View Runtime these tests cover,
+and failing on it would report a defect that does not exist."
+  (let ((load-path (cons example-dir load-path)))
+    (condition-case err
+        (require 'supertag-view-demo-dashboard)
+      (file-missing
+       (ert-skip (format "doc/examples dashboard cannot load here: %s"
+                         (error-message-string err)))))))
+
 (ert-deftest test-view-runtime-picker-always-uses-public-open ()
   "The custom-view picker must not route definitions around the Runtime."
   (supertag-view-framework-init)
@@ -634,7 +648,7 @@
   (let* ((example-dir (expand-file-name "doc/examples" default-directory))
          (load-path (cons example-dir load-path))
          (buffer-name "*View: Demo Dashboard - demo*"))
-    (require 'supertag-view-demo-dashboard)
+    (supertag-view-runtime-test--require-demo-dashboard example-dir)
     (unwind-protect
         (progn
           (supertag-view-framework-init)
@@ -699,7 +713,7 @@
          (buffer-name "*View: Demo Dashboard - demo*")
          (frame (selected-frame))
          (original-width (window-total-width)))
-    (require 'supertag-view-demo-dashboard)
+    (supertag-view-runtime-test--require-demo-dashboard example-dir)
     (unwind-protect
         (save-window-excursion
           (delete-other-windows)
