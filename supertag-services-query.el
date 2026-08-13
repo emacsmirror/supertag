@@ -494,12 +494,20 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
         matches))
 
      ((eq ast-type 'priority)
-      ;; Case-insensitive match against the projected :priority cookie.
-      (let ((states (mapcar #'upcase (plist-get ast :values)))
+      ;; Case-insensitive match against the projected :priority cookie;
+      ;; the projection stores "#A" (with the leading #) while queries
+      ;; spell it "A", so both sides strip the # before comparing.
+      (let ((states
+             (mapcar (lambda (state)
+                       (upcase (replace-regexp-in-string "^#" "" state)))
+                     (plist-get ast :values)))
             matches)
         (dolist (pair (supertag-query-nodes (lambda (_id data) data)))
           (let ((priority (plist-get (cdr pair) :priority)))
-            (when (and priority (member (upcase priority) states))
+            (when (and priority
+                       (member (upcase (replace-regexp-in-string
+                                        "^#" "" priority))
+                               states))
               (push (car pair) matches))))
         matches))
 

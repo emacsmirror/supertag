@@ -292,7 +292,15 @@ Returns the list of created node ids, in creation order."
                    (sort (supertag-query-node-ids
                           '(priority "A" "B")) #'string<)))
     (should-not (supertag-query-node-ids '(priority "C")))
-    (should-not (supertag-query-node-ids '(priority)))))
+    (should-not (supertag-query-node-ids '(priority)))
+    ;; The scan projection stores "#A" (with the leading #); queries
+    ;; spelled without it still match (n1 carries plain "A").
+    (supertag-store-put-entity
+     :nodes "n4" (list :id "n4" :title "d" :priority "#A"))
+    (should (equal '("n1" "n4")
+                   (sort (supertag-query-node-ids '(priority "A"))
+                         #'string<)))
+    (should (equal '("n4") (supertag-query-node-ids '(priority "#a"))))))
 
 (ert-deftest query-block-not-accepts-multiple-arguments ()
   "(not a b ...) excludes the union of its children."
