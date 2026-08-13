@@ -56,7 +56,8 @@
   - 影响范围：automation condition evaluator、rule normalize、automation tests、AUTOMATION-SYSTEM-GUIDE
   - 完成：2026-08-13；automation-condition 定向 4/4；转换发生在评估时（纯函数），旧数据无需迁移
 
-- task009 [ ] 文档收尾与 phase 验收
+- task009 [x] 文档收尾与 phase 验收
   - 产出：`doc/QUERY.md` 全量新语法；`QUERY-SYNTAX-PROPOSAL.md` 标记拍板结果；change 索引；用户验收后关闭 phase
   - 验证方式：干净 worktree 完整 ERT、byte compile、`git diff --check`；用户确认
   - 影响范围：docs、all regression suites
+  - 完成：2026-08-13；干净临时 worktree 全量 ERT 509/509；**Phase 关闭待用户验收**
