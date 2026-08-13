@@ -98,3 +98,26 @@ Verification：`./test/run-tests.sh query` 39/39；`git diff --check` 通过。
   与值断言）。
 
 Verification：`./test/run-tests.sh query` 40/40；`git diff --check` 通过。
+
+## 2026-08-13 — task008 Automation 条件语法直接切换
+
+- Modify `supertag-automation.el`：新增纯转换函数
+  `supertag-automation--condition-to-query`（旧条件 → 查询 sexp：
+  has-tag/has-any-tag/has-all-tags/field-equals/global-field-equals/
+  property-equals(string) 确定性转换；事件条件与 test 条件返回 nil）；
+  `--evaluate-condition` 优先走查询引擎（新旧语法统一匹配集合），无查询
+  对应物时走专用评估路径；`--eval-single-condition` 删除已迁移分支
+  （has-tag/has-any-tag/has-all-tags/field-equals/global-field-equals），
+  其 and/or/not 分支逐子条件分流（可转换子条件走查询引擎，事件子条件
+  走专用评估器）——混合条件因此保持完整语义。
+- Modify `doc/AUTOMATION-SYSTEM-GUIDE.md`：Conditions 节改为查询语法为主，
+  事件条件为专用形式；注明旧形式确定性转换。
+- Add `test/automation-condition-test.el` + `test/run-tests.sh`
+  （automation-condition filter）：4 项 ERT（新旧语法同集合 parity、
+  多 tag 转换 parity、事件/混合条件专用路径、nil/t 透传）。
+
+Behavior：同一条查询在 query block 与 automation 条件中匹配同一节点集；
+旧规则数据无需修改（评估时转换）；事件条件不受影响。
+
+Verification：`./test/run-tests.sh automation-condition` 4/4、query 40/40；
+`git diff --check` 通过。全量回归见 task009 验收。

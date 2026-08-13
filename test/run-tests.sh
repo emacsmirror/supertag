@@ -67,6 +67,7 @@ TEST_FILES=(
     "test/test-smart-key.el"
     "test/embed-cache-test.el"
     "test/ownership-separation-test.el"
+    "test/automation-condition-test.el"
 )
 
 # Allow filtering by keyword
@@ -105,8 +106,9 @@ if [ $# -gt 0 ]; then
             tag-path)  FILTER="$FILTER test/tag-path-test.el" ;;
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
+            automation-condition) FILTER="$FILTER test/automation-condition-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership automation-condition all"; exit 1 ;;
         esac
     done
     TEST_FILES=($(printf '%s\n' $FILTER | awk '!seen[$0]++'))

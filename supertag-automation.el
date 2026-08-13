@@ -1217,6 +1217,50 @@ Returns nil when the field is not found."
                  (eq (nth 2 path) :properties)
                  (eq (nth 3 path) name)))))))
 
+(defun supertag-automation--condition-to-query (condition)
+  "Convert a legacy automation CONDITION to query-sexp syntax.
+Returns the converted sexp, or nil when CONDITION (or any part of it)
+uses a form with no query equivalent: event conditions
+(property-changed/field-changed/global-field-changed), test conditions,
+and keyword property reads.  New-style query conditions pass through
+unchanged; and/or/not are shared by both grammars."
+  (cond
+   ((null condition) t)
+   ((not (consp condition)) condition)
+   ((memq (car condition) '(and or))
+    (let ((converted (mapcar #'supertag-automation--condition-to-query
+                             (cdr condition))))
+      (and (not (memq nil converted))
+           (cons (car condition) converted))))
+   ((eq (car condition) 'not)
+    (let ((converted (supertag-automation--condition-to-query
+                      (cadr condition))))
+      (and converted (list 'not converted))))
+   ((eq (car condition) 'quote)
+    (supertag-automation--condition-to-query (cadr condition)))
+   ((memq (car condition) '(has-tag tag))
+    (list 'tag (cadr condition)))
+   ((eq (car condition) 'has-any-tag)
+    (cons 'or (mapcar (lambda (tag) (list 'tag tag)) (cdr condition))))
+   ((eq (car condition) 'has-all-tags)
+    (cons 'and (mapcar (lambda (tag) (list 'tag tag)) (cdr condition))))
+   ((memq (car condition) '(field-equals global-field-equals field))
+    (list 'field (cadr condition) (caddr condition)))
+   ((eq (car condition) 'property-equals)
+    (if (stringp (cadr condition))
+        (list 'field (cadr condition) (caddr condition))
+      nil))
+   ((memq (car condition) '(property-changed property-test field-changed
+                            global-field-changed global-field-test))
+    nil)
+   ;; Query operators without a legacy equivalent pass through.
+   ((memq (car condition) '(term after before between recent-days
+                            in-month in-year sort-by sum count avg
+                            min max first last unique-count concat
+                            group-by))
+    condition)
+   (t nil)))
+
 (defun supertag-automation--eval-single-condition (cond-form node-data)
   "Evaluate a single condition COND-FORM against NODE-DATA.
 Returns t if condition passes, nil otherwise."
@@ -1227,58 +1271,43 @@ Returns t if condition passes, nil otherwise."
          (args (cdr cond-form)))
 
     (pcase op
-      ;; Logical operators
+      ;; Logical operators: each child converts to the query grammar when
+      ;; possible (the engine decides), otherwise falls back to the
+      ;; dedicated evaluator for event/test forms.
       ('and
        (cl-every (lambda (sub-cond)
-                   (supertag-automation--eval-single-condition sub-cond node-data))
+                   (let ((query (supertag-automation--condition-to-query
+                                 sub-cond)))
+                     (if query
+                         (member node-id (supertag-query-node-ids query))
+                       (supertag-automation--eval-single-condition
+                        sub-cond node-data))))
                  args))
 
       ('or
        (cl-some (lambda (sub-cond)
-                  (supertag-automation--eval-single-condition sub-cond node-data))
+                  (let ((query (supertag-automation--condition-to-query
+                                sub-cond)))
+                    (if query
+                        (member node-id (supertag-query-node-ids query))
+                      (supertag-automation--eval-single-condition
+                       sub-cond node-data))))
                 args))
 
       ('not
-       (not (supertag-automation--eval-single-condition (car args) node-data)))
+       (let ((query (supertag-automation--condition-to-query (car args))))
+         (if query
+             (not (member node-id (supertag-query-node-ids query)))
+           (not (supertag-automation--eval-single-condition
+                 (car args) node-data)))))
 
       ;; Unwrap quoted conditions
       ('quote
        (supertag-automation--eval-single-condition (cadr cond-form) node-data))
 
-      ;; Tag conditions
-      ('has-tag
-       (and tags
-            (member (supertag-automation--semantic-tag-id (car args)) tags)))
-
-      ;; Multi-tag conditions (new)
-      ('has-any-tag
-       ;; Return t if node has ANY of the specified tags
-       ;; Args: list of tag names, e.g., (has-any-tag "task" "project" "note")
-       (and tags
-            (cl-some
-             (lambda (tag)
-               (member (supertag-automation--semantic-tag-id tag) tags))
-             args)))
-
-      ('has-all-tags
-       ;; Return t if node has ALL of the specified tags
-       ;; Args: list of tag names, e.g., (has-all-tags "task" "urgent")
-       (and tags
-            (cl-every
-             (lambda (tag)
-               (member (supertag-automation--semantic-tag-id tag) tags))
-             args)))
-
-      ;; Field conditions
-      ('field-equals
-       (let ((key (car args))
-             (expected-val (cadr args)))
-         (if (not (stringp key))
-             (progn
-               (message "Automation Error: field-equals expects string key, got: %S" key)
-               nil)
-           (let ((actual-val (supertag-automation--get-field-value node-id tags key)))
-             (equal actual-val expected-val)))))
+      ;; Tag conditions migrated to the query grammar; only the forms
+      ;; without a query equivalent remain below (event conditions,
+      ;; tests, and keyword property reads).
 
       ;; Property conditions
       ('property-equals
@@ -1325,16 +1354,6 @@ Returns t if condition passes, nil otherwise."
                   (supertag-automation--global-field-changed-p fid))))))
 
       ;; Global field conditions (new)
-      ('global-field-equals
-       (let ((field-id (car args))
-             (expected-val (cadr args)))
-         (if (not (stringp field-id))
-             (progn
-               (message "Automation Error: global-field-equals expects string field-id, got: %S" field-id)
-               nil)
-           (let ((actual-val (supertag-automation--get-global-field-value node-id field-id)))
-             (equal actual-val expected-val)))))
-
       ('global-field-changed
        (let ((field-id (car args)))
          (if (stringp field-id)
@@ -1378,7 +1397,17 @@ Empty/nil conditions always return t."
           (message "Automation Warning: Condition is not a list: %S" cond-to-eval)
           nil)
          (t
-          (supertag-automation--eval-single-condition cond-to-eval node-data)))))))
+          (let ((query (supertag-automation--condition-to-query
+                        cond-to-eval)))
+            (if query
+                ;; Query grammar (new or converted): reuse the query
+                ;; engine so automation and query blocks agree on the
+                ;; matched set.
+                (member node-id (supertag-query-node-ids query))
+              ;; Forms without a query equivalent (event conditions,
+              ;; tests, keyword property reads).
+              (supertag-automation--eval-single-condition
+               cond-to-eval node-data)))))))))
 
 (defun supertag-automation--handle-field-change (node-id old-props new-props)
   "Handle field changes and trigger sync/rollup."

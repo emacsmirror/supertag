@@ -300,39 +300,45 @@ Notes:
 
 ### 2. Conditions - `IF`
 
-The `condition` field defines the "preconditions" that must be met for the rule to execute. It is a Lisp-style logical expression.
+The `condition` field defines the "preconditions" that must be met for the
+rule to execute. It is the **same S-expression query grammar** used by query
+blocks and saved queries — see `doc/QUERY.md`. State conditions are query
+operators; event conditions are the dedicated forms below.
 
 | Condition Type | Format | Description |
 | :--- | :--- | :--- |
-| **Logical Combinations** | `(and ...)` `(or ...)` `(not ...)` | Used to combine multiple conditions to implement complex logical judgments. |
-| **Has Tag** | `(has-tag "tag-name")` | Check if the current node has the specified tag. |
-| **Property Equals** | `(property-equals :prop-name "value")` | Check if a node's property equals a specific value. |
-| **Property Changed**| `(property-changed :prop-name)` | Check if this event was caused by a change in the specified property. |
-| **Property Test**| `(property-test :prop-name #'> 8)` | Use a function to test the property value. |
-| **Field Equals** | `(field-equals "field-name" "value")` | Resolve a field display name or ID and check its global value. |
-| **Field Changed** | `(field-changed "field-name")` | Resolve a field display name or ID and check whether its global value changed. |
-| **Global Field Equals** | `(global-field-equals "field-id" "value")` | Check a global field value (field-id is the global slug/id). |
-| **Global Field Changed** | `(global-field-changed "field-id")` | Check if the current event changed that global field-id. |
-| **Global Field Test** | `(global-field-test "field-id" #'pred ...)` | Test a global field value via a function. |
+| **Query grammar** | `(and ...)` `(or ...)` `(not ...)` `(tag ...)` `(field ...)` `(task ...)` `(priority ...)` `(term ...)` + date operators | Full query syntax; the rule matches the same node set a query block would |
+| **Property Equals (keyword)** | `(property-equals :prop-name "value")` | Node plist property equality (no query equivalent; keyword form only) |
+| **Property Changed** | `(property-changed :prop-name)` | This event changed the specified property |
+| **Property Test** | `(property-test :prop-name #'> 8)` | Test the property value via a function |
+| **Field Changed** | `(field-changed "field-name")` | This event changed the field's global value |
+| **Global Field Changed** | `(global-field-changed "field-id")` | This event changed that global field-id |
+| **Global Field Test** | `(global-field-test "field-id" #'pred ...)` | Test a global field value via a function |
+
+Legacy condition forms (`has-tag`, `has-any-tag`, `has-all-tags`,
+`field-equals`, `global-field-equals`, and `property-equals` with a string
+key) convert deterministically to the query grammar at evaluation time and
+keep working; new rules should write the query grammar directly.
 
 #### `:condition` (rule field)
 
-In the rule plist, `:condition` is the **IF** part. It is optional, and it must be a Lisp list form:
+In the rule plist, `:condition` is the **IF** part. It is optional, and it
+must be a Lisp list form:
 
 ```elisp
 (supertag-automation-create
  '(:name "only-when-hours-changed"
    :trigger :on-property-change
-   :condition (and (has-tag "task") (property-changed :hours))
+   :condition (and (tag "task") (property-changed :hours))
    :actions '((:action :add-tag :params (:tag "touched")))))
 ```
 
 - Optional: omit it or set it to `nil` to always pass (rule runs whenever `:trigger` matches).
-- Form: the engine evaluates a small set of built-in predicates (`has-tag`, `property-equals`, …) plus `and/or/not` (not arbitrary `eval`).
+- Form: the query grammar plus the event-sensitive helpers above (no arbitrary `eval`).
 - Quoting: both `:condition (and ...)` and `:condition '(and ...)` work; the engine unwraps one leading `quote`. If the whole rule is already quoted (`'(...)`), you typically do **not** need to quote `:condition` again.
 - Event-sensitive helpers like `property-changed` / `field-changed` rely on the event `:path` (see “Event Context”), so pair them with the appropriate `:trigger` (e.g. `:on-property-change` / `:on-field-change`).
 
-> This guide does not define a condition-level “formula DSL”. For complex logic, compose existing conditions and/or move complexity into `:call-function` actions.
+> This guide does not define a condition-level “formula DSL”. For complex logic, compose query operators and/or move complexity into `:call-function` actions.
 
 ### 3. Actions - `THEN`
 
