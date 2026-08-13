@@ -388,3 +388,17 @@ Behavior：保存的数据库不再包含 `:embeds`；老库加载不受影响�
 Risk：极低；`supertag--canonicalize-store-root` 的 legacy 键名归一化保留，仅影响写出。
 
 Verification：embed/ownership/persist/canon 定向 79/79；干净临时 worktree（HEAD + task028 patch）全量 ERT 491/491；修改文件 byte-compile 零新增 warning、`git diff --check` 通过。Phase 关闭待用户确认（Deferred Gate：SQLite 不属本 phase，task028 完成后单独 ADR/phase）。
+
+## 2026-08-13 — task025 续：公式语法统一（中缀为唯一实现）
+
+- Modify `supertag-services-formula.el`：parser/evaluator（tokenize/parse/eval/eval-string）从 virtual-column 迁入本模块，成为公式唯一实现；新增 legacy 翻译层 `supertag-formula--translate-placeholders` / `--prefix-to-infix` / `--canonicalize`（`{{:key}}` 占位符 + 二元前缀算术自动翻译为中缀）；`supertag-formula-evaluate` 统一入口（resolver 可插拔：Table 保留 tag 上下文 field-getter，其余走全局字段模型带 schema 默认值）；删除基于 `eval` 的占位符沙盒与无使用的 `get-property`/`days-until` helper；`supertag-formula-eval` 增加可选 resolver。
+- Modify `supertag-virtual-column.el`：parser 区块迁出；`--compute-formula` 改调统一入口 `supertag-formula-evaluate`（变量解析从"字段名直查 0 默认"改为全局字段模型 + schema 默认，修复字段 rename 后 VC 公式查不到值的缺陷）。
+- Modify `supertag-ops-relation.el`：load-time `require 'supertag-services-formula` 改为 calculate-rollup 内懒 require，断开 services-formula ↔ services-query ↔ ops-relation 的 require 环；services-formula 现在 load-time 零 supertag 依赖，resolver 在求值时懒 require ops-field。
+- Modify `doc/AUTOMATION-SYSTEM-GUIDE.md`/`_cn.md`：公式示例与语言说明改为中缀语法；`doc/ONTOLOGY-ARCHITECTURE_cn.md` 的"两种公式实现并存"表述更新为统一实现。
+- Modify `test/formula-test.el`：新增 legacy 翻译、中缀透传、双语法同一结果 parity 测试。
+
+Behavior：三种消费方（Table/VC/Automation）对同一公式文本给出相同结果；存量 `{{}}` 公式无需改动（自动翻译，仅支持二元算术子集，超出子集报错并提示中缀写法）；`/` 为浮点除法（旧 eval 整数除法的截断行为被修正，如 `(* (/ {{:progress}} 100) 100)` 旧结果恒 0，现正确返回 progress）。
+
+Risk：legacy 公式中使用了 `get-property`/`days-until` 或变长参数的会报错（全库无使用记录）；Automation formula 的变量解析从 entity plist 改为全局字段模型（与 Table/VC 收敛，符合 task025 验收）。
+
+Verification：formula/aggregate/vc/view-table/view-node/query/ownership/smart-key 定向 114/114；干净临时 worktree（HEAD + 本 patch）全量 ERT 494/494；5 个修改 Elisp byte-compile 零新增 warning、check-parens 与 `git diff --check` 通过。
