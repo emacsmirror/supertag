@@ -337,6 +337,66 @@ what makes the two copies distinguishable."
     (goto-char (point-max))
     (should-not (supertag-node-tag-occurrences-at-point))))
 
+;;; --- ID navigation inside the Org service ---
+
+(ert-deftest supertag-tag-membership-goto-id-leaves-point-on-the-heading ()
+  "Locating a node by ID moves point there, wherever point started.
+
+`supertag-service-org--goto-id-in-current-buffer' used to run its search
+inside `org-with-wide-buffer', which restores point, so it reported
+success without ever moving.  Everything `supertag-service-org--with-node-buffer'
+runs then operated on whatever heading point happened to sit on."
+  (supertag-tag-membership-test--with-org-file
+      (concat "* Alpha #one\n:PROPERTIES:\n:ID: ID-A\n:END:\nalpha body\n"
+              "* Beta #two\n:PROPERTIES:\n:ID: ID-B\n:END:\nbeta body\n")
+    ;; From inside another node's body.
+    (goto-char (point-min))
+    (should (search-forward "beta body" nil t))
+    (should (supertag-service-org--goto-id-in-current-buffer "ID-A"))
+    (should (org-at-heading-p))
+    (should (equal "ID-A" (org-entry-get nil "ID")))
+    ;; From another node's heading.
+    (goto-char (point-min))
+    (should (search-forward "* Beta" nil t))
+    (org-back-to-heading t)
+    (should (supertag-service-org--goto-id-in-current-buffer "ID-A"))
+    (should (equal "ID-A" (org-entry-get nil "ID")))))
+
+(ert-deftest supertag-tag-membership-goto-id-keeps-point-when-not-found ()
+  "A failed ID lookup reports failure and leaves point where it was."
+  (supertag-tag-membership-test--with-org-file
+      "* Alpha\n:PROPERTIES:\n:ID: ID-A\n:END:\nalpha body\n"
+    (goto-char (point-min))
+    (should (search-forward "alpha body" nil t))
+    (let ((before (point)))
+      (should-not (supertag-service-org--goto-id-in-current-buffer "ID-MISSING"))
+      (should (= before (point))))))
+
+(ert-deftest supertag-tag-membership-with-node-buffer-runs-at-the-right-node ()
+  "`--with-node-buffer' reaches its node even from a narrowed buffer.
+
+The restriction it widens past is put back once the body has run, so
+callers cannot silently un-narrow the user's buffer."
+  (supertag-tag-membership-test--with-org-file
+      (concat "* Alpha #one\n:PROPERTIES:\n:ID: ID-A\n:END:\nalpha body\n"
+              "* Beta #two\n:PROPERTIES:\n:ID: ID-B\n:END:\nbeta body\n")
+    (supertag-sync--process-single-file
+     (file-truename (buffer-file-name))
+     '(:nodes-created 0 :nodes-updated 0 :nodes-deleted 0))
+    ;; Narrow to Beta, then ask for Alpha.
+    (goto-char (point-min))
+    (should (search-forward "* Beta" nil t))
+    (org-back-to-heading t)
+    (org-narrow-to-subtree)
+    (let ((narrowed-min (point-min))
+          (narrowed-max (point-max))
+          (seen nil))
+      (supertag-service-org--with-node-buffer
+       "ID-A" (lambda () (setq seen (org-entry-get nil "ID"))))
+      (should (equal "ID-A" seen))
+      (should (= narrowed-min (point-min)))
+      (should (= narrowed-max (point-max))))))
+
 (provide 'tag-membership-org-first-test)
 
 ;;; tag-membership-org-first-test.el ends here

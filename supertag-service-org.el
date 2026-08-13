@@ -33,16 +33,30 @@ unknown to Supertag or the recorded file is missing."
   :group 'supertag-org-link)
 
 (defun supertag-service-org--goto-id-in-current-buffer (node-id)
-  "Jump to NODE-ID by searching `:ID:` in the current buffer.
+  "Move point to NODE-ID's heading in the current buffer.
 
-This intentionally does not consult `org-id-locations`."
+Returns non-nil when NODE-ID was found, with point left on its heading.
+Returns nil with point unmoved otherwise, so a failed lookup cannot strand
+callers somewhere arbitrary.
+
+The whole buffer is searched regardless of the current restriction, but
+narrowing is left as it was: a caller that needs to reach a node outside
+the restriction has to widen, and only it knows whether that is allowed.
+
+This intentionally does not consult `org-id-locations'."
   (when (and (stringp node-id) (not (string-empty-p node-id)))
-    (org-with-wide-buffer
-      (goto-char (point-min))
-      (when (re-search-forward
-             (concat "^[ \t]*:ID:[ \t]*" (regexp-quote node-id) "[ \t]*$")
-             nil t)
-        (org-back-to-heading t)
+    (let ((heading
+           (save-excursion
+             (save-restriction
+               (widen)
+               (goto-char (point-min))
+               (when (re-search-forward
+                      (concat "^[ \t]*:ID:[ \t]*" (regexp-quote node-id) "[ \t]*$")
+                      nil t)
+                 (org-back-to-heading t)
+                 (point))))))
+      (when (and heading (<= (point-min) heading) (<= heading (point-max)))
+        (goto-char heading)
         t))))
 
 (defun supertag-service-org-follow-id (node-id)
@@ -58,6 +72,9 @@ Returns non-nil when NODE-ID was handled, nil otherwise."
                    (supertag-sync--in-sync-scope-p file)))
       (let ((buffer (find-file-noselect file)))
         (pop-to-buffer buffer)
+        ;; Navigating to a node the user asked for outranks whatever the
+        ;; buffer happened to be narrowed to, the same way `org-id-goto' does.
+        (widen)
         (when (supertag-service-org--goto-id-in-current-buffer node-id)
           (org-show-context)
           (recenter)
@@ -295,11 +312,16 @@ preventing data loss from incorrect position calculations."
     (save-window-excursion
       (with-current-buffer (find-file-noselect file-path)
         (save-excursion
-          (if (zerop (or (plist-get node-info :level) 1))
-              (goto-char (point-min))
-            (unless (supertag-service-org--goto-id-in-current-buffer node-id)
-              (user-error "Node '%s' was not found in %s" node-id file-path)))
-          (funcall func))))))
+          (save-restriction
+            ;; Edits are addressed by node, not by whatever the user left the
+            ;; buffer narrowed to, so reach the whole file and restore the
+            ;; restriction afterwards.
+            (widen)
+            (if (zerop (or (plist-get node-info :level) 1))
+                (goto-char (point-min))
+              (unless (supertag-service-org--goto-id-in-current-buffer node-id)
+                (user-error "Node '%s' was not found in %s" node-id file-path)))
+            (funcall func)))))))
 
 (defun supertag-service-org--parent-title (node-id)
   "Return the direct parent's title for NODE-ID, or nil.
