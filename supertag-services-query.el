@@ -300,6 +300,18 @@ This function is compatible with the old query syntax."
       (unless (= (length args) 1)
         (error "'tag' operator expects exactly one argument, but got %S" args))
       `(:type tag :value ,(if (stringp (car args)) (car args) (symbol-name (car args)))))
+     ((eq op 'task)
+      ;; Zero or more states; zero states match no node (identity of OR).
+      `(:type task
+              :values ,(mapcar (lambda (a)
+                                 (if (stringp a) a (symbol-name a)))
+                               args)))
+     ((eq op 'priority)
+      ;; Zero or more priorities; zero priorities match no node.
+      `(:type priority
+              :values ,(mapcar (lambda (a)
+                                 (if (stringp a) a (symbol-name a)))
+                               args)))
      ((eq op 'field)
       (unless (= (length args) 2)
         (error "'field' operator expects exactly two arguments, but got %S" args))
@@ -382,6 +394,27 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
       (let ((tag-value (plist-get ast :value)))
         (let ((result (supertag-index-get-nodes-by-tag tag-value)))
           result)))
+
+     ((eq ast-type 'task)
+      ;; Case-sensitive match against the projected :todo state; a node
+      ;; without a todo state never matches.
+      (let ((states (plist-get ast :values))
+            matches)
+        (dolist (pair (supertag-query-nodes (lambda (_id data) data)))
+          (let ((todo (plist-get (cdr pair) :todo)))
+            (when (and todo (member todo states))
+              (push (car pair) matches))))
+        matches))
+
+     ((eq ast-type 'priority)
+      ;; Case-insensitive match against the projected :priority cookie.
+      (let ((states (mapcar #'upcase (plist-get ast :values)))
+            matches)
+        (dolist (pair (supertag-query-nodes (lambda (_id data) data)))
+          (let ((priority (plist-get (cdr pair) :priority)))
+            (when (and priority (member (upcase priority) states))
+              (push (car pair) matches))))
+        matches))
 
      ((eq ast-type 'field)
       (supertag-query--find-nodes-by-field-indexed (plist-get ast :key) (plist-get ast :value)))

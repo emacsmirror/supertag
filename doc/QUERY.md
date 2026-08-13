@@ -26,6 +26,8 @@ For hands-on help while writing a query, see:
 | `or` | one or more conditions | any of them must match | `(or (tag "work") (tag "personal"))` |
 | `not` | exactly one condition | the condition must not match | `(not (tag "archived"))` |
 | `tag` | `NAME` | nodes carrying tag `NAME` | `(tag "project")` |
+| `task` | zero or more `STATE`s (OR) | nodes whose todo state equals one of `STATE`s (case-sensitive; nodes without a todo state never match) | `(task "TODO" "DOING")` |
+| `priority` | zero or more `P`s (OR) | nodes whose priority cookie is one of `P`s (case-insensitive) | `(priority "A" "B")` |
 | `field` | `KEY VALUE` | nodes whose field `KEY` equals `VALUE` (exact match) | `(field "status" "active")` |
 | `term` | `WORD` | substring search over node title and content (case-insensitive) | `(term "meeting")` |
 | `after` | `DATE` | nodes dated after `DATE` | `(after "2025-01-01")` |

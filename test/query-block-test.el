@@ -254,6 +254,46 @@ Returns the list of created node ids, in creation order."
       (let ((text (buffer-string)))
         (should (string-match-p "Error:" text))))))
 
+(ert-deftest query-block-task-operator-matches-todo-states ()
+  "(task ...) matches projected :todo states; multi-arg is OR."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" '(:id "n1" :title "a" :todo "TODO" :priority "A"))
+    (supertag-store-put-entity
+     :nodes "n2" '(:id "n2" :title "b" :todo "DOING"))
+    (supertag-store-put-entity
+     :nodes "n3" '(:id "n3" :title "c"))
+    (should (equal '("n1") (supertag-query-node-ids '(task "TODO"))))
+    (should (equal '("n1" "n2")
+                   (sort (supertag-query-node-ids
+                          '(task "TODO" "DOING")) #'string<)))
+    ;; Case-sensitive: lowercase does not match a projected TODO.
+    (should-not (supertag-query-node-ids '(task "todo")))
+    ;; A node without a todo state never matches.
+    (should-not (member "n3" (supertag-query-node-ids '(task "TODO" "DOING"))))
+    ;; Zero states match nothing.
+    (should-not (supertag-query-node-ids '(task)))
+    ;; Combines with not.
+    (should (equal '("n2" "n3")
+                   (sort (supertag-query-node-ids
+                          '(not (task "TODO"))) #'string<)))))
+
+(ert-deftest query-block-priority-operator-matches-case-insensitively ()
+  "(priority ...) matches projected :priority cookies case-insensitively."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" '(:id "n1" :title "a" :priority "A"))
+    (supertag-store-put-entity
+     :nodes "n2" '(:id "n2" :title "b" :priority "B"))
+    (supertag-store-put-entity
+     :nodes "n3" '(:id "n3" :title "c"))
+    (should (equal '("n1") (supertag-query-node-ids '(priority "a"))))
+    (should (equal '("n1" "n2")
+                   (sort (supertag-query-node-ids
+                          '(priority "A" "B")) #'string<)))
+    (should-not (supertag-query-node-ids '(priority "C")))
+    (should-not (supertag-query-node-ids '(priority)))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here
