@@ -134,3 +134,14 @@ Verification：`./test/run-tests.sh automation-condition` 4/4、query 40/40；
 Verification：干净临时 worktree（HEAD 最新 + 全部 phase 提交）全量 ERT
 509/509；6 个修改 Elisp byte-compile 零新增 warning；`git diff --check` 通过。
 Phase 关闭待用户验收。
+
+## 2026-08-13 — task001 follow-up（验收实测发现）
+
+- Modify `supertag-services-query.el`：priority executor 两侧归一化时剥除
+  前导 `#`——扫描投影存 `"#A"`，查询写 `"A"`；此前 `(priority "A")` 对
+  真实扫描数据恒不匹配。
+- Modify `test/query-block-test.el`：新增 `"#A"` 投影 cookie 断言（带/不
+  带 # 均匹配）。
+
+来源：用户要求 emacs -Q 实操验收，样例文件扫描后暴露该差异。
+Verification：干净 worktree 全量 ERT 509/509。
