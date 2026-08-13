@@ -14,7 +14,6 @@
 (require 'supertag-core-schema)
 (require 'supertag-core-transform)
 (require 'supertag-core-index)
-(require 'supertag-services-formula)
 (require 'sha1)
 
 (declare-function supertag-node-get "supertag-ops-node" (id))
@@ -697,6 +696,9 @@ RELATION-ID is the identifier of the rollup relation.
 Return the derived value without storing it in a node or tag entity."
   (let ((relation (supertag-relation-get relation-id)))
     (when relation
+      ;; Lazy require: `supertag-services-formula' must not be required at
+      ;; load time (it would close a require cycle with the query service).
+      (require 'supertag-services-formula)
       (let* ((from-id (plist-get relation :from))
              (to-id (plist-get relation :to))
              (rollup-field (plist-get relation :rollup-field))

@@ -178,19 +178,25 @@ In tag definitions, you can declare formula fields just like regular fields, but
             (:name "progress" :type :number)
             ;; Example: A derived number for display (not persisted)
             (:name "days_left" :type :formula
-                   :formula "(- 10 {{:progress}})")
+                   :formula "10 - progress")
             ;; Example: Calculate completion percentage (basic arithmetic)
             (:name "completion_percentage" :type :formula
-                   :formula "(* (/ {{:progress}} 100) 100)"))))
+                   :formula "(progress / 100) * 100"))))
 ```
 
 ### Formula Language and Available Functions
 
-Formula fields currently perform simple placeholder substitution and then evaluate the resulting Emacs Lisp expression.
+Formula fields use a single infix grammar shared by table formula fields,
+formula virtual columns, and automation formula fields.  Field references
+are bare field names; arithmetic is `+ - * /` with parentheses, and
+`/` is floating-point division (division by zero yields 0).
 
-- Property references use `{{...}}` placeholders that are looked up from the entity's `:properties` plist.
-  - Example: `{{:progress}}` resolves `(plist-get props :progress)`.
-- The resulting expression is evaluated via Emacs Lisp (`eval`), so do not use untrusted formulas.
+- Example: `"(done / total) * 100"` reads the `done` and `total` field
+  values of the rendered node and computes a percentage.
+- Unknown fields resolve to their schema default (or nil/0 when unset).
+- Legacy `{{key}}`-placeholder prefix formulas (e.g. `"(- 10 {{:progress}})"`)
+  are translated to the infix grammar automatically, so existing
+  configurations keep working.
 
 ### Differences Between Formula Fields, Automation Rules, and Rollup
 

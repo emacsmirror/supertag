@@ -104,7 +104,7 @@
 ### 混杂点清单（函数级，当前态）
 
 - `supertag-automation--evaluate-condition` / `supertag-automation--eval-single-condition` (`supertag-automation.el`)：条件语义解析属于逻辑层，但目前绑定在行为层执行引擎里。
-- `supertag-automation--evaluate-formula` / `supertag-automation-calculate-formula` (`supertag-automation.el`)：公式求值属于逻辑层，且与 `supertag-services-formula.el` 的沙盒实现并存。
+- `supertag-automation--evaluate-formula` / `supertag-automation-calculate-formula` (`supertag-automation.el`)：公式求值的薄入口，委托 `supertag-services-formula.el` 的统一中缀语法求值器（2026-08-13 起为唯一实现，legacy `{{}}` 语法自动翻译）。
 - `supertag-automation--apply-rollup-function` / `supertag-automation--execute-rollup-calculation` (`supertag-automation.el`)：rollup 计算语义属于逻辑层，但内嵌在自动化执行中。
 - `supertag-relation-calculate-rollup` (`supertag-ops-relation.el`)：同时做 rollup 计算与写入更新，逻辑与行为未分离。
 - `supertag-view-table--evaluate-filter-condition` / `supertag-view-table--compare-values` (`supertag-view-table.el`)：UI 内部实现过滤语义，和 `supertag-services-query.el` 的过滤/比较逻辑重复。

@@ -179,19 +179,19 @@ graph LR
             (:name "progress" :type :number)
             ;; 示例：用于显示的派生数值（不持久化）
             (:name "days_left" :type :formula
-                   :formula "(- 10 {{:progress}})")
+                   :formula "10 - progress")
             ;; 示例：计算完成百分比（基础算术）
             (:name "completion_percentage" :type :formula
-                   :formula "(* (/ {{:progress}} 100) 100)"))))
+                   :formula "(progress / 100) * 100"))))
 ```
 
 ### 公式语言与可用函数
 
-当前的公式字段实现采用“占位符替换 + 求值”：
+公式字段使用统一的中缀语法，与表格公式字段、公式虚拟列、自动化公式字段共享同一个求值器。字段引用直接写字段名；算术为 `+ - * /`（支持括号），`/` 是浮点除法（除零得 0）。
 
-- 使用 `{{...}}` 占位符从实体的 `:properties` plist 中取值。
-  - 例如：`{{:progress}}` 对应 `(plist-get props :progress)`。
-- 替换完成后，表达式会通过 Emacs Lisp `eval` 执行，因此请勿使用不可信公式。
+- 示例：`"(done / total) * 100"` 读取当前节点的 `done` 与 `total` 字段值并计算百分比。
+- 未知字段取 schema 默认值（未设置时 nil/0）。
+- 旧的 `{{key}}` 占位符前缀公式（如 `"(- 10 {{:progress}})"`）会自动翻译为中缀语法，存量配置无需改动。
 
 ### 公式字段与自动化规则/汇总的区别
 

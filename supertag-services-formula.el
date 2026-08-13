@@ -1,90 +1,218 @@
 ;;; supertag-services-formula.el --- Formula evaluation service -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module provides a safe environment for evaluating user-defined
-;; formula expressions within Org-Supertag.
+;; This module owns the single formula grammar and evaluator for
+;; Org-Supertag.  The canonical grammar is infix arithmetic over field
+;; references, e.g. "(done / total) * 100".  Legacy formulas using the
+;; "{{key}}"-placeholder prefix syntax (e.g. "(- 10 {{:progress}})") are
+;; translated to the canonical grammar at evaluation time, so existing
+;; configurations keep working without touching user data.
 
 ;;; Code:
 
 (require 'cl-lib)
 (require 'subr-x)
 
-;; --- Formula Context Functions ---
+;; NOTE: this module deliberately requires no other supertag modules at
+;; load time.  `supertag-ops-relation' requires this module, and the ops
+;; layer requires the query service which requires ops-relation -- a
+;; load-time require of either direction would create a cycle.  The
+;; field-value resolver therefore loads `supertag-ops-field' lazily at
+;; evaluation time, when every module is already loaded.
 
-(defun supertag-formula-get-property (entity-data prop-key)
-  "Helper function for formulas to get a property from ENTITY-DATA.
-This function is exposed within the formula evaluation sandbox."
-  (plist-get entity-data prop-key))
+;; --- Canonical infix parser and evaluator ---
 
-(defun supertag-formula-days-until (date-list)
-  "Helper function for formulas to calculate days until a date.
-DATE-LIST is a list like (year month day)."
-  (when (and (listp date-list) (= (length date-list) 3))
-    (let* ((year (nth 0 date-list))
-           (month (nth 1 date-list))
-           (day (nth 2 date-list))
-           (target-time (encode-time 0 0 0 day month year)) ; sec, min, hour are 0
-           (current-time (current-time))
-           (diff-seconds (time-to-seconds (time-subtract target-time current-time))))
-      (floor (/ diff-seconds 86400.0))))) ; 86400 seconds in a day
+(defun supertag-formula-tokenize (input)
+  "Tokenize INPUT string into list of tokens."
+  (let ((tokens nil)
+        (i 0)
+        (len (length input)))
+    (while (< i len)
+      (let ((ch (aref input i)))
+        (cond
+         ((member ch '(?\s ?\t ?\n ?\r))
+          (setq i (1+ i)))
+         ((= ch ?+)
+          (push '+ tokens)
+          (setq i (1+ i)))
+         ((= ch ?-)
+          (push '- tokens)
+          (setq i (1+ i)))
+         ((= ch ?*)
+          (push '* tokens)
+          (setq i (1+ i)))
+         ((= ch ?/)
+          (push '/ tokens)
+          (setq i (1+ i)))
+         ((= ch ?\()
+          (push '*lparen* tokens)
+          (setq i (1+ i)))
+         ((= ch ?\))
+          (push '*rparen* tokens)
+          (setq i (1+ i)))
+         ((and (>= ch ?0) (<= ch ?9))
+          (let ((start i))
+            (while (and (< i len)
+                        (let ((c (aref input i)))
+                          (or (and (>= c ?0) (<= c ?9))
+                              (= c ?.))))
+              (setq i (1+ i)))
+            (push (string-to-number (substring input start i)) tokens)))
+         ((or (and (>= ch ?a) (<= ch ?z))
+              (and (>= ch ?A) (<= ch ?Z))
+              (= ch ?_))
+          (let ((start i))
+            (while (and (< i len)
+                        (let ((c (aref input i)))
+                          (or (and (>= c ?a) (<= c ?z))
+                              (and (>= c ?A) (<= c ?Z))
+                              (and (>= c ?0) (<= c ?9))
+                              (= c ?_))))
+              (setq i (1+ i)))
+            (push (substring input start i) tokens)))
+         (t
+          (error "Invalid character at position %d: %c" i ch)))))
+    (nreverse tokens)))
 
-;; Add more safe helper functions here as needed, e.g., supertag-formula-format-date, etc.
+(defun supertag-formula-parse (tokens)
+  "Parse TOKENS into AST using recursive descent."
+  (let ((pos 0)
+        (len (length tokens)))
+    (cl-labels
+        ((peek ()
+           (when (< pos len) (nth pos tokens)))
+         (consume ()
+           (prog1 (peek) (setq pos (1+ pos))))
+         (expect (token)
+           (if (eq (peek) token)
+               (consume)
+             (error "Expected %s but got %s at position %d" token (peek) pos)))
+         (parse-expr ()
+           (parse-additive))
+         (parse-additive ()
+           (let ((left (parse-multiplicative)))
+             (while (member (peek) '(+ -))
+               (let ((op (consume))
+                     (right (parse-multiplicative)))
+                 (setq left (list op left right))))
+             left))
+         (parse-multiplicative ()
+           (let ((left (parse-primary)))
+             (while (member (peek) '(* /))
+               (let ((op (consume))
+                     (right (parse-primary)))
+                 (setq left (list op left right))))
+             left))
+         (parse-primary ()
+           (let ((token (peek)))
+             (cond
+              ((null token)
+               (error "Unexpected end of input"))
+              ((eq token '*lparen*)
+               (consume)
+               (let ((expr (parse-expr)))
+                 (expect '*rparen*)
+                 expr))
+              ((numberp token)
+               (consume)
+               (list '*number* token))
+              ((stringp token)
+               (consume)
+               (list '*var* token))
+              ((eq token '-)
+               (consume)
+               (list '*neg* (parse-primary)))
+              (t
+               (error "Unexpected token: %s" token))))))
+      (let ((result (parse-expr)))
+        (when (< pos len)
+          (error "Unexpected token at end: %s" (peek)))
+        result))))
 
-;; --- Formula Evaluation Sandbox ---
+(defun supertag-formula-eval (ast node-id &optional resolver)
+  "Evaluate AST for NODE-ID, resolving variables via RESOLVER.
+RESOLVER is a function taking a field name and returning its value.
+Without RESOLVER, variables fall back to the global field store keyed by
+field name with a 0 default (legacy behavior)."
+  (pcase ast
+    ((pred numberp) ast)
+    (`(*number* ,n) n)
+    (`(*var* ,field-name)
+     (if resolver
+         (funcall resolver field-name)
+       (if (fboundp 'supertag-node-get-global-field)
+           (supertag-node-get-global-field node-id field-name 0)
+         0)))
+    (`(+ ,a ,b) (+ (supertag-formula-eval a node-id resolver)
+                   (supertag-formula-eval b node-id resolver)))
+    (`(- ,a ,b) (- (supertag-formula-eval a node-id resolver)
+                   (supertag-formula-eval b node-id resolver)))
+    (`(* ,a ,b) (* (supertag-formula-eval a node-id resolver)
+                   (supertag-formula-eval b node-id resolver)))
+    (`(/ ,a ,b)
+     (let ((denom (supertag-formula-eval b node-id resolver)))
+       (if (zerop denom) 0
+         (/ (float (supertag-formula-eval a node-id resolver)) denom))))
+    (`(*neg* ,a) (- (supertag-formula-eval a node-id resolver)))
+    (_ (error "Unknown AST node: %s" ast))))
 
-(defun supertag-formula--normalize-key (key)
-  "Normalize KEY into a keyword when possible."
+(defun supertag-formula-parse-string (input)
+  "Parse INPUT string to AST."
+  (let ((tokens (supertag-formula-tokenize input)))
+    (supertag-formula-parse tokens)))
+
+(defun supertag-formula-eval-string (input node-id &optional resolver)
+  "Parse and evaluate INPUT string for NODE-ID.
+RESOLVER is the variable resolver passed to `supertag-formula-eval'."
+  (let ((ast (supertag-formula-parse-string input)))
+    (supertag-formula-eval ast node-id resolver)))
+
+;; --- Legacy syntax translation ---
+
+(defun supertag-formula--translate-placeholders (formula-string)
+  "Replace {{KEY}} placeholders in FORMULA-STRING with bare KEY names."
+  (replace-regexp-in-string
+   "{{\\s-*:?\\([^{}]*?\\)\\s-*}}"
+   (lambda (placeholder)
+     (string-trim
+      (if (string-match "{{\\s-*:?\\([^{}]*?\\)\\s-*}}" placeholder)
+          (match-string 1 placeholder)
+        "")))
+   formula-string t t))
+
+(defun supertag-formula--prefix-to-infix (form)
+  "Translate legacy prefix FORM to canonical infix text.
+Only binary + - * / over numbers and symbols are supported."
   (cond
-   ((keywordp key) key)
-   ((symbolp key) (intern (concat ":" (symbol-name key))))
-   ((stringp key)
-    (let ((s (string-trim key)))
-      (if (string-prefix-p ":" s)
-          (intern s)
-        (intern (concat ":" s)))))
-   (t nil)))
+   ((numberp form) (number-to-string form))
+   ((symbolp form) (symbol-name form))
+   ((and (consp form)
+         (memq (car form) '(+ - * /))
+         (= (length form) 3))
+    (format "(%s %s %s)"
+            (supertag-formula--prefix-to-infix (nth 1 form))
+            (symbol-name (car form))
+            (supertag-formula--prefix-to-infix (nth 2 form))))
+   (t (error
+       (concat "Unsupported legacy formula form %S; rewrite using the "
+               "infix grammar, e.g. \"(done / total) * 100\"")
+       form))))
 
-(defun supertag-formula--lookup (entity-data key &optional field-getter)
-  "Lookup KEY for ENTITY-DATA, optionally using FIELD-GETTER.
+(defun supertag-formula--canonicalize (formula-string)
+  "Return FORMULA-STRING in the canonical infix grammar.
+Legacy {{placeholder}} prefix formulas are translated; strings already
+in the infix grammar pass through unchanged."
+  (let* ((translated (supertag-formula--translate-placeholders formula-string))
+         (parsed (condition-case nil
+                     (read-from-string translated)
+                   (error nil))))
+    (if (and parsed
+             (string-match-p "\\`[[:space:]]*\\'"
+                             (substring translated (cdr parsed))))
+        (supertag-formula--prefix-to-infix (car parsed))
+      translated)))
 
-Resolution order:
-1) ENTITY-DATA :properties plist
-2) ENTITY-DATA top-level plist
-3) FIELD-GETTER (tag-field/global-field) when provided"
-  (let* ((k (supertag-formula--normalize-key key))
-         (props (plist-get entity-data :properties))
-         (v (when (and k (plistp props))
-              (plist-get props k))))
-    (cond
-     ((not (null v)) v)
-     ((and k (plist-member entity-data k)) (plist-get entity-data k))
-     ((functionp field-getter) (funcall field-getter key))
-     (t nil))))
-
-(defun supertag-formula--literal (value)
-  "Convert VALUE to a readable literal for embedding into a formula."
-  (cond
-   ((null value) "nil")
-   ((or (numberp value) (eq value t)) (format "%S" value))
-   ((stringp value) (prin1-to-string value))
-   ((listp value) (prin1-to-string value))
-   (t (prin1-to-string value))))
-
-(defun supertag-formula--expand-placeholders (formula-string entity-data &optional field-getter)
-  "Expand {{...}} placeholders in FORMULA-STRING using ENTITY-DATA/FIELD-GETTER.
-
-Placeholder content accepts:
-- `:prop` (keyword-like)
-- `prop`  (will be treated as `:prop` for lookup)
-Values are embedded as Emacs Lisp literals."
-  (let ((expanded formula-string))
-    (while (string-match "{{\\([^}]+\\)}}" expanded)
-      (let* ((raw (match-string 1 expanded))
-             (key (string-trim raw))
-             (val (supertag-formula--lookup entity-data key field-getter))
-             (lit (supertag-formula--literal val)))
-        (setq expanded (replace-match lit t t expanded))))
-    expanded))
+;; --- Unified evaluation entry point ---
 
 (defun supertag-rollup-apply (function-name values)
   "Reduce VALUES with FUNCTION-NAME.
@@ -108,23 +236,24 @@ Automation so identical inputs produce identical results."
 
 (defun supertag-formula-evaluate (formula-string entity-data &optional field-getter)
   "Evaluate FORMULA-STRING for ENTITY-DATA.
-
-Supports {{...}} placeholders which are expanded before evaluation.
-Also exposes a limited set of helper functions:
-- (get-property :key)  ; reads from ENTITY-DATA (and FIELD-GETTER when provided)
-- (days-until '(YYYY MM DD))"
+Canonical grammar: infix arithmetic with field references as variables,
+e.g. \"(done / total) * 100\".  Legacy {{key}}-placeholder prefix forms
+are translated first.  Variables resolve through FIELD-GETTER when
+supplied, otherwise through the global field model with schema defaults."
   (unless (and (stringp formula-string) (not (string-empty-p formula-string)))
     (error "FORMULA-STRING must be a non-empty string"))
-  (let* ((expanded (supertag-formula--expand-placeholders formula-string entity-data field-getter))
-         (sexp (condition-case _err
-                   (read expanded)
-                 (error nil)))
-         (get-property-fn (lambda (prop-key)
-                            (supertag-formula--lookup entity-data prop-key field-getter))))
-    (unless sexp
-      (error "Invalid formula: %S" formula-string))
-    (cl-letf (((symbol-function 'get-property) get-property-fn)
-              ((symbol-function 'days-until) #'supertag-formula-days-until))
-      (eval sexp))))
+  (let* ((canonical (supertag-formula--canonicalize formula-string))
+         (node-id (plist-get entity-data :id))
+         (resolver
+          (or field-getter
+              (and node-id
+                   (lambda (name)
+                     (require 'supertag-ops-field)
+                     (supertag-field-get-with-default node-id nil name))))))
+    (supertag-formula-eval
+     (supertag-formula-parse-string canonical)
+     node-id resolver)))
 
 (provide 'supertag-services-formula)
+
+;;; supertag-services-formula.el ends here

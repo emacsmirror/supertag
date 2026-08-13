@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 
-;; Tests for the formula parser in supertag-virtual-column.el
+;; Tests for the unified formula grammar in supertag-services-formula.el
 
 ;;; Code:
 
@@ -201,6 +201,46 @@
   (should (= 0 (supertag-rollup-apply :avg '())))
   (should-not (supertag-rollup-apply :max '()))
   (should-not (supertag-rollup-apply :min '())))
+
+(ert-deftest test-formula-legacy-translation ()
+  "Legacy {{placeholder}} prefix formulas translate to the infix grammar."
+  (should (equal "(10 - progress)"
+                 (supertag-formula--canonicalize "(- 10 {{:progress}})")))
+  (should (equal "((progress / 100) * 100)"
+                 (supertag-formula--canonicalize
+                  "(* (/ {{:progress}} 100) 100)")))
+  (should (equal "progress"
+                 (supertag-formula--canonicalize "{{ progress }}")))
+  (should (equal "(done + total)"
+                 (supertag-formula--canonicalize "(+ {{done}} {{total}})"))))
+
+(ert-deftest test-formula-infix-passes-through ()
+  "Strings already in the infix grammar pass through unchanged."
+  (should (equal "(done / total) * 100"
+                 (supertag-formula--canonicalize "(done / total) * 100")))
+  (should (equal "10 - progress"
+                 (supertag-formula--canonicalize "10 - progress"))))
+
+(ert-deftest test-formula-unified-entry-evaluates-both-syntaxes ()
+  "Table/VC/Automation entry points agree for the same computation."
+  (let ((supertag--store nil))
+    (supertag--ensure-store)
+    (supertag-store-put-field-definition
+     "progress" '(:id "progress" :name "progress" :type :number))
+    (supertag-store-put-field-value "n1" "progress" 40)
+    (let* ((entity '(:id "n1" :title "x"))
+           (legacy (supertag-formula-evaluate "(* (/ {{:progress}} 100) 100)"
+                                              entity))
+           (infix (supertag-formula-evaluate "(progress / 100) * 100"
+                                             entity))
+           (via-eval-string
+            (supertag-formula-eval-string "(progress / 100) * 100" "n1"
+                                          (lambda (name)
+                                            (supertag-field-get-with-default
+                                             "n1" nil name)))))
+      (should (= 40.0 legacy))
+      (should (= legacy infix))
+      (should (= legacy via-eval-string)))))
 
 (provide 'formula-test)
 
