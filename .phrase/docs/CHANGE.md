@@ -1,3 +1,12 @@
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task009 phase accepted by user (hands-on emacs -Q acceptance)
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task008 automation :condition unified with query grammar
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task007 query block aggregate rendering
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task006 aggregate/group-by modifiers + supertag-query-evaluate
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task005 dynamic day variables
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task004 in-query sort-by
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task003 day symbols + h/min units
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task002 multi-argument not
+- 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task001 task/priority operators (+ priority #-cookie follow-up fix)
 # CHANGE Index
 
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task018 unified derived-index cold rebuild contract

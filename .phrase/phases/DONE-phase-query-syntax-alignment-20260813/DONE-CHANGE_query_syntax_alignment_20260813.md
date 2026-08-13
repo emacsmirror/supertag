@@ -145,3 +145,10 @@ Phase 关闭待用户验收。
 
 来源：用户要求 emacs -Q 实操验收，样例文件扫描后暴露该差异。
 Verification：干净 worktree 全量 ERT 509/509。
+
+## 2026-08-13 — phase 关闭（用户验收通过）
+
+用户以 emacs -Q 实操验收：10 个查询块全部返回正确；Tags 列空确认为正确
+语义（heading 尾部 org tag 是 occurrence token，supertag 语义标签需 #tag
+定义）；期间发现并修复 priority 井号投影差异（见 task001 follow-up）。
+Phase 改名 DONE-phase-query-syntax-alignment-20260813。
