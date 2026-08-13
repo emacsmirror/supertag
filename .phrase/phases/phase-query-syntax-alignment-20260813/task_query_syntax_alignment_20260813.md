@@ -22,10 +22,11 @@
   - 影响范围：`supertag-query--resolve-date-string`、query docs/tests
   - 完成：2026-08-13；query 定向 34/34（含 2 项新增）；encode-time 自动归一化天溢出
 
-- task004 [ ] `sort-by` 入语法
+- task004 [x] `sort-by` 入语法
   - 产出：尾部 `(sort-by FIELD asc|desc)`（order 可省略默认 desc）；语法内优先于 query block `:sort` header；缺失排序键排最后
   - 验证方式：优先级、方向、内置键/字段名、与聚合子句共存顺序
   - 影响范围：parser/executor、`supertag-ui-query-block.el` 协调、docs/tests
+  - 完成：2026-08-13；query 定向 36/36；排序核心提升到 services-query 并供 query block 复用
 
 - task005 [ ] 动态变量日期三件套
   - 产出：`<%today%>` `<%yesterday%>` `<%tomorrow%>` 在查询解析前替换为日期符号；替换覆盖 query block/saved query/library 入口
