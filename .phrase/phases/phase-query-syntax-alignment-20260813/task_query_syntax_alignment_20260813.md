@@ -42,10 +42,11 @@
   - 影响范围：parser/executor 公开入口、docs/tests
   - 完成：2026-08-13；query 定向 39/39；语法采用单 form（与提案双 form 示例不同，已在文档与 change log 说明）
 
-- task007 [ ] query block 聚合结果渲染
+- task007 [x] query block 聚合结果渲染
   - 产出：聚合查询在 query block 渲染为标量行/分组小表；无聚合行为不变
   - 验证方式：Org output parity（无聚合）、聚合表格形状、与 :columns 并存
   - 影响范围：`supertag-ui-query-block.el`、docs/tests
+  - 完成：2026-08-13；query 定向 40/40（含标量/分组表渲染断言）
 
 ## M4 — Automation 条件统一与验收
 
