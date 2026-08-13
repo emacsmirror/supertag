@@ -2,10 +2,11 @@
 
 ## M1 — simple query 补齐一
 
-- task001 [ ] `(task ...)` 与 `(priority ...)` 操作符
+- task001 [x] `(task ...)` 与 `(priority ...)` 操作符
   - 产出：两个新 query 操作符，多参数 = OR；task 大小写敏感匹配 node `:todo`；priority 大小写不敏感匹配 node `:priority`；`doc/QUERY.md` 更新
   - 验证方式：定向 ERT（单/多参数、无状态节点不匹配、与 not 组合、大小写）+ 全量回归
   - 影响范围：`supertag-services-query.el`（parser/executor）、query docs/tests
+  - 完成：2026-08-13；query 定向 31/31（含 2 项新增）；全量回归见 task009
 
 - task002 [ ] `not` 多参数
   - 产出：`(not a b ...)` = `(not (or a b ...))`；单参数行为不变
