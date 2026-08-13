@@ -260,10 +260,13 @@ Returns a list of (id . node-data) pairs."
 (defun supertag-query-node-ids (query-sexp)
   "Execute QUERY-SEXP and return matching node IDs.
 QUERY-SEXP is an S-expression like (and (tag \"foo\") (term \"bar\")).
+Result modifiers (sort-by, aggregates) are applied in order, so the
+returned IDs are sorted when the query carries sort-by.
 Returns a list of node IDs matching the query."
   (let* ((ast (supertag-query--parse-sexp query-sexp))
          (node-ids (supertag-query--execute-ast ast)))
-    node-ids))
+    (supertag-query--apply-modifiers
+     node-ids (supertag-query--ast-modifiers ast))))
 
 (defun supertag-query-sexp (query-sexp)
   "Compatibility entry point for `supertag-query-node-ids'."
@@ -284,14 +287,29 @@ Signals the same error the executor would raise on malformed input."
   "Return non-nil when DATE-STR is accepted by the engine's date resolver."
   (and (supertag-query--resolve-date-string date-str) t))
 
+(defun supertag-query--modifier-ast-p (ast)
+  "Return non-nil when AST is a result modifier (sort-by/aggregate)."
+  (memq (plist-get ast :type)
+        '(sort-by sum count avg min max first last unique-count concat group-by)))
+
 (defun supertag-query--parse-sexp (query-sexp)
   "Parse a query S-expression into an AST.
 This function is compatible with the old query syntax."
   (let ((op (car query-sexp))
         (args (cdr query-sexp)))
     (cond
-     ((eq op 'and) `(:type and :children ,(mapcar #'supertag-query--parse-sexp args)))
-     ((eq op 'or) `(:type or :children ,(mapcar #'supertag-query--parse-sexp args)))
+     ((eq op 'and)
+      (let* ((children (mapcar #'supertag-query--parse-sexp args))
+             (modifiers (cl-remove-if-not #'supertag-query--modifier-ast-p
+                                          children))
+             (filters (cl-remove-if #'supertag-query--modifier-ast-p
+                                    children)))
+        `(:type and :children ,filters :modifiers ,modifiers)))
+     ((eq op 'or)
+      (let ((children (mapcar #'supertag-query--parse-sexp args)))
+        (when (cl-some #'supertag-query--modifier-ast-p children)
+          (error "Result modifiers like sort-by/aggregates only belong inside 'and'"))
+        `(:type or :children ,children)))
      ((eq op 'not)
       (unless (>= (length args) 1)
         (error "'not' operator expects at least one argument, but got %S" args))
@@ -300,6 +318,19 @@ This function is compatible with the old query syntax."
       (unless (= (length args) 1)
         (error "'tag' operator expects exactly one argument, but got %S" args))
       `(:type tag :value ,(if (stringp (car args)) (car args) (symbol-name (car args)))))
+     ((eq op 'sort-by)
+      (unless (<= 1 (length args) 2)
+        (error "'sort-by' operator expects a field key and an optional asc/desc order, but got %S" args))
+      (let* ((key (if (stringp (car args)) (car args) (symbol-name (car args))))
+             (order-arg (and (cdr args) (cadr args)))
+             (order (cond
+                     ((null order-arg) 'desc)
+                     ((eq order-arg 'asc) 'asc)
+                     ((eq order-arg 'desc) 'desc)
+                     ((and (stringp order-arg) (string= order-arg "asc")) 'asc)
+                     ((and (stringp order-arg) (string= order-arg "desc")) 'desc)
+                     (t (error "Invalid sort-by order: %S" order-arg)))))
+        `(:type sort-by :key ,key :order ,order)))
      ((eq op 'task)
       ;; Zero or more states; zero states match no node (identity of OR).
       `(:type task
@@ -445,6 +476,12 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
      ((eq ast-type 'term)
       (supertag-index-get-nodes-by-word (plist-get ast :value)))
 
+     ;; A bare modifier query (e.g. (sort-by "title" asc)) means
+     ;; "all nodes, modified": modifiers are applied by the public entry
+     ;; point after execution.
+     ((eq ast-type 'sort-by)
+      (supertag-query--get-all-node-ids))
+
      (t '()))))
 
 (defun supertag-query--get-all-node-ids ()
@@ -453,6 +490,78 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
     (maphash (lambda (id _data) (push id all-ids))
              (supertag-store-get-collection :nodes))
     all-ids))
+
+(defun supertag-query--ast-modifiers (ast)
+  "Return the result modifiers carried by AST, in order.
+Modifiers live in an 'and' node's :modifiers slot; a bare modifier
+query is itself a modifier."
+  (if (supertag-query--modifier-ast-p ast)
+      (list ast)
+    (or (plist-get ast :modifiers) '())))
+
+(defun supertag-query--numeric (value)
+  "Return VALUE as a number if it is one, or a numeric-looking string. Else nil."
+  (cond
+   ((numberp value) value)
+   ((and (stringp value)
+         (string-match-p "\\`[ \t]*-?[0-9]+\\(\\.[0-9]+\\)?[ \t]*\\'" value))
+    (string-to-number value))
+   (t nil)))
+
+(defun supertag-query--value< (a b)
+  "Return non-nil if sort value A sorts before sort value B.
+Numeric comparison when both parse as numbers; Emacs-time comparison when
+both look like Emacs time values (as used by :created-at/:modified-at);
+string comparison otherwise."
+  (let ((na (supertag-query--numeric a))
+        (nb (supertag-query--numeric b)))
+    (cond
+     ((and na nb) (< na nb))
+     ((and (consp a) (consp b) (integerp (car a)) (integerp (car b)))
+      (time-less-p a b))
+     (t (string< (format "%s" a) (format "%s" b))))))
+
+(defun supertag-query--sort-value (node-id node key)
+  "Return the raw sort value for NODE-ID/NODE for normalized sort KEY."
+  (cond
+   ((string= key "title") (plist-get node :title))
+   ((string= key "created") (plist-get node :created-at))
+   ((string= key "modified") (plist-get node :modified-at))
+   (t (supertag-query-field-value node-id nil key t))))
+
+(defun supertag-query--sort-node-ids (node-ids key order)
+  "Sort NODE-IDS by KEY per ORDER.
+Nodes missing the sort key are always placed last, regardless of ORDER."
+  (let (with-key without-key)
+    (dolist (id node-ids)
+      (let* ((node (supertag-query-node id))
+             (v (and node (supertag-query--sort-value id node key))))
+        (if v (push (cons id v) with-key) (push id without-key))))
+    (setq with-key (nreverse with-key)
+          without-key (nreverse without-key))
+    (setq with-key
+          (sort with-key
+                (lambda (a b) (supertag-query--value< (cdr a) (cdr b)))))
+    (when (eq order 'desc) (setq with-key (nreverse with-key)))
+    (append (mapcar #'car with-key) without-key)))
+
+(defun supertag-query--apply-modifiers (node-ids modifiers)
+  "Apply result MODIFIERS to NODE-IDS in order.
+Sorting runs before aggregation; aggregation arrives in task006."
+  (let ((result node-ids))
+    (dolist (modifier modifiers)
+      (pcase (plist-get modifier :type)
+        ('sort-by
+         (setq result
+               (supertag-query--sort-node-ids
+                result (plist-get modifier :key) (plist-get modifier :order))))
+        (_ (error "Unsupported query modifier: %S" (plist-get modifier :type)))))
+    result))
+
+(defun supertag-query-modifiers (query-sexp)
+  "Return the result modifiers of QUERY-SEXP, in order."
+  (supertag-query--ast-modifiers
+   (supertag-query--parse-sexp query-sexp)))
 
 (defun supertag-query--find-nodes-by-field-indexed (field-name value)
   "Find nodes by field using indexed lookup.

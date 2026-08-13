@@ -25,6 +25,7 @@ For hands-on help while writing a query, see:
 | `and` | one or more conditions | all of them must match | `(and (tag "task") (tag "work"))` |
 | `or` | one or more conditions | any of them must match | `(or (tag "work") (tag "personal"))` |
 | `not` | one or more conditions | none of them may match (excludes their union) | `(not (tag "archived") (tag "done"))` |
+| `sort-by` | `KEY` and optional `asc`/`desc` (default `desc`) | result modifier: sorts the matching nodes; nodes missing the key sort last | `(and (tag "task") (sort-by "created" desc))` |
 | `tag` | `NAME` | nodes carrying tag `NAME` | `(tag "project")` |
 | `task` | zero or more `STATE`s (OR) | nodes whose todo state equals one of `STATE`s (case-sensitive; nodes without a todo state never match) | `(task "TODO" "DOING")` |
 | `priority` | zero or more `P`s (OR) | nodes whose priority cookie is one of `P`s (case-insensitive) | `(priority "A" "B")` |

@@ -121,33 +121,15 @@ separated string, or nil (meaning \"no override\")."
 
 (defun supertag-query-block--sort-value (node-id node key)
   "Return the raw sort value for NODE-ID/NODE for normalized sort KEY."
-  (cond
-   ((string= key "title") (plist-get node :title))
-   ((string= key "created") (plist-get node :created-at))
-   ((string= key "modified") (plist-get node :modified-at))
-   (t (supertag-query-field-value node-id nil key t))))
+  (supertag-query--sort-value node-id node key))
 
 (defun supertag-query-block--numeric (value)
   "Return VALUE as a number if it is one, or a numeric-looking string. Else nil."
-  (cond
-   ((numberp value) value)
-   ((and (stringp value)
-         (string-match-p "\\`[ \t]*-?[0-9]+\\(\\.[0-9]+\\)?[ \t]*\\'" value))
-    (string-to-number value))
-   (t nil)))
+  (supertag-query--numeric value))
 
 (defun supertag-query-block--value< (a b)
-  "Return non-nil if sort value A sorts before sort value B.
-Numeric comparison when both parse as numbers; Emacs-time comparison when
-both look like Emacs time values (as used by :created-at/:modified-at);
-string comparison otherwise."
-  (let ((na (supertag-query-block--numeric a))
-        (nb (supertag-query-block--numeric b)))
-    (cond
-     ((and na nb) (< na nb))
-     ((and (consp a) (consp b) (integerp (car a)) (integerp (car b)))
-      (time-less-p a b))
-     (t (string< (format "%s" a) (format "%s" b))))))
+  "Return non-nil if sort value A sorts before sort value B."
+  (supertag-query--value< a b))
 
 (defun supertag-query-block--apply-sort (nodes sort-key order)
   "Sort NODES (list of node plists) by SORT-KEY (string or nil) per ORDER.
@@ -192,8 +174,15 @@ that must never signal should go through `supertag-query-block--render'."
          (sort-key (supertag-query-block--normalize-sort-key (plist-get opts :sort)))
          (order (supertag-query-block--normalize-order (plist-get opts :order)))
          (limit (supertag-query-block--normalize-limit (plist-get opts :limit)))
+         ;; In-query sort-by wins over the :sort header: the engine already
+         ;; returned sorted IDs, so skip the header sort entirely.
+         (syntax-sorts (cl-remove-if-not
+                        (lambda (modifier) (eq (plist-get modifier :type) 'sort-by))
+                        (supertag-query-modifiers query-sexp)))
          (nodes (delq nil (mapcar #'supertag-node-get node-ids)))
-         (nodes (supertag-query-block--apply-sort nodes sort-key order)))
+         (nodes (if syntax-sorts
+                    nodes
+                  (supertag-query-block--apply-sort nodes sort-key order))))
     (when limit
       (setq nodes (cl-subseq nodes 0 (min limit (length nodes)))))
     (cons (append '("Node" "Tags") columns)

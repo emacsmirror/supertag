@@ -36,3 +36,21 @@ Verification：`./test/run-tests.sh query` 32/32；`git diff --check` 通过。
   current-time，断言 00:00 边界、±1 天 86400s 间隔、h/min 偏移、既有单位回归）。
 
 Verification：`./test/run-tests.sh query` 34/34；`git diff --check` 通过。
+
+## 2026-08-13 — task004 sort-by 入语法
+
+- Modify `supertag-services-query.el`：parser 新增 `sort-by` 分支（KEY +
+  可选 asc/desc，缺省 desc）与结果修饰符机制——`and` 的 children 在解析时
+  剥离修饰符到 `:modifiers`；`or` 中出现修饰符显式报错；executor 对裸
+  `sort-by` 查询返回全量节点；新增 `supertag-query--apply-modifiers`/
+  `--sort-node-ids`/`--sort-value`/`--value<`/`--numeric` 与公开
+  `supertag-query-modifiers`；`supertag-query-node-ids` 执行后按序应用修饰符
+  （排序保留"缺失键排最后"语义）。
+- Modify `supertag-ui-query-block.el`：排序辅助函数（sort-value/numeric/
+  value<）收缩为 services-query 委托，删除重复实现；`--headers-and-rows`
+  检测语法内 sort-by 时跳过 header `:sort` 排序（语法内优先）。
+- Modify `doc/QUERY.md`：语法表新增 sort-by 行。
+- Modify `test/query-block-test.el`：新增 2 项定向 ERT（排序方向/默认
+  desc/内置键与字段/缺失最后/裸 sort-by/与过滤组合/header 优先级）。
+
+Verification：`./test/run-tests.sh query` 36/36；`git diff --check` 通过。

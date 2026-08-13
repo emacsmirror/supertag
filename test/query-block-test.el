@@ -366,6 +366,50 @@ Returns the list of created node ids, in creation order."
                         (supertag-query--resolve-date-string "now")
                         (supertag-query--resolve-date-string "-1w")))))))
 
+(ert-deftest query-block-sort-by-modifier-sorts-results ()
+  "(sort-by ...) inside and sorts results; missing keys go last."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "B" :created-at (encode-time 0 0 10 10 8 2026)))
+    (supertag-store-put-entity
+     :nodes "n2" (list :id "n2" :title "A" :created-at (encode-time 0 0 9 9 8 2026)))
+    (supertag-store-put-entity
+     :nodes "n3" (list :id "n3" :title "C"))
+    (let ((asc (supertag-query-node-ids '(and (sort-by "title" asc))))
+          (desc (supertag-query-node-ids '(and (sort-by "title"))))
+          (created-desc
+           (supertag-query-node-ids '(and (sort-by "created" desc))))
+          (bare (supertag-query-node-ids '(sort-by "title" asc)))
+          (combined
+           (supertag-query-node-ids
+            '(and (sort-by "created" desc) (term "B")))))
+      ;; title asc by explicit order.
+      (should (equal '("n2" "n1" "n3") asc))
+      ;; default order is desc.
+      (should (equal '("n3" "n1" "n2") desc))
+      ;; created desc: n1 (Aug 10) before n2 (Aug 9); n3 missing -> last.
+      (should (equal '("n1" "n2" "n3") created-desc))
+      ;; Bare sort-by query sorts everything.
+      (should (= 3 (length bare)))
+      ;; Combined with filters.
+      (should (equal '("n1") combined)))))
+
+(ert-deftest query-block-sort-by-wins-over-header-sort ()
+  "In-query sort-by takes precedence over the :sort header."
+  (query-block-test--with-clean-store
+    (supertag-store-put-entity
+     :nodes "n1" (list :id "n1" :title "B"))
+    (supertag-store-put-entity
+     :nodes "n2" (list :id "n2" :title "A"))
+    (let ((table (org-babel-execute:org-supertag-query-block
+                  "(and (sort-by \"title\" asc))"
+                  '(:sort "title" :order desc))))
+      ;; asc from the syntax wins: A row appears before B row.
+      (should (string-match-p (regexp-quote "A") table))
+      (should (string-match-p (regexp-quote "B") table))
+      (should (< (string-match-p (regexp-quote "A") table)
+                 (string-match-p (regexp-quote "B") table))))))
+
 (provide 'query-block-test)
 
 ;;; query-block-test.el ends here
