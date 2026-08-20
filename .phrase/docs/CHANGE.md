@@ -1,3 +1,4 @@
+- 2026-08-19: phase-supertag-rename-20260819/change_supertag_rename_20260819.md  # task001 breaking rename spec and baseline
 - 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task009 phase accepted by user (hands-on emacs -Q acceptance)
 - 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task008 automation :condition unified with query grammar
 - 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task007 query block aggregate rendering
