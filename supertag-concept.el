@@ -21,7 +21,7 @@
 
 (defgroup supertag-concept nil
   "Concept mention support for Org-Supertag."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-concept-min-term-length 2
   "Minimum character length for a concept title or alias mention."

@@ -22,15 +22,15 @@
 (defcustom supertag-search-history-max-items 100
   "Maximum number of keywords to keep in history."
   :type 'integer
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-search-history-file
   (expand-file-name "search-history.el"
-                    (or (bound-and-true-p org-supertag-data-directory)
+                    (or (bound-and-true-p supertag-data-directory)
                         user-emacs-directory))
   "File to store search history."
   :type 'file
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defvar supertag-search--history nil
   "List of search history items.")
@@ -119,37 +119,37 @@ Handles both time stamps (list) and date strings."
 
 ;;; --- Search Window UI ---
 
-(defgroup org-supertag-search nil
+(defgroup supertag-search nil
   "Customization for org-supertag search."
-  :group 'org-supertag)
+  :group 'supertag)
 
-(defcustom org-supertag-search-preview-length 300
+(defcustom supertag-search-preview-length 300
   "Preview content maximum length."
   :type 'integer
-  :group 'org-supertag-search)
+  :group 'supertag-search)
 
-(defface org-supertag-search-current
+(defface supertag-search-current
   '((t :inherit region))
   "Face for current selected item."
-  :group 'org-supertag-search)
+  :group 'supertag-search)
 
-(defface org-supertag-search-title
+(defface supertag-search-title
   '((t :weight bold))
   "Face for titles in search results."
-  :group 'org-supertag-search)
+  :group 'supertag-search)
 
-(defface org-supertag-search-tag
+(defface supertag-search-tag
   '((t :box t))
   "Face for tags in search results."
-  :group 'org-supertag-search)
+  :group 'supertag-search)
 
-(defface org-supertag-search-file
+(defface supertag-search-file
   '((t :inherit fixed-pitch))
   "Face for file names in search results."
-  :group 'org-supertag-search)
+  :group 'supertag-search)
 
-(defvar-local org-supertag-search-mode-map nil
-  "Keymap for `org-supertag-search-mode'.")
+(defvar-local supertag-search-mode-map nil
+  "Keymap for `supertag-search-mode'.")
 
 (defun supertag-search-mode-init-map ()
   "Initialize the keymap for supertag-search-mode."
@@ -164,14 +164,14 @@ Handles both time stamps (list) and date strings."
     (define-key map (kbd "i") #'supertag-search-insert-at-point)
     map))
 
-(define-minor-mode org-supertag-search-mode
+(define-minor-mode supertag-search-mode
   "Minor mode for org-supertag search results buffer."
   :lighter " SupertagSearch"
-  (when org-supertag-search-mode
-    (unless org-supertag-search-mode-map
-      (setq org-supertag-search-mode-map (supertag-search-mode-init-map)))
+  (when supertag-search-mode
+    (unless supertag-search-mode-map
+      (setq supertag-search-mode-map (supertag-search-mode-init-map)))
     (setq buffer-read-only t)
-    (use-local-map org-supertag-search-mode-map)))
+    (use-local-map supertag-search-mode-map)))
 
 ;;; --- Search Functions ---
 
@@ -312,7 +312,7 @@ Handles both time stamps (list) and date strings."
 (defun supertag-search--view-mode ()
   "Install the Search results buffer modes."
   (fundamental-mode)
-  (org-supertag-search-mode 1)
+  (supertag-search-mode 1)
   (setq-local supertag-search--marked-nodes nil))
 
 (defun supertag-search--render-view (state)
@@ -383,7 +383,7 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-search-highlight-current ()
   "Highlight the current result card."
-  (remove-overlays (point-min) (point-max) 'org-supertag-search t)
+  (remove-overlays (point-min) (point-max) 'supertag-search t)
   (save-excursion
     (beginning-of-line)
     (when (looking-at "┌")
@@ -393,8 +393,8 @@ Handles both time stamps (list) and date strings."
                    (line-end-position))))
         (when end
           (let ((ov (make-overlay beg end)))
-            (overlay-put ov 'face 'org-supertag-search-current)
-            (overlay-put ov 'org-supertag-search t)))))))
+            (overlay-put ov 'face 'supertag-search-current)
+            (overlay-put ov 'supertag-search t)))))))
 
 (defun supertag-search-next ()
   "Jump to the next result card."
@@ -591,16 +591,6 @@ Handles both time stamps (list) and date strings."
 
 ;; Hook to load history on startup
 (add-hook 'after-init-hook #'supertag-search--load-history)
-
-;;; --- Backward Compatibility ---
-
-;; Create alias for backward compatibility
-(defalias 'org-supertag-query 'supertag-search
-  "Backward compatibility alias for the interactive search command.")
-
-;; Ensure the alias is marked as interactive
-(put 'org-supertag-query 'interactive-form
-     (interactive-form 'supertag-search))
 
 ;;; --- Main Search Function ---
 

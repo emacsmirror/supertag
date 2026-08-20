@@ -34,7 +34,7 @@ Value is a plist:
   "Legacy option retained for compatibility.
 Reciprocal links are no longer written."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-relation-last-error ()
   "Return the last error payload from `supertag-relation-add-reference`."

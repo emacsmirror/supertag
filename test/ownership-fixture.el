@@ -13,8 +13,8 @@
 (require 'supertag-core-persistence)
 
 (defvar supertag-query-saved nil)
-(defvar org-supertag-sync-directories nil)
-(defvar org-supertag-active-sync-directory nil)
+(defvar supertag-sync-directories nil)
+(defvar supertag-active-sync-directory nil)
 
 (defconst supertag-ownership-test-semantic-collections
   '(:tags
@@ -153,8 +153,8 @@ Document nodes and Document Links are intentionally excluded."
           (supertag-data-directory (expand-file-name "data" tmp))
           (supertag-db-file (expand-file-name "supertag-db.el" supertag-data-directory))
           (supertag-db-backup-directory (expand-file-name "backups" supertag-data-directory))
-          (org-supertag-sync-directories (list vault))
-          (org-supertag-active-sync-directory vault)
+          (supertag-sync-directories (list vault))
+          (supertag-active-sync-directory vault)
           (supertag--store nil)
           (supertag-query-saved nil)
           (files (supertag-ownership-test-create-vault vault)))

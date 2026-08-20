@@ -52,7 +52,7 @@
 
 (defgroup supertag-completion nil
   "Completion settings for org-supertag."
-  :group 'org-supertag
+  :group 'supertag
   :prefix "supertag-completion-")
 
 (defcustom supertag-completion-auto-enable t

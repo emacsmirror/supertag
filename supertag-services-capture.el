@@ -145,7 +145,7 @@ Example:
   :type '(repeat (list (string :tag "Key")
                        (string :tag "Description")
                        (plist :tag "Properties")))
-  :group 'org-supertag)
+  :group 'supertag)
 
 ;; --- Generator Implementations ---
 
@@ -551,7 +551,7 @@ TAG-POSITION determines where tags are placed in the headline."
 
 (defgroup supertag-capture nil
   "Capture-related configuration and integration for Org-Supertag."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-capture-finalize-node-at-point (&optional field-specs explicit-node-id)
   "Finalize current Org headline as a Supertag node.

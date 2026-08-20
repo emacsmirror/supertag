@@ -90,6 +90,45 @@ and internal state variables, so tests never touch the real
        (supertag--db-release-lock)
        (ignore-errors (delete-directory tmp t)))))
 
+(defmacro supertag-hardening-test--with-temp-user-directory (&rest body)
+  "Run BODY with an isolated `user-emacs-directory'."
+  (declare (indent 0))
+  `(let* ((tmp (file-name-as-directory
+                (make-temp-file "supertag-rename-test" t)))
+          (user-emacs-directory tmp)
+          (supertag-data-directory (expand-file-name "supertag" tmp)))
+     (unwind-protect
+         (progn ,@body)
+       (ignore-errors (delete-directory tmp t)))))
+
+;;; --- Breaking rename data-root guard ---
+
+(ert-deftest supertag-hardening-test-legacy-data-root-fails-before-creation ()
+  "An unmigrated legacy root fails instead of creating an empty new root."
+  (supertag-hardening-test--with-temp-user-directory
+    (let ((legacy (expand-file-name "org-supertag" user-emacs-directory))
+          (current (expand-file-name "supertag" user-emacs-directory)))
+      (make-directory legacy t)
+      (should-error (supertag-persistence-check-legacy-data-directory)
+                    :type 'user-error)
+      (should-not (file-exists-p current)))))
+
+(ert-deftest supertag-hardening-test-two-default-data-roots-are-ambiguous ()
+  "Supertag refuses to guess when both default data roots exist."
+  (supertag-hardening-test--with-temp-user-directory
+    (make-directory (expand-file-name "org-supertag" user-emacs-directory) t)
+    (make-directory (expand-file-name "supertag" user-emacs-directory) t)
+    (should-error (supertag-persistence-check-legacy-data-directory)
+                  :type 'user-error)))
+
+(ert-deftest supertag-hardening-test-custom-data-root-skips-default-root-guard ()
+  "An explicit custom data root is not coupled to either default root."
+  (supertag-hardening-test--with-temp-user-directory
+    (let ((supertag-data-directory
+           (expand-file-name "custom-supertag" user-emacs-directory)))
+      (make-directory (expand-file-name "org-supertag" user-emacs-directory) t)
+      (should (supertag-persistence-check-legacy-data-directory)))))
+
 ;;; --- 1. Atomic save ---
 
 (ert-deftest supertag-hardening-test-atomic-save-leaves-no-temp-residue ()

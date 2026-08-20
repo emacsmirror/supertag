@@ -45,7 +45,7 @@
 
 (defgroup supertag-doctor nil
   "Health check and repair tools for Org-Supertag."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defconst supertag-doctor--buffer-name "*Supertag Doctor*"
   "Name of the buffer used to render the doctor report.")
@@ -328,7 +328,7 @@ sync-scanner-skipping advice)."
           (progn
             (insert "  Hint: run `M-x supertag-git-setup' to initialize/configure git sync for this vault.\n")
             (when (plist-get status :multiple-sync-roots-p)
-              (insert "  NOTE: multiple `org-supertag-sync-directories' roots are configured -- git sync (V1) only supports a single-root vault; `supertag-git-setup' will refuse until this is consolidated.\n")))
+              (insert "  NOTE: multiple `supertag-sync-directories' roots are configured -- git sync (V1) only supports a single-root vault; `supertag-git-setup' will refuse until this is consolidated.\n")))
         (progn
           (insert (format "  Repo root: %s\n" (plist-get status :repo-root)))
           (insert (format "  DB path relative to repo root: %s\n" (plist-get status :relative-path)))
@@ -347,7 +347,7 @@ sync-scanner-skipping advice)."
           (insert (format "  Remote configured: %s\n"
                           (if (plist-get status :remote-configured-p) "yes" "no")))
           (when (plist-get status :multiple-sync-roots-p)
-            (insert "  WARNING: multiple `org-supertag-sync-directories' roots are configured -- git sync (V1) only supports a single-root vault; consolidate before relying on this.\n"))
+            (insert "  WARNING: multiple `supertag-sync-directories' roots are configured -- git sync (V1) only supports a single-root vault; consolidate before relying on this.\n"))
           (when (and (plist-get status :driver-configured-p)
                      (plist-get status :gitattributes-entry-present-p))
             (insert "  Degradation note: even if the driver were misconfigured on another clone, git's default line merge still converges disjoint-entity edits; only a same-entity edit produces conflict markers, which the persistence loader refuses to load (see M-x supertag-doctor section \"2. Guards\" / *Messages*) rather than silently treating as an empty database.\n")))))

@@ -11,11 +11,14 @@
 
 ## M2 — 运行时切换
 
-- task002 [ ] 迁移入口、公开 Lisp 接口、数据目录与 Babel
+- task002 [x] 迁移入口、公开 Lisp 接口、数据目录与 Babel
   - 产出：`supertag.el`；运行时 `supertag-*` 唯一接口；旧目录冲突保护；
     `supertag-query-block` 唯一 Babel 语言。
   - 验证方式：定向 ERT、干净 Emacs require、旧目录场景、旧入口缺失断言。
   - 影响范围：入口、sync/setup/git/search/query-block、相关 tests。
+  - 完成：2026-08-19；入口改为 `supertag.el`，兼容文件与三个旧 alias 删除；
+    persist/query/git 定向 ERT 117/117；隔离目录 `(require 'supertag)` 成功且
+    `org-supertag` library 不存在。
 
 ## M3 — 仓库材料切换
 

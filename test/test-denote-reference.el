@@ -43,7 +43,7 @@
 
 (ert-deftest file-node-links-are-extracted-independent-of-policy ()
   "Both supported physical link types are parsed without a global mode switch."
-  (let ((org-supertag-file-id-source 'org-roam))
+  (let ((supertag-file-id-source 'org-roam))
     (should (equal (test-denote-reference--extract
                     "[[denote:20260705T120000][File]] [[id:custom-id][Node]]")
                    '("20260705T120000" "custom-id")))))
@@ -51,7 +51,7 @@
 (ert-deftest file-node-without-persisted-id-is-skipped ()
   "A file without a persisted identity must not receive a transient node ID."
   (test-denote-reference--with-env
-    (let ((org-supertag-file-id-source 'org-roam))
+    (let ((supertag-file-id-source 'org-roam))
       (should-not
        (supertag-sync--upsert-file-node
         (expand-file-name "plain.org" supertag-data-directory)
@@ -61,7 +61,7 @@
 
 (ert-deftest file-node-auto-detects-org-id-and-denote-identity ()
   "Auto policy records the physical link type with each file identity."
-  (let ((org-supertag-file-id-source 'auto))
+  (let ((supertag-file-id-source 'auto))
     (with-temp-buffer
       (org-mode)
       (insert ":PROPERTIES:\n:ID:       roam-id\n:END:\n#+TITLE: Roam\n")

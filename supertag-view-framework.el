@@ -520,7 +520,7 @@ Note: This loads the Elisp code which should register the views."
 (defface supertag-view-widget-field-face
   '((t :inherit widget-field :box nil :extend nil))
   "Face for editable fields that preserves fixed-width DSL layouts."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-view-widget--cleanup-fields ()
   "Remove native editable fields from the current Widget DSL buffer."
@@ -708,12 +708,12 @@ Widgets are reusable UI components for building views.")
 (defface supertag-view-widget-badge-face
   '((t :weight bold))
   "Face for badge widget content."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defface supertag-view-widget-toolbar-label-face
   '((t :weight bold))
   "Face for toolbar label text."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-widget-register (type render-fn)
   "Register a widget TYPE with RENDER-FN.

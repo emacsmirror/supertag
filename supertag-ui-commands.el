@@ -39,7 +39,7 @@
 - 'beginning: Insert tags at the beginning of the heading (after the stars and TODO keyword if any)"
   :type '(choice (const :tag "End of heading" end)
                  (const :tag "Beginning of heading" beginning))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-capture-tag-position 'end
   "Where to place tags when creating a headline via capture.
@@ -47,7 +47,7 @@
 - 'beginning: Insert tags immediately after the leading stars/TODO keyword."
   :type '(choice (const :tag "End of headline" end)
                  (const :tag "Beginning of headline" beginning))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-set-tag-parent (parent-tag child-tags)
   "Set one or more CHILD-TAGS to extend a PARENT-TAG.
@@ -865,7 +865,7 @@ setup or when rebuilding the entire database."
      (message "Found %d files to process" total-files)
 
      (if (= total-files 0)
-         (message "No files found in sync directories: %s" org-supertag-sync-directories)
+         (message "No files found in sync directories: %s" supertag-sync-directories)
        (progn
          ;; Step 3: Process each file within transaction
          (message "Step 3: Processing files...")
@@ -910,7 +910,7 @@ setup or when rebuilding the entire database."
 
            (when (= nodes-created 0)
              (message "WARNING: No nodes were created. Please check:")
-             (message "  - org-supertag-sync-directories: %s" org-supertag-sync-directories)
+             (message "  - supertag-sync-directories: %s" supertag-sync-directories)
              (message "  - supertag-sync-file-pattern: %s" supertag-sync-file-pattern)
              (message "  - File contents have proper org headings with IDs"))))))))
 
@@ -1004,7 +1004,7 @@ If INTERVAL is provided, use it as the sync interval in seconds."
         (timer-active (and supertag-sync--timer (not (null supertag-sync--timer)))))
 
    (message "=== Supertag Sync Status ===")
-   (message "Sync directories: %s" org-supertag-sync-directories)
+   (message "Sync directories: %s" supertag-sync-directories)
    (message "Exclude directories: %s" supertag-sync-exclude-directories)
    (message "File pattern: %s" supertag-sync-file-pattern)
    (message "Auto-sync: %s" (if timer-active "ACTIVE" "INACTIVE"))
@@ -1173,7 +1173,7 @@ target node, and optional context note."
           (supertag-ui--ensure-file-node-synced file)
           (car (supertag-find-file-node file)))
         (user-error
-         "No file node for %s; add the identity required by `org-supertag-file-id-source'"
+         "No file node for %s; add the identity required by `supertag-file-id-source'"
          file))))
 
 (defun supertag-ui--ensure-file-node-synced (file)

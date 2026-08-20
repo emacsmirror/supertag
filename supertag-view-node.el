@@ -37,7 +37,7 @@
   "Side where the Node View side window appears.
 One of 'right, 'left, 'bottom, or 'top."
   :type '(choice (const right) (const left) (const bottom) (const top))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-view-node-side-size 0.33
   "Default size of the Node View side window.
@@ -45,12 +45,12 @@ For 'left/'right, interpreted as a fraction of frame width (0.0–1.0).
 For 'top/'bottom, interpreted as a number of lines (integer) or a fraction
 if your Emacs accepts fractional heights for side windows."
   :type '(choice number integer)
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-view-node-auto-show nil
   "Whether to automatically show the Node View side window and follow context."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defun supertag-view-node--buffer ()
   (let ((buf (get-buffer supertag-view-node--buffer-name)))
@@ -221,7 +221,7 @@ Point must be at an Org heading. when invoked from other modes."
 If non-nil, TODO keywords will be removed from titles.
 If nil, titles will be displayed as-is with TODO keywords."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-view-node-todo-keywords
   '("TODO" "DONE" "NEXT" "WAITING" "HOLD" "CANCELLED" "CANCELED"
@@ -230,7 +230,7 @@ If nil, titles will be displayed as-is with TODO keywords."
 Only used when `supertag-view-node-strip-todo-keywords' is non-nil.
 You can customize this list to match your org-mode TODO keywords."
   :type '(repeat string)
-  :group 'org-supertag)
+  :group 'supertag)
 
 ;;; --- Visual Style Variables ---
 
@@ -309,7 +309,7 @@ Key Bindings:
   - Use Tab completion when available
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  :group 'org-supertag
+  :group 'supertag
   :keymap supertag-view-node-mode-map
   (setq-local buffer-read-only t)
   ;; Ensure cursor is visible in this special-mode buffer

@@ -30,19 +30,19 @@
 
 (require 'cl-lib)
 (require 'subr-x)
-(require 'org-supertag)
+(require 'supertag)
 
 ;;; --- Status helpers --------------------------------------------------
 
 (defun supertag-setup--current-directories ()
   "Return the currently configured sync directories, or nil."
-  (and (boundp 'org-supertag-sync-directories)
-       org-supertag-sync-directories))
+  (and (boundp 'supertag-sync-directories)
+       supertag-sync-directories))
 
 (defun supertag-setup--current-file-id-source ()
   "Return the currently configured file-ID source symbol."
-  (if (boundp 'org-supertag-file-id-source)
-      org-supertag-file-id-source
+  (if (boundp 'supertag-file-id-source)
+      supertag-file-id-source
     'org-roam))
 
 (defun supertag-setup--db-file ()
@@ -122,11 +122,11 @@ if the user adds nothing."
       (cons (car plist) (or tag (format "%s" (car plist)))))))
 
 (defun supertag-setup--file-id-source-choices ()
-  "Return an alist of (VALUE . TAG) for `org-supertag-file-id-source'.
+  "Return an alist of (VALUE . TAG) for `supertag-file-id-source'.
 The list is read from the defcustom's own `:type' so it always reflects
 the real set of valid options; if that shape ever changes underneath us,
 fall back to the documented set."
-  (let* ((type (get 'org-supertag-file-id-source 'custom-type))
+  (let* ((type (get 'supertag-file-id-source 'custom-type))
          (choices (when (and (consp type) (eq (car type) 'choice))
                     (delq nil (mapcar #'supertag-setup--parse-const-branch
                                        (cdr type))))))
@@ -173,10 +173,10 @@ we also require `user-init-file' to be non-nil."
    ";; Org-Supertag configuration snippet\n"
    ";; Paste into your init file, or adapt for `use-package''s :custom.\n\n"
    (if dirs
-       (format "(setq org-supertag-sync-directories\n      '(%s))\n\n"
+       (format "(setq supertag-sync-directories\n      '(%s))\n\n"
                (mapconcat (lambda (d) (format "%S" d)) dirs "\n        "))
      ";; No sync directories were configured.\n\n")
-   (format "(setq org-supertag-file-id-source '%s)\n" file-id-source)))
+   (format "(setq supertag-file-id-source '%s)\n" file-id-source)))
 
 (defun supertag-setup--show-snippet (text)
   "Display TEXT in the *supertag-setup* buffer."
@@ -209,12 +209,12 @@ Returns the chosen method: `save', `session', or `snippet'."
          (choice (cdr (assoc choice-label options))))
     ;; Always apply for the current session so a following scan step (and
     ;; the rest of this Emacs session) sees the new configuration.
-    (setq org-supertag-sync-directories dirs)
-    (setq org-supertag-file-id-source file-id-source)
+    (setq supertag-sync-directories dirs)
+    (setq supertag-file-id-source file-id-source)
     (cond
      ((eq choice 'save)
-      (customize-save-variable 'org-supertag-sync-directories dirs)
-      (customize-save-variable 'org-supertag-file-id-source file-id-source)
+      (customize-save-variable 'supertag-sync-directories dirs)
+      (customize-save-variable 'supertag-file-id-source file-id-source)
       (message "Saved permanently to %s" (abbreviate-file-name (or custom-file user-init-file))))
      ((eq choice 'session)
       (message "Applied for this Emacs session only (not written to disk)."))
@@ -242,7 +242,7 @@ LABEL names the operation for the confirmation prompt."
 
 (defun supertag-setup--doc-path ()
   "Return the path to the \"A Day with Org-SuperTag\" walkthrough, if found."
-  (let ((lib (locate-library "org-supertag")))
+  (let ((lib (locate-library "supertag")))
     (when lib
       (let ((path (expand-file-name "doc/A-DAY-WITH-ORG-SUPERTAG.org" (file-name-directory lib))))
         (and (file-exists-p path) path)))))
@@ -312,8 +312,8 @@ Walks through:
   1. Showing the current status (sync directories, file-ID source,
      database file, node count).  If already configured, offers to just
      rescan instead of reconfiguring from scratch.
-  2. Choosing sync directories (`org-supertag-sync-directories').
-  3. Choosing a file-ID source (`org-supertag-file-id-source').
+  2. Choosing sync directories (`supertag-sync-directories').
+  3. Choosing a file-ID source (`supertag-file-id-source').
   4. Persisting those choices: permanently via `customize-save-variable',
      for this session only, or as a copy-pastable Elisp snippet.
   5. Optionally running the initial database scan.

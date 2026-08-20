@@ -5,9 +5,9 @@
 ;; two flavors that share a single "query string + params -> table string"
 ;; core:
 ;;
-;; 1. Org Babel blocks (`org-babel-execute:org-supertag-query-block'):
+;; 1. Org Babel blocks (`org-babel-execute:supertag-query-block'):
 ;;
-;;      #+BEGIN_SRC org-supertag-query-block :results raw :sort modified :order desc :limit 20 :columns "status priority"
+;;      #+BEGIN_SRC supertag-query-block :results raw :sort modified :order desc :limit 20 :columns "status priority"
 ;;      (and (tag "project") (after "-30d"))
 ;;      #+END_SRC
 ;;
@@ -239,12 +239,12 @@ must never propagate into org-babel or org-dblock machinery."
   "Insert an S-expression query block for Org Babel."
   (interactive)
   (let* ((query (read-string "Query S-expression: "))
-         (block-template "#+BEGIN_SRC org-supertag-query-block :results raw\n%s\n#+END_SRC"))
+         (block-template "#+BEGIN_SRC supertag-query-block :results raw\n%s\n#+END_SRC"))
     (unless (string-empty-p query)
       (insert (format block-template query)))))
 
-(defun org-babel-execute:org-supertag-query-block (body params)
-  "Execute an org-supertag-query-block and return results as an Org table.
+(defun org-babel-execute:supertag-query-block (body params)
+  "Execute an supertag-query-block and return results as an Org table.
 BODY is the S-expression query string.
 PARAMS are the babel header args. All are optional and, when omitted,
 produce exactly the previous behavior:
@@ -283,7 +283,7 @@ PARAMS is the plist Org parses from the #+BEGIN: line, e.g.:
 
 Recognized keys (all but :query are optional):
   :query   (required) an S-expression query string, same syntax as the
-           `org-supertag-query-block' babel language.
+           `supertag-query-block' babel language.
   :sort    title | created | modified | a field name (bare symbol or
            string).
   :order   asc (default) | desc.
@@ -333,12 +333,8 @@ their syntax). Refresh anytime with \\[org-ctrl-c-ctrl-c] on the block,
 
 ;; Org Babel registration - new language name
 (with-eval-after-load 'org
-  (add-to-list 'org-babel-load-languages '(org-supertag-query-block . t))
-  (add-to-list 'org-babel-default-header-args '(org-supertag-query-block . ((:results . "raw")))))
-
-;; Backward compatibility alias for the old function name
-(defalias 'org-babel-execute:org-supertag-query 'org-babel-execute:org-supertag-query-block
-  "Backward compatibility alias for the renamed S-expression query block function.")
+  (add-to-list 'org-babel-load-languages '(supertag-query-block . t))
+  (add-to-list 'org-babel-default-header-args '(supertag-query-block . ((:results . "raw")))))
 
 (provide 'supertag-ui-query-block)
 

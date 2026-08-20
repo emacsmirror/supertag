@@ -35,7 +35,7 @@ allowing hierarchies (/) and arbitrary unicode/emoji symbols.")
 
 (defgroup supertag-view-style nil
   "Customization options for supertag inline tag styling."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-view-style-tag-face-properties
   '(:foreground "snow3")
@@ -147,10 +147,6 @@ Prefers SVG keywords when `supertag-svg-tag-enable' is non-nil."
   (supertag-view-style-mode 'toggle)
   (message "Supertag styling %s"
            (if supertag-view-style-mode "enabled" "disabled")))
-
-;; For backward compatibility
-(defalias 'org-supertag-inline-style-mode 'supertag-view-style-mode)
-(defalias 'org-supertag-debug-force-refontify 'supertag-view-style-refresh)
 
 (defconst supertag-view-helper--section-separator "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   "Separator line for sections.")

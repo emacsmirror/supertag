@@ -84,7 +84,7 @@ identical constant/rationale in test/git-integration-test.el.")
 ;; dynamic binding rather than an ordinary lexical one under this file's
 ;; own `lexical-binding: t'. Harmless no-op given `supertag-services-sync.el'
 ;; (required above) already provides the real `defcustom' for it.
-(defvar org-supertag-sync-directories nil)
+(defvar supertag-sync-directories nil)
 
 ;;; --- Small process/git helpers (same pattern as test/git-integration-test.el) ---
 
@@ -114,7 +114,7 @@ found on `exec-path'."
           (concat
            "(progn "
            "(setq after-init-time nil load-prefer-newer t) "
-           "(require 'org-supertag) "
+           "(require 'supertag) "
            "(let ((commands '(supertag-git-setup supertag-git-clone "
            "supertag-git-sync-mode supertag-git-sync-now supertag-doctor))) "
            "(unless (and (not (featurep 'supertag-git)) "
@@ -218,7 +218,7 @@ dirty (and possibly snapshot/migrate) as an unrelated side effect of
 
 (supertag-git-sync-test--deftest supertag-git-sync-test-migrate-layout-success
     "A database living outside any git repository, with a single
-`org-supertag-sync-directories' root configured, is migrated into
+`supertag-sync-directories' root configured, is migrated into
 `<root>/.supertag/supertag-db.el': the copy is verified loadable, this
 session's wiring (`supertag-db-file' et al) is switched to the new
 location, the live store is reloaded from it, and the OLD file is renamed
@@ -228,7 +228,7 @@ migration attempt is then a no-op (`:skipped-in-repo')."
     (let* ((vault-root (file-name-as-directory (expand-file-name "vault" dir)))
            (outside-dir (file-name-as-directory (expand-file-name "outside-db" dir)))
            (outside-db (expand-file-name "supertag-db.el" outside-dir))
-           (org-supertag-sync-directories (list vault-root))
+           (supertag-sync-directories (list vault-root))
            (supertag-data-directory outside-dir)
            (supertag-db-file outside-db)
            (supertag-db-backup-directory (expand-file-name "backups" outside-dir))
@@ -269,7 +269,7 @@ wiring change, no tombstone rename."
     (let* ((vault-root (file-name-as-directory (expand-file-name "vault" dir)))
            (outside-dir (file-name-as-directory (expand-file-name "outside-db" dir)))
            (outside-db (expand-file-name "supertag-db.el" outside-dir))
-           (org-supertag-sync-directories (list vault-root))
+           (supertag-sync-directories (list vault-root))
            (supertag-data-directory outside-dir)
            (supertag-db-file outside-db)
            (supertag-db-backup-directory (expand-file-name "backups" outside-dir))
@@ -322,7 +322,7 @@ of whatever the old file happened to contain a moment before)."
     (let* ((vault-root (file-name-as-directory (expand-file-name "vault" dir)))
            (outside-dir (file-name-as-directory (expand-file-name "outside-db" dir)))
            (outside-db (expand-file-name "supertag-db.el" outside-dir))
-           (org-supertag-sync-directories (list vault-root))
+           (supertag-sync-directories (list vault-root))
            (supertag-data-directory outside-dir)
            (supertag-db-file outside-db)
            (supertag-db-backup-directory (expand-file-name "backups" outside-dir))
@@ -377,7 +377,7 @@ session's wiring is unchanged, and the failure names the guard reason."
     (let* ((vault-root (file-name-as-directory (expand-file-name "vault" dir)))
            (outside-dir (file-name-as-directory (expand-file-name "outside-db" dir)))
            (outside-db (expand-file-name "supertag-db.el" outside-dir))
-           (org-supertag-sync-directories (list vault-root))
+           (supertag-sync-directories (list vault-root))
            (supertag-data-directory outside-dir)
            (supertag-db-file outside-db)
            (supertag-db-backup-directory (expand-file-name "backups" outside-dir))
@@ -426,7 +426,7 @@ creates a target or tombstones the only real database."
            (outside-dir (file-name-as-directory (expand-file-name "outside-db" dir)))
            (outside-db (expand-file-name "supertag-db.el" outside-dir))
            (target-db (expand-file-name ".supertag/supertag-db.el" vault-root))
-           (org-supertag-sync-directories (list vault-root))
+           (supertag-sync-directories (list vault-root))
            (supertag-data-directory outside-dir)
            (supertag-db-file outside-db)
            (supertag-db-backup-directory (expand-file-name "backups" outside-dir))
@@ -489,7 +489,7 @@ loads it directly (no rebuild) and reports matching node/tag counts."
       (supertag-git-sync-test--git! seed "remote" "add" "origin" bare)
       (supertag-git-sync-test--git! seed "push" "-q" "origin" "main")
       (let* ((clone-dir (expand-file-name "clone" dir))
-             (org-supertag-sync-directories nil)
+             (supertag-sync-directories nil)
              (supertag-data-directory (expand-file-name "unused/" dir))
              (supertag-db-file (expand-file-name "unused/supertag-db.el" dir))
              (supertag-db-backup-directory (expand-file-name "unused/backups" dir))
@@ -524,8 +524,8 @@ rebuilds document nodes from the cloned Org files."
       (supertag-git-sync-test--git! seed "remote" "add" "origin" bare)
       (supertag-git-sync-test--git! seed "push" "-q" "origin" "main")
       (let* ((clone-dir (file-name-as-directory (expand-file-name "clone" dir)))
-             (org-supertag-sync-directories (list clone-dir))
-             (org-supertag-sync-directories-mode 'unified)
+             (supertag-sync-directories (list clone-dir))
+             (supertag-sync-directories-mode 'unified)
              (supertag-data-directory (expand-file-name "unused/" dir))
              (supertag-db-file (expand-file-name "unused/supertag-db.el" dir))
              (supertag-db-backup-directory (expand-file-name "unused/backups" dir))
@@ -565,7 +565,7 @@ the vault is NEVER swept into that commit."
       (with-temp-file junk-file (insert "not tracked -- must never be committed\n"))
       (let ((supertag-db-file db)
             (supertag-data-directory root)
-            (org-supertag-sync-directories nil))
+            (supertag-sync-directories nil))
         (cl-letf (((symbol-function 'read-string) (lambda (&rest _) bare)))
           (supertag-git-setup)))
       ;; `origin' configured to the bare remote.
@@ -601,7 +601,7 @@ attempt any push -- an explicit, error-free, local-only vault."
       (with-temp-file org-file (insert "* Heading\nBody.\n"))
       (let ((supertag-db-file db)
             (supertag-data-directory root)
-            (org-supertag-sync-directories nil))
+            (supertag-sync-directories nil))
         (cl-letf (((symbol-function 'read-string) (lambda (&rest _) "")))
           (supertag-git-setup)))
       ;; No origin configured.
@@ -1049,7 +1049,7 @@ Org conflict already on disk is visible without enabling sync mode."
             (let ((default-directory root)
                   (supertag-db-file db)
                   (supertag-data-directory root)
-                  (org-supertag-sync-directories (list root)))
+                  (supertag-sync-directories (list root)))
               (let ((buf (supertag-doctor t)))
                 (should (featurep 'supertag-git))
                 (with-current-buffer buf

@@ -20,7 +20,7 @@
 
 (defgroup supertag-view-stream nil
   "Chronological title views for tagged nodes."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defface supertag-view-stream-title-face
   '((t :inherit org-level-2 :height 1.15 :weight semi-bold))

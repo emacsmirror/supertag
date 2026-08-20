@@ -42,7 +42,7 @@ Each function is called with no arguments during `supertag-init`.
 Use `supertag-schema-register' and/or `supertag-register-entity-type' inside
 these functions."
   :type '(repeat function)
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defvar supertag--global-field-cache (make-hash-table :test 'equal)
   "Cache of global field definitions keyed by field-id (slug).")
@@ -54,7 +54,7 @@ these functions."
   "Obsolete compatibility option; the global field model is always enabled.
 Setting this variable to nil no longer re-enables legacy field storage."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (make-obsolete-variable
  'supertag-use-global-fields

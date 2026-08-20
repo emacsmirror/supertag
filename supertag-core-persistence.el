@@ -16,12 +16,12 @@
 (require 'supertag-core-transform) ; For supertag-with-transaction (real per-entity rollback)
 
 ;;; --- Persistence Configuration ---
-;; Note: supertag-data-directory is defined in org-supertag.el
+;; Note: supertag-data-directory is defined in supertag.el
 ;; This is a fallback definition in case this module is loaded independently
 (defvar supertag-data-directory
-  (expand-file-name "org-supertag/" user-emacs-directory)
-  "Directory for storing Org-Supertag data.
-This is a fallback definition. The primary definition is in org-supertag.el.")
+  (expand-file-name "supertag/" user-emacs-directory)
+  "Directory for storing Supertag data.
+This is a fallback definition. The primary definition is in supertag.el.")
 
 (defvar supertag--config-guard-allow)
 
@@ -56,37 +56,63 @@ format if it was never resaved since upgrading this package.")
 FILENAME is relative to `supertag-data-directory`."
   (expand-file-name filename supertag-data-directory))
 
+(defun supertag-persistence-check-legacy-data-directory ()
+  "Refuse ambiguous default data roots left by the breaking rename.
+The check applies only when `supertag-data-directory' is the new default.
+It never moves or deletes data.  Return t when initialization may continue."
+  (let* ((configured (file-name-as-directory
+                      (expand-file-name supertag-data-directory)))
+         (current (file-name-as-directory
+                   (expand-file-name "supertag" user-emacs-directory)))
+         (legacy (file-name-as-directory
+                  (expand-file-name "org-supertag" user-emacs-directory)))
+         (current-exists (file-exists-p current))
+         (legacy-exists (file-exists-p legacy)))
+    (when (string= configured current)
+      (cond
+       ((and current-exists legacy-exists)
+        (user-error
+         "Supertag found both %s and %s; refusing to choose a data directory. Consolidate them or set `supertag-data-directory' explicitly"
+         (abbreviate-file-name legacy)
+         (abbreviate-file-name current)))
+       (legacy-exists
+        (user-error
+         "Supertag found the retired data directory %s. Quit other Emacs instances, back it up, and rename it to %s before starting Supertag"
+         (abbreviate-file-name legacy)
+         (abbreviate-file-name current)))))
+    t))
+
 (defcustom supertag-db-file
   (supertag-data-file "supertag-db.el")
   "Database file path."
   :type 'file
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-backup-directory
   (supertag-data-file "backups")
   "Directory for database backups."
   :type 'directory
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-auto-save-interval 300
   "Auto-save interval in seconds.
 Set to nil to disable auto-save."
   :type '(choice (const :tag "Disable" nil)
                 (integer :tag "Interval (seconds)"))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-backup-interval 86400
   "Daily backup interval in seconds (default: 24 hours).
 Set to nil to disable daily backups."
   :type '(choice (const :tag "Disable" nil)
                 (integer :tag "Interval (seconds)"))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-backup-keep-days 3
   "Number of days to keep daily backups.
 Older backups will be automatically cleaned up."
   :type 'integer
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-verify-after-save t
   "When non-nil, verify the database file after saving.
@@ -95,7 +121,7 @@ by `supertag--store-collections' is compared with the in-memory Store before
 the previous database file is replaced. On mismatch or read error, the write
 is aborted and the previous database file is left untouched."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-lock t
   "When non-nil, protect the database from concurrent multi-instance access.
@@ -108,10 +134,10 @@ lock, this session records the conflict in
 other instance releases the lock (or `supertag-db-retry-lock' is used once
 it has exited)."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-lock-directory
-  (expand-file-name "org-supertag-locks/" temporary-file-directory)
+  (expand-file-name "supertag-locks/" temporary-file-directory)
   "Directory for local database advisory lock files.
 When non-nil, local `supertag-db-file' paths are mapped to deterministic
 SHA-256 lock names in this directory. This keeps same-host locking out of
@@ -120,7 +146,7 @@ session. Remote/TRAMP database paths and a nil value retain Emacs' native
 database-adjacent lock behavior. If this directory cannot be created, the
 native behavior is used as a safe fallback."
   :type '(choice (const :tag "Use database directory" nil) directory)
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-db-auto-migrate t
   "When non-nil, automatically migrate an out-of-date database after load.
@@ -134,7 +160,7 @@ A timestamped pre-migration snapshot of the database file is written to
 databases are left as-is after loading; migrate manually with
 \\[supertag-db-migrate-and-normalize]."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-presence-enable t
   "When non-nil, write and check an advisory presence file for cross-machine
@@ -152,7 +178,7 @@ runs. When another host's presence looks recently active, loading warns
 loudly. See README \"Syncing across machines\" for the supported
 single-writer workflow this is meant to nudge users toward."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-presence-stale-seconds 300
   "Age in seconds beyond which a foreign presence record is ignored.
@@ -160,7 +186,7 @@ A presence record written by another host more than this many seconds ago
 is treated as stale — that machine is presumed no longer actively editing —
 and `supertag--presence-foreign-active-p' returns nil for it."
   :type 'integer
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defvar supertag-db--auto-save-timer nil
   "Timer for auto-save.")
@@ -384,7 +410,7 @@ a presence-file problem must never break a save or a load."
        (unless supertag--presence-write-failed
          (setq supertag--presence-write-failed t)
          (display-warning
-          'org-supertag
+          'supertag
           (format "Supertag: failed to write cross-machine presence file: %s"
                   (error-message-string err))
           :warning))))))
@@ -440,7 +466,7 @@ database for this host going forward."
                             (ignore-errors (parse-iso8601-time-string updated-at))))
                (age (and parsed (round (float-time (time-subtract (current-time) parsed))))))
           (display-warning
-           'org-supertag
+           'supertag
            (format "SUPERTAG: ANOTHER MACHINE MAY STILL BE EDITING THIS DATABASE.
 
 Host %s was active on this database %s ago (%s).
@@ -1189,10 +1215,10 @@ Signals an error if the file cannot be read or parsed."
                                   supertag-sync-state-file)
                :sync-state-source (when (boundp 'supertag-sync--state-source)
                                     supertag-sync--state-source)
-               :sync-directories (when (boundp 'org-supertag-sync-directories)
-                                   org-supertag-sync-directories)
-               :active-sync-directory (when (boundp 'org-supertag-active-sync-directory)
-                                        org-supertag-active-sync-directory)
+               :sync-directories (when (boundp 'supertag-sync-directories)
+                                   supertag-sync-directories)
+               :active-sync-directory (when (boundp 'supertag-active-sync-directory)
+                                        supertag-active-sync-directory)
                :nodes-count (supertag--count-nodes)
                :field-values-count (supertag--count-field-values)
                :captured-at (current-time))

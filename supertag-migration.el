@@ -791,7 +791,7 @@ When DRY-RUN is non-nil, do not modify the file; only report changes."
 
 (defun supertag-migrate--save-new-db (store indexes)
   "Save the new STORE and INDEXES to the conventional file location."
-  (let* ((default-dir (expand-file-name "org-supertag" user-emacs-directory))
+  (let* ((default-dir (expand-file-name "supertag" user-emacs-directory))
          (new-db-file (expand-file-name "supertag-db.el" default-dir)))
     (make-directory default-dir t)
     (message "Saving new database to %s..." new-db-file)
@@ -821,7 +821,7 @@ When DRY-RUN is non-nil, do not modify the file; only report changes."
               (print-escape-newlines nil)
               (print-continuous-numbering nil)
               (print-gensym nil))
-          (insert ";;; org-supertag.db --- Data store for org-supertag\n")
+          (insert ";;; supertag.db --- Data store for Supertag\n")
           (insert ";;; -*- coding: utf-8 -*-\n\n")
           ;; Output store data directly as hash table (compatible with supertag-store.el)
           (insert ";; supertag--store data\n")

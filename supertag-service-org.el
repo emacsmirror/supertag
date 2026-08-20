@@ -21,7 +21,7 @@
 
 (defgroup supertag-org-link nil
   "Org link integration for Org-Supertag."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-org-id-open-link-auto-enable t
   "When non-nil, let `org-id-open-link` resolve IDs via Org-Supertag first.
@@ -472,12 +472,12 @@ POSITION may be `beginning', `end', or a marker in the node buffer."
 New exports no longer use this prefix in property names, but the prefix
 is still used to recognize and clean up older exported properties."
   :type 'string
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-debug-export-fields nil
   "When non-nil, log detailed information during field export."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defconst supertag-export--missing (make-symbol "supertag-export-missing")
   "Sentinel used to detect missing field values during export.")

@@ -20,7 +20,7 @@
 (require 'supertag-view-node)
 (require 'supertag-view-table)
 
-(defvar org-supertag-file-id-source 'org-roam)
+(defvar supertag-file-id-source 'org-roam)
 
 (defmacro add-reference-test--with-clean-env (&rest body)
   "Run BODY with an isolated Store and temporary Org files."
@@ -130,7 +130,7 @@
   (add-reference-test--with-clean-env
     (let ((source-file (expand-file-name "source.org" tmp))
           (target-file (expand-file-name "target.org" tmp))
-          (org-supertag-file-id-source 'org-roam))
+          (supertag-file-id-source 'org-roam))
       (with-temp-file source-file
         (insert ":PROPERTIES:\n:ID:       file-id\n:END:\n#+TITLE: Source\n\nSource body.\n"))
       (with-temp-file target-file

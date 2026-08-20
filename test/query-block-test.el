@@ -99,7 +99,7 @@ Returns the list of created node ids, in creation order."
   "A plain tag query returns a table with exactly the tagged nodes."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(tag \"project\")" nil)))
       (should (stringp table))
       (should (= 6 (query-block-test--link-count table)))
@@ -115,7 +115,7 @@ Returns the list of created node ids, in creation order."
   ":limit truncates the result rows after sorting."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(tag \"project\")"
                   '((:sort . "priority") (:order . "asc") (:limit . 3)))))
       (should (= 3 (query-block-test--link-count table)))
@@ -131,7 +131,7 @@ Returns the list of created node ids, in creation order."
   ":sort on a numeric field orders rows numerically, not lexically."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let* ((table (org-babel-execute:org-supertag-query-block
+    (let* ((table (org-babel-execute:supertag-query-block
                    "(tag \"project\")"
                    '((:sort . "priority") (:order . "asc"))))
            (pos-4 (string-match "Node 4" table))
@@ -147,7 +147,7 @@ Returns the list of created node ids, in creation order."
   ":order desc reverses the sorted order."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let* ((table (org-babel-execute:org-supertag-query-block
+    (let* ((table (org-babel-execute:supertag-query-block
                    "(tag \"project\")"
                    '((:sort . "priority") (:order . "desc"))))
            (pos-3 (string-match "Node 3" table))
@@ -162,7 +162,7 @@ Returns the list of created node ids, in creation order."
   ":columns overrides the fields auto-derived from the query AST."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(tag \"project\")"
                   '((:columns . ("priority"))))))
       (should (string-match-p "|[ \t]*Node[ \t]*|[ \t]*Tags[ \t]*|[ \t]*priority[ \t]*|" table))
@@ -207,7 +207,7 @@ Returns the list of created node ids, in creation order."
   "A malformed query s-expression renders a one-line error, never signals."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(this-is-not-an-operator 1 2)" nil)))
       (should (stringp table))
       (should (string-prefix-p "Error:" table)))))
@@ -216,7 +216,7 @@ Returns the list of created node ids, in creation order."
   "An unparseable s-expression string renders a one-line error, never signals."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(tag \"project\"" nil))) ; missing closing paren
       (should (stringp table))
       (should (string-prefix-p "Error:" table)))))
@@ -225,7 +225,7 @@ Returns the list of created node ids, in creation order."
   "An invalid :order value renders a one-line error, never signals."
   (query-block-test--with-clean-store
     (query-block-test--make-fixture)
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(tag \"project\")" '((:order . "sideways")))))
       (should (stringp table))
       (should (string-prefix-p "Error:" table)))))
@@ -411,7 +411,7 @@ Returns the list of created node ids, in creation order."
      :nodes "n1" (list :id "n1" :title "B"))
     (supertag-store-put-entity
      :nodes "n2" (list :id "n2" :title "A"))
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(and (sort-by \"title\" asc))"
                   '(:sort "title" :order desc))))
       ;; asc from the syntax wins: A row appears before B row.
@@ -509,12 +509,12 @@ Returns the list of created node ids, in creation order."
     (supertag-store-put-field-value "n1" "genre" "tech")
     (supertag-store-put-field-value "n2" "genre" "novel")
     ;; Scalar aggregate renders one Aggregate column with the value.
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(and (sum \"pages\"))" nil)))
       (should (string-match-p "|[ \t]*Aggregate[ \t]*|" table))
       (should (string-match-p "300" table)))
     ;; Grouped aggregate renders Group + Aggregate columns.
-    (let ((table (org-babel-execute:org-supertag-query-block
+    (let ((table (org-babel-execute:supertag-query-block
                   "(and (group-by \"genre\") (sum \"pages\"))" nil)))
       (should (string-match-p "|[ \t]*Group[ \t]*|[ \t]*Aggregate[ \t]*|" table))
       (should (string-match-p "novel" table))

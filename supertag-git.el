@@ -25,7 +25,7 @@
 ;; ## V1 limitation: single-root vaults only
 ;;
 ;; Per the plan's explicit decision, git sync in this version only supports
-;; a vault backed by a SINGLE `org-supertag-sync-directories' root (or none
+;; a vault backed by a SINGLE `supertag-sync-directories' root (or none
 ;; configured at all, in which case the database's own directory is used).
 ;; Multiple configured roots are refused outright rather than guessed at —
 ;; seeing `.phrase/phases/phase-git-sync-20260713/PLAN.md' section "S4 用户
@@ -80,7 +80,7 @@
 
 (defgroup supertag-git nil
   "Git integration for Org-Supertag's semantic database merge driver."
-  :group 'org-supertag)
+  :group 'supertag)
 
 ;; --- Free-variable declarations for symbols owned by org-supertag.el /
 ;; supertag-services-sync.el ---
@@ -105,7 +105,7 @@
 ;; code would happen to work, which is exactly the kind of latent
 ;; compile/interpret divergence this declaration exists to prevent; see
 ;; test/git-integration-test.el's identical technique/rationale for
-;; `org-supertag-sync-directories'). Plain reads/writes of the other
+;; `supertag-sync-directories'). Plain reads/writes of the other
 ;; symbols below never need this treatment (proven empirically: a
 ;; `boundp'/`fboundp'-guarded read or `setq' of an undeclared symbol
 ;; compiles warning-free; only `let'-binding one does not).
@@ -115,8 +115,8 @@
 ;; are real functions already pulled in transitively by the top-level
 ;; `(require 'supertag-core-persistence)' above -- no declaration needed.
 ;; Everything below genuinely lives in files this file does not require.
-(declare-function supertag-config-guard--capture "org-supertag")
-(declare-function supertag-vault--vault-mode-p "org-supertag")
+(declare-function supertag-config-guard--capture "supertag")
+(declare-function supertag-vault--vault-mode-p "supertag")
 (declare-function supertag-reindex-org "supertag-services-sync")
 (declare-function supertag-sync-check-now "supertag-services-sync")
 (declare-function supertag-sync--process-single-file "supertag-services-sync")
@@ -191,13 +191,13 @@ never `--global'). Signals an error on failure."
 ;;; --- Sync-root configuration (V1 single-root check) ---
 
 (defun supertag-git--sync-roots ()
-  "Return the configured, non-empty `org-supertag-sync-directories' entries.
+  "Return the configured, non-empty `supertag-sync-directories' entries.
 Returns nil when the variable is unbound, nil, or contains no usable
 strings -- all treated the same as \"no configured root\"."
-  (when (and (boundp 'org-supertag-sync-directories)
-             (listp org-supertag-sync-directories))
+  (when (and (boundp 'supertag-sync-directories)
+             (listp supertag-sync-directories))
     (delq nil (mapcar (lambda (d) (and (stringp d) (> (length d) 0) d))
-                       org-supertag-sync-directories))))
+                       supertag-sync-directories))))
 
 (defun supertag-git--multiple-sync-roots-p ()
   "Return non-nil if more than one sync root is configured.
@@ -389,16 +389,16 @@ in that case (this matters for this file's own standalone batch tests)."
     (when (fboundp 'supertag-config-guard--capture)
       (funcall #'supertag-config-guard--capture))
     ;; Best-effort: keep the single-root "registry" (there is no other one
-    ;; in this V1 -- see the Commentary on `org-supertag-sync-directories'
+    ;; in this V1 -- see the Commentary on `supertag-sync-directories'
     ;; being the vault registry) pointed at the vault root this data
     ;; directory now belongs to, when vault mode happens to be active.
     (when (and (fboundp 'supertag-vault--vault-mode-p)
                (funcall #'supertag-vault--vault-mode-p)
-               (boundp 'org-supertag-active-sync-directory))
+               (boundp 'supertag-active-sync-directory))
       (let ((roots (supertag-git--sync-roots)))
         (when (= (length roots) 1)
           (let ((supertag--config-guard-allow t))
-            (setq org-supertag-active-sync-directory (car roots))))))))
+            (setq supertag-active-sync-directory (car roots))))))))
 
 (defun supertag-git--capture-wiring ()
   "Return a plist snapshotting this session's persistence wiring variables,
@@ -411,8 +411,8 @@ flipped them. Mirrors exactly the set of variables that function writes."
                                   supertag-db-backup-directory)
         :sync-state-file (and (boundp 'supertag-sync-state-file)
                               supertag-sync-state-file)
-        :active-sync-directory (and (boundp 'org-supertag-active-sync-directory)
-                                    org-supertag-active-sync-directory)))
+        :active-sync-directory (and (boundp 'supertag-active-sync-directory)
+                                    supertag-active-sync-directory)))
 
 (defun supertag-git--restore-wiring (snapshot)
   "Restore persistence wiring variables from SNAPSHOT (as returned by
@@ -429,8 +429,8 @@ already flipped (see `supertag-git--do-migrate-layout')."
       (setq supertag-db-backup-directory (plist-get snapshot :db-backup-directory)))
     (when (boundp 'supertag-sync-state-file)
       (setq supertag-sync-state-file (plist-get snapshot :sync-state-file)))
-    (when (boundp 'org-supertag-active-sync-directory)
-      (setq org-supertag-active-sync-directory (plist-get snapshot :active-sync-directory))))
+    (when (boundp 'supertag-active-sync-directory)
+      (setq supertag-active-sync-directory (plist-get snapshot :active-sync-directory))))
   (when (fboundp 'supertag-config-guard--capture)
     (funcall #'supertag-config-guard--capture)))
 
@@ -598,7 +598,7 @@ one of:
                               `supertag-git-setup''s pre-existing
                               behavior). Idempotent: this is what every
                               re-run after a successful migration reports.
-  :skipped-no-root           no `org-supertag-sync-directories' root is
+  :skipped-no-root           no `supertag-sync-directories' root is
                               configured to migrate towards.
   :skipped-multi-root        more than one root is configured (V1
                               limitation; refused elsewhere by
@@ -700,7 +700,7 @@ contain DB-DIR (the vault-layout requirement -- git sync needs the
 database physically inside the chosen repo); or no root can be inferred
 and we cannot prompt (`noninteractive')."
   (when (supertag-git--multiple-sync-roots-p)
-    (user-error "supertag-git-setup: refusing -- `org-supertag-sync-directories' configures multiple roots (%s). Git sync (V1) only supports a single-root vault; see .phrase/phases/phase-git-sync-20260713/PLAN.md \"S4 用户旅程\" / \"V1 限制\" for how to consolidate."
+    (user-error "supertag-git-setup: refusing -- `supertag-sync-directories' configures multiple roots (%s). Git sync (V1) only supports a single-root vault; see .phrase/phases/phase-git-sync-20260713/PLAN.md \"S4 用户旅程\" / \"V1 限制\" for how to consolidate."
                 (mapconcat #'identity (supertag-git--sync-roots) ", ")))
   (let ((roots (supertag-git--sync-roots)))
     (cond
@@ -711,7 +711,7 @@ and we cannot prompt (`noninteractive')."
                       root db-dir))
         root))
      (noninteractive
-      (error "supertag-git-setup: %s is not inside a git repository and no usable `org-supertag-sync-directories' root is configured to infer one; run this interactively to be prompted for a root, or `git init` the vault yourself first"
+      (error "supertag-git-setup: %s is not inside a git repository and no usable `supertag-sync-directories' root is configured to infer one; run this interactively to be prompted for a root, or `git init` the vault yourself first"
              db-dir))
      (t
       (let ((root (file-name-as-directory
@@ -856,7 +856,7 @@ between clones (see the Commentary in this file for why).
 Steps performed (each reported as it happens):
 1. Locate `supertag-db-file''s directory; if it is not already inside a
    git worktree, offer to `git init' one -- at the single configured
-   `org-supertag-sync-directories' root if there is exactly one and it
+   `supertag-sync-directories' root if there is exactly one and it
    already contains the database, otherwise by prompting (refusing
    outright, rather than guessing, when multiple sync roots are
    configured or no in-repo root can be inferred; see
@@ -883,7 +883,7 @@ Steps performed (each reported as it happens):
 
 Also performs, as its new Step 0 (S4), a one-time vault layout migration
 when `supertag-db-file' lives outside any git repository but a single
-`org-supertag-sync-directories' root is configured: the database is
+`supertag-sync-directories' root is configured: the database is
 copied to `<root>/.supertag/supertag-db.el', verified loadable, this
 session's persistence wiring is switched over and the store reloaded from
 the new location, and only then is the OLD file renamed (never deleted) to
@@ -992,7 +992,7 @@ root at all with a non-interactive caller."
 ;;; --- S4 vault registry (V1 single-root) ---
 ;;
 ;; There is no separate "registry" data structure in this codebase (see the
-;; migration Commentary above): `org-supertag-sync-directories' -- a plain
+;; migration Commentary above): `supertag-sync-directories' -- a plain
 ;; list of vault root directories -- IS the registry. Registering a newly
 ;; cloned vault means appending its root to that list (if not already
 ;; there) and pointing this session's persistence wiring at
@@ -1002,19 +1002,19 @@ root at all with a non-interactive caller."
 
 (defun supertag-git--register-vault-root (root)
   "Best-effort register ROOT (a freshly cloned repository) as this
-session's git-sync vault: append it to `org-supertag-sync-directories'
+session's git-sync vault: append it to `supertag-sync-directories'
 \(if bound and not already present) and switch persistence wiring to
 `<ROOT>/.supertag/'. Degrades to just the wiring switch when
-`org-supertag-sync-directories' is not bound (e.g. `org-supertag.el' /
+`supertag-sync-directories' is not bound (e.g. `org-supertag.el' /
 `supertag-services-sync.el' not loaded in this session)."
   (let ((root (file-name-as-directory (expand-file-name root))))
-    (when (boundp 'org-supertag-sync-directories)
+    (when (boundp 'supertag-sync-directories)
       (let ((supertag--config-guard-allow t)
-            (current (and (listp org-supertag-sync-directories)
-                          org-supertag-sync-directories)))
+            (current (and (listp supertag-sync-directories)
+                          supertag-sync-directories)))
         (unless (member root (mapcar (lambda (d) (file-name-as-directory (expand-file-name d)))
                                      current))
-          (setq org-supertag-sync-directories (append current (list root))))))
+          (setq supertag-sync-directories (append current (list root))))))
     (supertag-git--apply-data-directory-wiring (expand-file-name ".supertag/" root))
     root))
 

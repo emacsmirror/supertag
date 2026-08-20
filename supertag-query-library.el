@@ -31,7 +31,7 @@
 
 (defgroup supertag-query-library nil
   "Saved queries, guided builder, and syntax reference for Org-Supertag queries."
-  :group 'org-supertag)
+  :group 'supertag)
 
 ;;; --- Saved queries ---------------------------------------------------
 
@@ -266,7 +266,7 @@ query this library ran/inserted/built.  Persists with the Store via
 ;;;###autoload
 (defun supertag-query-insert-saved (name)
   "Insert the saved query NAME as a query block at point.
-Offers the Org Babel form (`#+BEGIN_SRC org-supertag-query-block ...')
+Offers the Org Babel form (`#+BEGIN_SRC supertag-query-block ...')
 by default.  If the query-block layer's dynamic-block insert command
 (the `#+BEGIN: supertag-query ...' form) is loaded, also offer that
 form -- see supertag-ui-query-block.el for its docstring and exact
@@ -285,7 +285,7 @@ parameters (:sort/:order/:limit/:columns and friends)."
           (message "Query copied to kill-ring (yank it if %s prompts for one); invoking it now."
                    dynamic-cmd)
           (call-interactively dynamic-cmd))
-      (insert (format "#+BEGIN_SRC org-supertag-query-block :results raw\n%s\n#+END_SRC\n"
+      (insert (format "#+BEGIN_SRC supertag-query-block :results raw\n%s\n#+END_SRC\n"
                        query-string)))))
 
 ;;; --- Guided builder -------------------------------------------------------
@@ -414,7 +414,7 @@ COMBINATOR is \"and\"/\"or\" (a string) or the symbol `and'/`or'."
        (kill-new text)
        (message "Copied to kill-ring: %s" text))
       ("Insert block"
-       (insert (format "#+BEGIN_SRC org-supertag-query-block :results raw\n%s\n#+END_SRC\n" text)))
+       (insert (format "#+BEGIN_SRC supertag-query-block :results raw\n%s\n#+END_SRC\n" text)))
       ("Run now"
        (pop-to-buffer (supertag-query-library--render-results expr)))
       ("Save as named query"

@@ -28,7 +28,7 @@
 
 (defgroup supertag-graph-ui nil
   "Graph visualization for org-supertag."
-  :group 'org-supertag
+  :group 'supertag
   :prefix "supertag-graph-ui-")
 
 (defcustom supertag-graph-ui-port 35901
@@ -355,8 +355,8 @@ PATH is /node/<encoded-id>."
 
 (defun supertag-graph-ui--send-variables (ws)
   "Send configuration variables through WebSocket WS."
-  (let ((sync-dirs (or (and (boundp 'org-supertag-sync-directories)
-                            org-supertag-sync-directories)
+  (let ((sync-dirs (or (and (boundp 'supertag-sync-directories)
+                            supertag-sync-directories)
                        '())))
     (condition-case nil
         (websocket-send-text

@@ -29,7 +29,7 @@
 
 (defgroup supertag-board nil
   "Whiteboard visualization for org-supertag."
-  :group 'org-supertag
+  :group 'supertag
   :prefix "supertag-board-")
 
 (defcustom supertag-board-port 35905

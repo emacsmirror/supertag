@@ -49,7 +49,7 @@ compute via `locate-library' on THIS machine.")
 (require 'supertag-merge)
 (require 'supertag-git)
 
-;; `org-supertag-sync-directories' is normally defined by
+;; `supertag-sync-directories' is normally defined by
 ;; supertag-services-sync.el; `supertag-git.el' only ever checks
 ;; `(boundp ...)' on it (by design -- see its Commentary on the V1
 ;; single-root check), and this test file follows the same minimal-require
@@ -61,7 +61,7 @@ compute via `locate-library' on THIS machine.")
 ;; see. Harmless no-op if some other test file in the same batch run
 ;; already loaded the real `defcustom' first: `defvar' only ever sets the
 ;; value when the symbol is still unbound.
-(defvar org-supertag-sync-directories nil)
+(defvar supertag-sync-directories nil)
 
 ;;; --- Small process/git helpers ---
 
@@ -542,13 +542,13 @@ never duplicates a `.gitattributes'/`.gitignore' line, and reports empty
 
 (supertag-git-test--deftest supertag-git-test-unit-multi-root-refusal
     "`supertag-git-setup--pick-root' refuses outright when
-`org-supertag-sync-directories' configures more than one root (the V1
+`supertag-sync-directories' configures more than one root (the V1
 single-root vault limitation)."
   (supertag-git-test--with-temp-dir dir
     (let* ((root1 (expand-file-name "root1" dir))
            (root2 (expand-file-name "root2" dir))
            (db-dir (expand-file-name "elsewhere" dir))
-           (org-supertag-sync-directories (list root1 root2)))
+           (supertag-sync-directories (list root1 root2)))
       (make-directory root1 t) (make-directory root2 t) (make-directory db-dir t)
       (should-error (supertag-git-setup--pick-root db-dir) :type 'user-error))))
 
@@ -559,7 +559,7 @@ silently `git init'-ing somewhere the database does not live."
   (supertag-git-test--with-temp-dir dir
     (let* ((root (file-name-as-directory (expand-file-name "vaultroot" dir)))
            (db-dir (file-name-as-directory (expand-file-name "elsewhere/dbdir" dir)))
-           (org-supertag-sync-directories (list root)))
+           (supertag-sync-directories (list root)))
       (make-directory root t) (make-directory db-dir t)
       (should-error (supertag-git-setup--pick-root db-dir) :type 'user-error))))
 

@@ -17,7 +17,7 @@
 
 (defgroup supertag-view-svg-tag nil
   "SVG tag rendering for org-supertag inline #tags."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-svg-tag-enable t
   "When non-nil, render #tags as SVG pill badges.

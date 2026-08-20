@@ -1,11 +1,11 @@
-;;; org-supertag.el --- SuperTag plugin for Org mode -*- lexical-binding: t; -*-
+;;; supertag.el --- Semantic knowledge system for Org mode -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024 Yibie
 
 ;; Author: Yibie
 ;; Keywords: org-mode, tags, metadata, workflow, automation
-;; Version: 5.9.0
-;; URL: https://github.com/yibie/org-supertag
+;; Version: 6.0.0
+;; URL: https://github.com/yibie/supertag
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -24,7 +24,7 @@
 
 ;;; Commentary:
 
-;; org-supertag is a powerful tagging system for Org mode that extends the
+;; Supertag is a semantic knowledge system for Org mode that extends the
 ;; traditional tagging capabilities with advanced features
 
 ;; Package-Requires: ((emacs "29.1") (org "9.6") (ht "2.4"))
@@ -37,15 +37,15 @@
 (require 'org-id)
 (require 'subr-x)
 
-(defgroup org-supertag nil
-  "Core configuration for Org-Supertag."
+(defgroup supertag nil
+  "Core configuration for Supertag."
   :group 'org)
 
 (defcustom supertag-data-directory
-  (expand-file-name "org-supertag" user-emacs-directory)
-  "Directory for storing Org-Supertag data."
+  (expand-file-name "supertag" user-emacs-directory)
+  "Directory for storing Supertag data."
   :type 'directory
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defvar supertag--base-data-directory
   (file-name-as-directory (expand-file-name supertag-data-directory))
@@ -53,16 +53,16 @@
 
 This stays constant even when `supertag-data-directory` is switched per vault.")
 
-(defcustom org-supertag-active-sync-directory nil
-  "Active vault root directory when `org-supertag-sync-directories` lists multiple roots.
+(defcustom supertag-active-sync-directory nil
+  "Active vault root directory when `supertag-sync-directories` lists multiple roots.
 
-This is only used when `org-supertag-sync-directories-mode` is `vaults`.
+This is only used when `supertag-sync-directories-mode` is `vaults`.
 The value may include `~`; it will be normalized internally."
   :type '(choice (const :tag "First directory" nil)
                  directory)
-  :group 'org-supertag)
+  :group 'supertag)
 
-(defcustom org-supertag-vault-auto-switch nil
+(defcustom supertag-vault-auto-switch nil
   "When non-nil, automatically switch the active vault for Org buffers.
 
 If enabled, entering an Org buffer will activate the matching vault (by file path),
@@ -70,17 +70,17 @@ which includes loading that vault's DB/state and restarting auto-sync for it.
 
 Default is nil to avoid unexpected IO and model reload costs during navigation."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
-(defcustom org-supertag-vault-modeline-indicator t
+(defcustom supertag-vault-modeline-indicator t
   "When non-nil, show the matched vault name in the mode line for Org buffers.
 
 This does not switch the active vault; it only displays which vault the current
 file belongs to (based on its path)."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
-(defcustom org-supertag-file-id-source 'org-roam
+(defcustom supertag-file-id-source 'org-roam
   "Policy for recognizing stable file node IDs.
 - `org-roam' => require :ID: in the top-level :PROPERTIES: drawer
 - `denote'   => require a #+IDENTIFIER: keyword
@@ -92,7 +92,7 @@ Files without the selected persistent identity remain ordinary Org files."
                  (const :tag "denote (#+IDENTIFIER:)" denote)
                  (const :tag "auto-detect either identity" auto)
                  (const :tag "disable file nodes" disabled))
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defvar supertag-vault--current nil
   "Currently active vault plist (normalized).")
@@ -127,8 +127,8 @@ Files without the selected persistent identity remain ordinary Org files."
     ('supertag-db-file :db-file)
     ('supertag-db-backup-directory :backup-directory)
     ('supertag-sync-state-file :sync-state-file)
-    ('org-supertag-sync-directories :sync-directories)
-    ('org-supertag-active-sync-directory :active-sync-directory)
+    ('supertag-sync-directories :sync-directories)
+    ('supertag-active-sync-directory :active-sync-directory)
     (_ nil)))
 
 (defun supertag-config-guard--capture ()
@@ -139,10 +139,10 @@ Files without the selected persistent identity remain ordinary Org files."
               :backup-directory supertag-db-backup-directory
               :sync-state-file (when (boundp 'supertag-sync-state-file)
                                  supertag-sync-state-file)
-              :sync-directories (when (boundp 'org-supertag-sync-directories)
-                                  org-supertag-sync-directories)
-              :active-sync-directory (when (boundp 'org-supertag-active-sync-directory)
-                                       org-supertag-active-sync-directory))))
+              :sync-directories (when (boundp 'supertag-sync-directories)
+                                  supertag-sync-directories)
+              :active-sync-directory (when (boundp 'supertag-active-sync-directory)
+                                       supertag-active-sync-directory))))
 
 (defun supertag-config-guard--update (symbol newval)
   "Update guard state for SYMBOL to NEWVAL."
@@ -177,8 +177,8 @@ Files without the selected persistent identity remain ordinary Org files."
                      supertag-db-file
                      supertag-db-backup-directory
                      supertag-sync-state-file
-                     org-supertag-sync-directories
-                     org-supertag-active-sync-directory))
+                     supertag-sync-directories
+                     supertag-active-sync-directory))
         (add-variable-watcher var #'supertag-config-guard--watch)))))
 
 (defmacro supertag-config-guard--with-allow (&rest body)
@@ -226,13 +226,13 @@ Files without the selected persistent identity remain ordinary Org files."
 
 (defun supertag-vault--vault-mode-p ()
   "Return non-nil when sync directories are treated as separate vaults."
-  (and (boundp 'org-supertag-sync-directories-mode)
-       (eq org-supertag-sync-directories-mode 'vaults)))
+  (and (boundp 'supertag-sync-directories-mode)
+       (eq supertag-sync-directories-mode 'vaults)))
 
 (defun supertag-vault--normalized-vaults ()
   "Return list of normalized vaults."
-  (when (and (supertag-vault--vault-mode-p) (listp org-supertag-sync-directories))
-    (delq nil (mapcar #'supertag-vault--normalize-vault-root org-supertag-sync-directories))))
+  (when (and (supertag-vault--vault-mode-p) (listp supertag-sync-directories))
+    (delq nil (mapcar #'supertag-vault--normalize-vault-root supertag-sync-directories))))
 
 (defun supertag-vault--find-by-root (root)
   "Find normalized vault by ROOT directory."
@@ -280,23 +280,23 @@ Files without the selected persistent identity remain ordinary Org files."
   (when (supertag-vault--vault-mode-p)
     (let ((vaults (supertag-vault--normalized-vaults)))
       (cond
-       ((and org-supertag-active-sync-directory
-             (supertag-vault--find-by-root org-supertag-active-sync-directory))
-        (plist-get (supertag-vault--find-by-root org-supertag-active-sync-directory) :root))
+       ((and supertag-active-sync-directory
+             (supertag-vault--find-by-root supertag-active-sync-directory))
+        (plist-get (supertag-vault--find-by-root supertag-active-sync-directory) :root))
        ((and (consp vaults) (plist-get (car vaults) :root))
         (plist-get (car vaults) :root))
        (t nil)))))
 
 ;;;###autoload
-(defun org-supertag--effective-sync-directories ()
+(defun supertag--effective-sync-directories ()
   "Return effective sync directories for the current session.
 
 In vault mode, returns a single-element list containing the active vault root.
-Otherwise, returns `org-supertag-sync-directories` unchanged."
+Otherwise, returns `supertag-sync-directories` unchanged."
   (if (supertag-vault--vault-mode-p)
       (let ((root (supertag-vault--effective-root)))
         (when root (list root)))
-    org-supertag-sync-directories))
+    supertag-sync-directories))
 
 (defun supertag-vault--persist-current ()
   "Persist current vault state/store best-effort."
@@ -316,9 +316,9 @@ Otherwise, returns `org-supertag-sync-directories` unchanged."
 (defun supertag-vault--update-buffer-indicator ()
   "Update `supertag-vault--buffer-indicator` for the current buffer."
   (setq supertag-vault--buffer-indicator nil)
-  (when (and org-supertag-vault-modeline-indicator
-             (listp org-supertag-sync-directories)
-             (> (length org-supertag-sync-directories) 1))
+  (when (and supertag-vault-modeline-indicator
+             (listp supertag-sync-directories)
+             (> (length supertag-sync-directories) 1))
     (let ((name (supertag-vault--buffer-vault-name)))
       (setq supertag-vault--buffer-indicator
             (if name
@@ -345,7 +345,7 @@ active vault when `supertag-sync-auto-start` is non-nil."
   (unless vault
     (user-error "No vault selected"))
   (unless (supertag-vault--vault-mode-p)
-    (user-error "Vault switching requires `org-supertag-sync-directories-mode` set to 'vaults"))
+    (user-error "Vault switching requires `supertag-sync-directories-mode` set to 'vaults"))
   (unless (equal (plist-get vault :id) (supertag-vault--current-id))
     (supertag-vault--persist-current)
     (when (fboundp 'supertag-sync--cancel-auto-start)
@@ -354,7 +354,7 @@ active vault when `supertag-sync-auto-start` is non-nil."
       (ignore-errors (supertag-sync-stop-auto-sync)))
     (supertag-config-guard--with-allow
       (setq supertag-vault--current vault)
-      (setq org-supertag-active-sync-directory (plist-get vault :root)))
+      (setq supertag-active-sync-directory (plist-get vault :root)))
     (supertag-vault--apply vault)
     (when (fboundp 'supertag-persistence-ensure-data-directory)
       (supertag-persistence-ensure-data-directory))
@@ -375,12 +375,12 @@ active vault when `supertag-sync-auto-start` is non-nil."
 ;;;###autoload
 (defun supertag-vault-auto-activate ()
   "Update vault indicator and optionally auto-switch active vault for Org buffers."
-  (when (and (listp org-supertag-sync-directories)
-             (> (length org-supertag-sync-directories) 1))
-    (when org-supertag-vault-modeline-indicator
+  (when (and (listp supertag-sync-directories)
+             (> (length supertag-sync-directories) 1))
+    (when supertag-vault-modeline-indicator
       (supertag-vault-indicator-mode 1))
     (supertag-vault--update-buffer-indicator)
-    (when org-supertag-vault-auto-switch
+    (when supertag-vault-auto-switch
       (let ((file (buffer-file-name)))
         (when file
           (let ((vault (supertag-vault--find-by-file file)))
@@ -393,20 +393,20 @@ active vault when `supertag-sync-auto-start` is non-nil."
         (or supertag--base-data-directory
             (file-name-as-directory (expand-file-name supertag-data-directory))))
   (when (and (supertag-vault--vault-mode-p)
-             (listp org-supertag-sync-directories)
-             (> (length org-supertag-sync-directories) 1))
-    (let* ((vault (or (supertag-vault--find-by-root org-supertag-active-sync-directory)
+             (listp supertag-sync-directories)
+             (> (length supertag-sync-directories) 1))
+    (let* ((vault (or (supertag-vault--find-by-root supertag-active-sync-directory)
                       (car (supertag-vault--normalized-vaults)))))
       (when vault
         (setq supertag-vault--current vault)
-        (setq org-supertag-active-sync-directory (plist-get vault :root))
+        (setq supertag-active-sync-directory (plist-get vault :root))
         (supertag-vault--apply vault)))))
 
 (defcustom supertag-project-root
   (file-name-directory (file-name-directory (or load-file-name buffer-file-name)))
   "The root directory of the org-supertag project."
   :type 'directory
-  :group 'org-supertag)
+  :group 'supertag)
 
 ;; --- Core Components ---
 (require 'ht) ; Ensure ht is loaded before other modules that might depend on it
@@ -475,12 +475,9 @@ active vault when `supertag-sync-auto-start` is non-nil."
 ;; --- Migration ---
 (require 'supertag-migration)
 
-;; --- Compat ---
-(require 'supertag-compat)
-
 ;; --- Diagnostics (optional) ---
 (autoload 'supertag-doctor "supertag-doctor"
-  "Run Org-Supertag health checks and guided repairs." t)
+  "Run Supertag health checks and guided repairs." t)
 
 ;; --- Git sync (optional) ---
 ;; Keep the documented M-x commands discoverable even when Org-Supertag is
@@ -514,11 +511,14 @@ active vault when `supertag-sync-auto-start` is non-nil."
 
 ;; --- Initialization ---
 (defun supertag-init ()
- "Initialize the Org-Supertag system.
+ "Initialize the Supertag system.
 This function loads all necessary components and sets up the environment."
     (interactive)
 
-    ;; Step 0: Select default vault (if configured) before any IO.
+    ;; Step 0: Refuse ambiguous legacy/default data roots before any IO.
+    (supertag-persistence-check-legacy-data-directory)
+
+    ;; Step 1: Select default vault (if configured) before any IO.
     (supertag-vault--select-startup-default)
     
     ;; Step 1: Ensure data directories exist
@@ -587,30 +587,30 @@ This function loads all necessary components and sets up the environment."
 (defun supertag--check-critical-config ()
   "Check critical configuration before initialization.
 Warn user if important settings are missing or incorrect."
-  (unless org-supertag-sync-directories
-    (display-warning 'org-supertag
-                     "org-supertag-sync-directories is not configured!\n\
+  (unless supertag-sync-directories
+    (display-warning 'supertag
+                     "supertag-sync-directories is not configured!\n\
 This means no files will be synchronized automatically.\n\
 Please set this variable in your Emacs configuration, for example:\n\
-  (setq org-supertag-sync-directories '(\"/path/to/your/notes\"))"
+  (setq supertag-sync-directories '(\"/path/to/your/notes\"))"
                      :warning))
 
-  (when org-supertag-sync-directories
-    (dolist (dir org-supertag-sync-directories)
+  (when supertag-sync-directories
+    (dolist (dir supertag-sync-directories)
       (unless (file-directory-p (expand-file-name dir))
-        (display-warning 'org-supertag
+        (display-warning 'supertag
                          (format "Configured sync directory does not exist: %s\n\
-Please check your org-supertag-sync-directories configuration."
+Please check your supertag-sync-directories configuration."
                                  (abbreviate-file-name (expand-file-name dir)))
                          :warning))))
 
   (when (supertag-vault--vault-mode-p)
     (let ((vaults (supertag-vault--normalized-vaults)))
-      (when (and (> (length org-supertag-sync-directories) 1)
+      (when (and (> (length supertag-sync-directories) 1)
                  (null vaults))
-        (display-warning 'org-supertag
+        (display-warning 'supertag
                          "Vault mode is enabled but no valid vault roots were found.\n\
-Check `org-supertag-sync-directories`."
+Check `supertag-sync-directories`."
                          :warning)))))
 
 (defun supertag--validate-initialization ()
@@ -638,7 +638,7 @@ Check `org-supertag-sync-directories`."
                (> db-size 100)  ; Non-trivial file size
                (not store-is-valid)  ; Store is invalid or empty
                (= node-count 0))
-      (display-warning 'org-supertag
+      (display-warning 'supertag
                        (format "Database file exists but contains no nodes!\n\
 Database: %s\n\
 This may indicate:\n\
@@ -650,8 +650,8 @@ Consider running: M-x supertag-reindex-org" db-file)
     
     ;; Suggest initial sync if database is truly empty
     (when (and (= node-count 0)
-               org-supertag-sync-directories
-               (cl-some #'file-directory-p org-supertag-sync-directories))
+               supertag-sync-directories
+               (cl-some #'file-directory-p supertag-sync-directories))
       (message "Database is empty. Consider running: M-x supertag-reindex-org"))))
  
 ;; --- Hooks for persistence ---
@@ -680,8 +680,8 @@ Consider running: M-x supertag-reindex-org" db-file)
 (add-hook 'org-mode-hook #'supertag-vault-auto-activate)
 (add-hook 'org-mode-hook #'supertag-sync-setup-realtime-hooks)
 
-(provide 'org-supertag)
+(provide 'supertag)
 
-;;; org-supertag.el ends here
+;;; supertag.el ends here
 
  

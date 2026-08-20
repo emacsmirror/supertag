@@ -26,7 +26,7 @@
   "When non-nil, log detailed field mutation events and automation processing.
 Useful for diagnosing field value loss or unexpected overwrites."
   :type 'boolean
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defconst supertag-field--missing (list :supertag-field-missing)
   "Sentinel used to detect missing field values.")

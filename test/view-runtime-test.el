@@ -335,7 +335,7 @@ and failing on it would report a defect that does not exist."
             (should (buffer-live-p buffer))
             (should (equal (buffer-name buffer) buffer-name))
             (with-current-buffer buffer
-              (should org-supertag-search-mode)
+              (should supertag-search-mode)
               (should (string-match-p "First result" (buffer-string))))
             (supertag-view-refresh buffer)
             (with-current-buffer buffer

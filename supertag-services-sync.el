@@ -25,7 +25,7 @@
 (require 'supertag-ops-relation) ; For supertag-relation-create, supertag-relation-find-between
 (require 'supertag-core-async) ; For async job queue
 
-(defvar org-supertag-file-id-source 'org-roam
+(defvar supertag-file-id-source 'org-roam
   "Policy for recognizing stable file node IDs.")
 
 ;;; Customization (from org-supertag-old/org-supertag-sync.el)
@@ -53,15 +53,15 @@
   :type 'number
   :group 'supertag-sync)
 
-(defcustom org-supertag-sync-directories nil
+(defcustom supertag-sync-directories nil
   "List of directories to monitor for automatic synchronization.
 Each entry should be an absolute path. Subdirectories will also be monitored.
 If nil, no automatic synchronization will occur."
   :type '(repeat directory)
   :group 'supertag-sync)
 
-(defcustom org-supertag-sync-directories-mode 'unified
-  "How to interpret `org-supertag-sync-directories`.
+(defcustom supertag-sync-directories-mode 'unified
+  "How to interpret `supertag-sync-directories`.
 
 - `unified`: all directories share one database (legacy/default behavior).
 - `vaults`: each directory is treated as an isolated vault with its own DB/state,
@@ -76,15 +76,15 @@ Vault activation is handled by `org-supertag.el` (see `supertag-vault-activate`)
   "Return effective sync directories.
 
 When Org-Supertag is running in vault mode, this resolves to the active vault's
-directory (single-element list). Otherwise returns `org-supertag-sync-directories`."
-  (if (and (eq org-supertag-sync-directories-mode 'vaults)
-           (fboundp 'org-supertag--effective-sync-directories))
-      (org-supertag--effective-sync-directories)
-    org-supertag-sync-directories))
+directory (single-element list). Otherwise returns `supertag-sync-directories`."
+  (if (and (eq supertag-sync-directories-mode 'vaults)
+           (fboundp 'supertag--effective-sync-directories))
+      (supertag--effective-sync-directories)
+    supertag-sync-directories))
 
 (defcustom supertag-sync-exclude-directories nil
   "List of directories to exclude from synchronization.
-Takes precedence over `org-supertag-sync-directories`."
+Takes precedence over `supertag-sync-directories`."
   :type '(repeat directory)
   :group 'supertag-sync)
 
@@ -385,7 +385,7 @@ Otherwise, returns a list of new files that are not yet in sync state."
         (state-table (supertag-sync--get-state-table)))
     (let ((sync-dirs (supertag-sync--effective-directories)))
       (if (not sync-dirs)
-          (message "WARNING: org-supertag-sync-directories is not configured. No files will be synced.")
+          (message "WARNING: supertag-sync-directories is not configured. No files will be synced.")
         (dolist (dir sync-dirs)
           (when (file-exists-p dir)
             (let ((dir-files (directory-files-recursively
@@ -652,7 +652,7 @@ Returns the loaded or initialized sync state."
 (defun supertag-sync-ensure-directories ()
   "Ensure sync directories are properly configured."
   (unless (supertag-sync--effective-directories)
-    (message "Warning: `org-supertag-sync-directories` is not set. Auto-sync will not occur.")))
+    (message "Warning: `supertag-sync-directories` is not set. Auto-sync will not occur.")))
 
 (defvar supertag-sync--timer nil
   "Timer for periodic sync checks.")
@@ -962,7 +962,7 @@ Projection; Semantic Facts live in their own Store collections."
 (defun supertag-sync--parse-file-header ()
   "Parse file header in current buffer for file node properties.
 Returns a plist with identity, title, tags, and top-level :ref-to links.
-Identity selection follows `org-supertag-file-id-source'."
+Identity selection follows `supertag-file-id-source'."
   (save-excursion
     (goto-char (point-min))
     (let (org-id denote-id id link-type title file-tags ref-to)
@@ -981,7 +981,7 @@ Identity selection follows `org-supertag-file-id-source'."
              "^#\\+IDENTIFIER:\\s-*\\(.+\\)"
              (min 2000 (point-max)) t)
         (setq denote-id (string-trim (match-string 1))))
-      (pcase org-supertag-file-id-source
+      (pcase supertag-file-id-source
         ((or 'org-roam 'org-id)
          (setq id org-id link-type (and org-id 'id)))
         ('denote
@@ -990,7 +990,7 @@ Identity selection follows `org-supertag-file-id-source'."
          (setq id (or org-id denote-id)
                link-type (cond (org-id 'id) (denote-id 'denote))))
         ('disabled nil)
-        (_ (user-error "Unknown file node policy: %S" org-supertag-file-id-source)))
+        (_ (user-error "Unknown file node policy: %S" supertag-file-id-source)))
       ;; Read #+TITLE:
       (goto-char (point-min))
       (when (re-search-forward
@@ -1203,7 +1203,7 @@ COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-dele
   It enqueues modified files for asynchronous processing."
   ;; Pre-check: Warn if sync directories are not configured
   (unless (supertag-sync--effective-directories)
-    (message "WARNING: org-supertag-sync-directories is not configured. Sync will not run.")
+    (message "WARNING: supertag-sync-directories is not configured. Sync will not run.")
     (cl-return-from supertag-sync--check-and-sync-legacy nil))
 
   (let ((files-to-remove nil)
@@ -1270,7 +1270,7 @@ COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-dele
   "Check and synchronize modified files with snapshot guard."
   ;; Pre-check: Warn if sync directories are not configured
   (unless (supertag-sync--effective-directories)
-    (message "WARNING: org-supertag-sync-directories is not configured. Sync will not run.")
+    (message "WARNING: supertag-sync-directories is not configured. Sync will not run.")
     (cl-return-from supertag-sync--check-and-sync-guarded nil))
   (let* ((snapshot (supertag-sync--snapshot-build))
          (status (plist-get snapshot :status))
@@ -1457,7 +1457,7 @@ Returns t if the node ID is found, nil otherwise."
          (file-exists-p file)
          (with-temp-buffer
            (insert-file-contents-literally file)
-           (let ((org-supertag-file-id-source policy))
+           (let ((supertag-file-id-source policy))
              (equal id (plist-get (supertag-sync--parse-file-header) :id)))))))
 
 (defun supertag-sync-validate-nodes (&optional counters)
@@ -2521,7 +2521,7 @@ Provides helpful hints to the user about configuration issues."
     (cond
      ;; Case 1: No sync directories configured
      ((null sync-dirs)
-      (message "DIAGNOSTIC: No sync directories configured. Set org-supertag-sync-directories."))
+      (message "DIAGNOSTIC: No sync directories configured. Set supertag-sync-directories."))
 
      ;; Case 2: Sync directories don't exist
      ((not (cl-some #'file-directory-p sync-dirs))

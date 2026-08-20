@@ -23,7 +23,7 @@
 
 (defgroup supertag-diagnostics nil
   "Experimental helpers for Org-Supertag."
-  :group 'org-supertag)
+  :group 'supertag)
 
 (defcustom supertag-diagnostics-ref-stale-days 7
   "Days after which a `ref' node is considered stale if not done."

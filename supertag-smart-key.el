@@ -303,7 +303,7 @@ With prefix argument ASSIST, offer actions relevant to that object."
 `supertag-menu', so Org-Supertag's context-sensitive activation and its
 discoverable command menu are always one keystroke away."
   :global t
-  :group 'org-supertag
+  :group 'supertag
   :keymap supertag-smart-key-mode-map)
 
 (provide 'supertag-smart-key)
