@@ -143,7 +143,10 @@
      ((not (fboundp 'file-locked-p))
       (insert "n/a (helper not available: file-locked-p)\n"))
      (t
-      (let ((status (ignore-errors (file-locked-p active))))
+      (let ((status (ignore-errors
+                      (if (fboundp 'supertag--db-lock-status)
+                          (supertag--db-lock-status active)
+                        (file-locked-p active)))))
         (insert
          (format "Lock status for %s: %s\n"
                  active

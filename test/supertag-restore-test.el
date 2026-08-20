@@ -246,7 +246,7 @@ VERSION defaults to `supertag-data-version' and ROOT-KEY to :nodes."
                  (lambda () (cl-incf release-count))))
         (supertag-restore-test--run-command snapshot))
       (should (= 0 release-count))
-      (should (eq t (file-locked-p supertag-db-file))))))
+      (should (eq t (supertag--db-lock-status supertag-db-file))))))
 
 (ert-deftest supertag-restore-test-downgrade-snapshot-is-not-auto-migrated ()
   (supertag-restore-test--with-temp-env

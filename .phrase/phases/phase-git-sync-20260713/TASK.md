@@ -35,3 +35,8 @@
 - task008 [x] 缩短 fetch/push 首次失败提示，只保留失败操作与自动重试信息；验证：
   精确消息回归先红后绿、Git 38/38、干净 worktree 默认全量 403/403、临时
   byte-compile 与 `git diff --check`。关联：PLAN.md「离线提示收敛」。
+
+- task009 [x] 将同机数据库锁从网络/同步目录迁移到本机临时目录，避免陈旧网络锁阻断保存；保留同机
+  活跃 Emacs 实例之间的互斥，并更新 Doctor/README；验证：锁冲突、锁获取释放、网络目录陈旧锁不阻断
+  保存回归，persist 36/36、Git 38/38、全量 516/516（2 skipped）、临时 byte-compile、
+  `check-parens` 与 `git diff --check`。

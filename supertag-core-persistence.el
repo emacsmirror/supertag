@@ -100,12 +100,26 @@ is aborted and the previous database file is left untouched."
 (defcustom supertag-db-lock t
   "When non-nil, protect the database from concurrent multi-instance access.
 Uses Emacs' built-in advisory file locking (`lock-file', `unlock-file',
-`file-locked-p') on `supertag-db-file'. When another Emacs instance already
-holds the lock, this session records the conflict in
+`file-locked-p') for `supertag-db-file'. By default, local database files use
+`supertag-db-lock-directory' so the lock stays on this host instead of a
+network or sync filesystem. When another Emacs instance already holds the
+lock, this session records the conflict in
 `supertag--db-lock-conflict' and refuses to save the database until the
 other instance releases the lock (or `supertag-db-retry-lock' is used once
 it has exited)."
   :type 'boolean
+  :group 'org-supertag)
+
+(defcustom supertag-db-lock-directory
+  (expand-file-name "org-supertag-locks/" temporary-file-directory)
+  "Directory for local database advisory lock files.
+When non-nil, local `supertag-db-file' paths are mapped to deterministic
+SHA-256 lock names in this directory. This keeps same-host locking out of
+network/sync folders, where stale lock artifacts can survive a disconnected
+session. Remote/TRAMP database paths and a nil value retain Emacs' native
+database-adjacent lock behavior. If this directory cannot be created, the
+native behavior is used as a safe fallback."
+  :type '(choice (const :tag "Use database directory" nil) directory)
   :group 'org-supertag)
 
 (defcustom supertag-db-auto-migrate t
@@ -206,6 +220,38 @@ the correct file's lock.")
 
 ;;; --- Multi-instance DB Locking ---
 
+(defun supertag--db-lock-file-transforms (file)
+  "Return the local lock transform for FILE, or nil when unavailable.
+Only local paths are transformed; a failed directory creation deliberately
+falls back to Emacs' native database-adjacent lock behavior."
+  (when (and (stringp supertag-db-lock-directory)
+             (> (length supertag-db-lock-directory) 0)
+             (stringp file)
+             (not (file-remote-p supertag-db-lock-directory))
+             (not (file-remote-p file)))
+    (let ((directory (file-name-as-directory
+                      (expand-file-name supertag-db-lock-directory))))
+      (when (condition-case nil
+                (progn (make-directory directory t) t)
+              (error nil))
+        (list (list (concat "\\`" (regexp-quote (expand-file-name file)) "\\'")
+                    directory
+                    'sha256))))))
+
+(defun supertag--db-lock-status (file)
+  "Return Emacs' lock status for FILE using SuperTag's lock location."
+  (let ((lock-file-name-transforms
+         (append (supertag--db-lock-file-transforms file)
+                 lock-file-name-transforms)))
+    (file-locked-p file)))
+
+(defun supertag--db-lock-file-name (file)
+  "Return the actual lock path Emacs uses for FILE."
+  (let ((lock-file-name-transforms
+         (append (supertag--db-lock-file-transforms file)
+                 lock-file-name-transforms)))
+    (make-lock-file-name file)))
+
 (defun supertag--db-acquire-lock ()
   "Acquire the advisory lock on `supertag-db-file' for this Emacs instance.
 When `supertag-db-lock' is enabled and `supertag-db-file' is set, checks
@@ -220,7 +266,7 @@ locking problem can never break DB loading."
   (when (and supertag-db-lock
              (stringp supertag-db-file)
              (> (length supertag-db-file) 0))
-    (let ((owner (file-locked-p supertag-db-file)))
+    (let ((owner (supertag--db-lock-status supertag-db-file)))
       (if (stringp owner)
           (progn
             (setq supertag--db-lock-conflict owner)
@@ -229,7 +275,10 @@ locking problem can never break DB loading."
         (setq supertag--db-lock-conflict nil)
         (condition-case err
             (let ((create-lockfiles t))
-              (lock-file supertag-db-file)
+              (let ((lock-file-name-transforms
+                     (append (supertag--db-lock-file-transforms supertag-db-file)
+                             lock-file-name-transforms)))
+                (lock-file supertag-db-file))
               (setq supertag--db-locked-file supertag-db-file))
           (error
            (message "Supertag: failed to acquire lock on %s: %s (continuing without a lock)"
@@ -242,7 +291,11 @@ Safe no-op when no lock is currently held (`supertag--db-locked-file' is
 nil). Any error from `unlock-file' is ignored, since a failed unlock must
 never interrupt shutdown or vault switching."
   (when supertag--db-locked-file
-    (ignore-errors (unlock-file supertag--db-locked-file))
+    (ignore-errors
+      (let ((lock-file-name-transforms
+             (append (supertag--db-lock-file-transforms supertag--db-locked-file)
+                     lock-file-name-transforms)))
+        (unlock-file supertag--db-locked-file)))
     (setq supertag--db-locked-file nil))
   (setq supertag--db-lock-conflict nil))
 
@@ -263,10 +316,10 @@ it over so saves can resume."
 ;;; --- Cross-machine Presence (advisory; S0 of the git-sync hardening plan) ---
 ;;
 ;; `supertag--db-acquire-lock' above only ever sees *this machine's* other
-;; Emacs instances (`lock-file' writes a local symlink next to the DB file,
-;; which most sync services do not even propagate reliably, and certainly
-;; not promptly). It cannot detect a second machine editing the same
-;; Dropbox/iCloud-synced database. Presence closes that visibility gap with
+;; Emacs instances (`lock-file' writes a host-local symlink, using the
+;; configured transform above for local databases). It cannot detect a second
+;; machine editing the same Dropbox/iCloud-synced database. Presence closes
+;; that visibility gap with
 ;; an ordinary, sync-friendly JSON file instead of a lock primitive: it is
 ;; written periodically and read on load, purely advisory, and never blocks
 ;; a save the way a lock conflict does.
@@ -1184,7 +1237,7 @@ Signals an error if the file cannot be read or parsed."
                (> current-nodes 0))
       (push "field-values dropped to 0 (possible data loss)" reasons))
     (when supertag-db-lock
-      (let ((live-owner (file-locked-p db-file)))
+      (let ((live-owner (supertag--db-lock-status db-file)))
         (cond
          ((stringp live-owner)
           (setq supertag--db-lock-conflict live-owner)
@@ -1662,7 +1715,7 @@ lock already held for it; this is reserved for the restore critical section."
     (when (and preserve-lock
                supertag-db-lock
                (or (not (equal supertag--db-locked-file locked-file))
-                   (not (eq t (file-locked-p locked-file)))))
+                   (not (eq t (supertag--db-lock-status locked-file)))))
       (user-error "Cannot preserve a database lock not held by this Emacs"))
     ;; Release any lock held for a previously loaded DB file (e.g. when
     ;; switching vaults) before possibly loading a different one below.
@@ -1710,7 +1763,7 @@ lock already held for it; this is reserved for the restore critical section."
                  (migration-will-be-skipped
                   (and version-mismatch
                        supertag-db-auto-migrate
-                       (stringp (file-locked-p file-to-load))))
+                       (stringp (supertag--db-lock-status file-to-load))))
                  (show-manual-hint
                   (or (not supertag-db-auto-migrate) migration-will-be-skipped)))
             (message "Database loaded from %s.%s"
@@ -2308,7 +2361,7 @@ downgrade."
         (supertag--db-acquire-lock)
         (when (and supertag-db-lock
                    (or supertag--db-lock-conflict
-                       (not (eq t (file-locked-p supertag-db-file)))
+                       (not (eq t (supertag--db-lock-status supertag-db-file)))
                        (not (equal supertag--db-locked-file supertag-db-file))))
           (user-error "Cannot restore while the database lock is unavailable%s"
                       (if supertag--db-lock-conflict

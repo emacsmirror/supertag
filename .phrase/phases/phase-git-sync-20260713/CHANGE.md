@@ -1,5 +1,28 @@
 # Git 原生同步变更记录
 
+## 2026-08-19 — task009 / issue045
+
+- Modify `supertag-core-persistence.el`：为本地数据库文件增加
+  `supertag-db-lock-directory`，默认把 Emacs advisory lock 通过
+  `lock-file-name-transforms` 放入本机 `temporary-file-directory/org-supertag-locks/`
+  的确定性 SHA-256 路径；网络/同步目录中的陈旧 `.#*` 不再阻断当前会话。锁目录创建
+  失败或配置为 nil 时回退到 Emacs 原生数据库旁锁行为。
+- Modify 保存守卫、加载/恢复临界区和 `supertag-doctor`：统一通过同一锁状态入口，保留
+  两个当前运行的同机 Emacs 之间的互斥。
+- Add `test/persistence-hardening-test.el` 回归：数据库旁陈旧外部锁不阻断新会话保存，
+  同机外部锁仍然阻断；更新 restore/lock 测试使用实际锁路径。
+- Modify `README.md`, `README_CN.md`, `PLAN.md`, `TASK.md`；说明新锁位置与升级后旧锁
+  清理边界，登记 issue045。
+
+行为：断网或同步服务遗留的数据库旁锁不再让自动保存跳过，因此正常退出不会因这类陈旧
+锁被迫取消；真实同机活跃实例仍会触发保护。跨机器并发仍由 presence 与 Git 单写者/合并
+策略负责。风险：所有需要共享同机锁的 Emacs 实例都必须载入包含此改动的版本；显式将
+`supertag-db-lock-directory` 设为 nil 会恢复旧路径行为。
+
+验证：回归测试先在旧实现上因 `otheruser` 锁冲突失败，修复后 persist 36/36、Git 38/38、
+全量 516/516（2 skipped）；临时目录 byte-compile、`check-parens` 与 `git diff --check`
+通过。
+
 ## 2026-08-10 — task008
 
 - Modify `supertag-git.el`：将 fetch/push 首次失败提示缩短为

@@ -395,3 +395,15 @@ Emacs 自身的保存询问。
 睡眠唤醒等短暂断网会让一次 fetch/push 失败，但同步循环会自动重试。首次失败提示
 只说明失败操作与“稍后重试”，不猜测原因、不显示可能为 0 的 pending 计数；恢复
 提示保持不变。同步、重试与本地数据保留语义不变。
+
+## 数据库锁的网络盘隔离（2026-08-19）
+
+用户报告同步目录中的陈旧 `.#supertag-db.el` 锁会被误判为另一 Emacs 实例，导致
+自动保存跳过并连带阻断正常退出。根因是 Emacs 原生 advisory lock 默认把锁符号链接
+写在数据库旁边；网络/同步文件系统会让这个陈旧路径跨会话残留，且其清理语义不可靠。
+
+task009 将本地数据库文件通过 `lock-file-name-transforms` 映射到
+`temporary-file-directory/org-supertag-locks/` 下的确定性 SHA-256 锁名。映射只对
+本地路径生效，所有同机 Emacs 仍共享同一锁；`supertag-db-lock-directory` 设为 nil
+时保留原生数据库旁锁行为，若本机临时目录不可用也回退到原生行为。跨机器并发编辑
+仍由 presence 告警和 Git 同步策略负责，不能把 advisory lock 当成跨机器锁。

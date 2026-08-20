@@ -9,6 +9,8 @@
 - 2026-08-13: phase-query-syntax-alignment-20260813/change_query_syntax_alignment_20260813.md  # task001 task/priority operators (+ priority #-cookie follow-up fix)
 # CHANGE Index
 
+- 2026-08-19: phase-git-sync-20260713/CHANGE.md  # task009 / issue045 本机数据库锁隔离
+
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task018 unified derived-index cold rebuild contract
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task017 Stable Semantic Tag cutover + resolver
 - 2026-08-12: phase-ownership-separation-20260812/change_ownership_separation_20260812.md  # task016 deterministic Stable Semantic Tag ID dry-run

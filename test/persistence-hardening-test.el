@@ -232,9 +232,7 @@ and internal state variables, so tests never touch the real
     (supertag-persistence-ensure-data-directory)
     (supertag-hardening-test--write-store-file
      supertag-db-file (supertag-hardening-test--make-store '("A")))
-    (let* ((lock-file (expand-file-name
-                        (concat ".#" (file-name-nondirectory supertag-db-file))
-                        (file-name-directory supertag-db-file))))
+    (let* ((lock-file (supertag--db-lock-file-name supertag-db-file)))
       ;; Emacs advisory lock artifacts are dangling symlinks whose target
       ;; encodes "user@host.pid[:boot]"; not every filesystem supports
       ;; symlinks, so skip rather than fail when this one doesn't.
@@ -244,7 +242,7 @@ and internal state variables, so tests never touch the real
          t))
       (unwind-protect
           (progn
-            (let ((owner (file-locked-p supertag-db-file)))
+            (let ((owner (supertag--db-lock-status supertag-db-file)))
               (should (stringp owner))
               (supertag--db-acquire-lock)
               (should (equal supertag--db-lock-conflict owner))
@@ -261,13 +259,47 @@ and internal state variables, so tests never touch the real
     (supertag-persistence-ensure-data-directory)
     (supertag-hardening-test--write-store-file
      supertag-db-file (supertag-hardening-test--make-store '("A")))
-    (should (null (file-locked-p supertag-db-file)))
+    (should (null (supertag--db-lock-status supertag-db-file)))
     (supertag--db-acquire-lock)
     (should (null supertag--db-lock-conflict))
-    (should (eq t (file-locked-p supertag-db-file)))
+    (should (eq t (supertag--db-lock-status supertag-db-file)))
     (supertag--db-release-lock)
-    (should (null (file-locked-p supertag-db-file)))
+    (should (null (supertag--db-lock-status supertag-db-file)))
     (should (null supertag--db-locked-file))))
+
+(ert-deftest supertag-hardening-test-network-lock-artifact-does-not-block-save ()
+  "A stale DB-adjacent lock from a sync folder does not block local saves."
+  (supertag-hardening-test--with-temp-env
+    (supertag-persistence-ensure-data-directory)
+    (supertag-hardening-test--write-store-file
+     supertag-db-file
+     (supertag-hardening-test--make-store '("A") supertag-data-version))
+    (let ((stale-lock (expand-file-name
+                       (concat ".#" (file-name-nondirectory supertag-db-file))
+                       (file-name-directory supertag-db-file))))
+      (skip-unless
+       (ignore-errors
+         (make-symbolic-link "otheruser@otherhost.999999:12345" stale-lock)
+         t))
+      (unwind-protect
+          (cl-letf (((symbol-function 'supertag--persistence--expected-sync-state-file)
+                     (lambda () nil)))
+            (supertag-load-store)
+            (should-not supertag--db-lock-conflict)
+            (should-not (equal stale-lock
+                                (supertag--db-lock-file-name supertag-db-file)))
+            (let* ((nodes (supertag-store-get-collection :nodes))
+                   (node (gethash "A" nodes)))
+              (puthash "A" (plist-put node :title "new") nodes))
+            (supertag-mark-dirty)
+            (supertag-save-store)
+            (should-not (supertag-dirty-p))
+            (let* ((on-disk (supertag--persistence--try-read-store supertag-db-file))
+                   (node (gethash "A" (gethash :nodes on-disk))))
+              (should (equal "new" (plist-get node :title))))
+            (should (file-symlink-p stale-lock))
+            (should (eq t (supertag--db-lock-status supertag-db-file))))
+        (ignore-errors (delete-file stale-lock))))))
 
 ;;; --- 3. Auto-migration ---
 
