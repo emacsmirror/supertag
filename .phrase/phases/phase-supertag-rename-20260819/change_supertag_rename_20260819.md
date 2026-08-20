@@ -61,3 +61,17 @@ Verification：非历史/迁移白名单范围的 `git grep` 只剩 README 中�
   113 条分别为 Changelog 79、迁移指南 14、legacy DB migration 9、persistence
   guard/version 5、对应测试 4、README 升级提示 2。排除这些白名单后为 0。
 - `git diff --check` 通过；用户原有 TextUI、路径修复与未跟踪文件仍未提交。
+
+## 2026-08-19 — task005 外部与本地命名迁移
+
+- `git pull --rebase` 确认旧远端无新增提交；5 个改名提交成功 push。
+- GitHub repository rename：`yibie/org-supertag` → `yibie/supertag`；核验
+  default branch `main`、当前账号 ADMIN、公开 URL 为
+  `https://github.com/yibie/supertag`。
+- Modify origin：fetch/push 均为 `git@github.com:yibie/supertag.git`。
+- Rename local checkout：
+  `/Users/chenyibin/Documents/emacs/package/org-supertag` →
+  `/Users/chenyibin/Documents/emacs/package/supertag`；目标存在时拒绝覆盖。
+- Preserve user work：两份 tracked 修改仅在 pull 期间进入临时 stash，随后无冲突
+  恢复并删除 stash；三个 untracked 文件始终未移动出工作树、未提交。
+- `bd sync` 已执行但仓库不存在 Beads 数据库；未擅自运行 `bd init`。

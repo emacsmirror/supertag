@@ -45,7 +45,10 @@
 
 ## M5 — 外部命名
 
-- task005 [ ] 推送并迁移 GitHub、remote 与本地根目录
+- task005 [x] 推送并迁移 GitHub、remote 与本地根目录
   - 产出：公开仓库 `yibie/supertag`；origin 与本地 checkout 使用新名称。
   - 验证方式：pull/push 成功；GitHub repo 元数据与 `git status` 显示同步。
   - 影响范围：GitHub 仓库、本地 remote、工作区根目录。
+  - 完成：2026-08-19；5 个改名提交先推送到旧远端；GitHub 仓库改为
+    `yibie/supertag`，origin 改为 `git@github.com:yibie/supertag.git`，checkout
+    最终路径为 `/Users/chenyibin/Documents/emacs/package/supertag`；用户未提交改动已恢复。
