@@ -1,10 +1,10 @@
-# Org-SuperTag 数据主权宪章
+# Supertag 数据主权宪章
 
 - Status: Accepted
 - Date: 2026-08-12
 - Scope: 数据所有权、写入方向、重建与恢复语义
 
-Org-SuperTag 的长期模型是：
+Supertag 的长期模型是：
 
 > Org 文档主权 + 数据库语义主权 + 可丢弃查询投影。
 

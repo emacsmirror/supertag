@@ -93,7 +93,7 @@
 ;; ## Load-time visibility (hook choice, justified)
 ;;
 ;; supertag-core-persistence.el must not `require' this file. Rather than
-;; the alternative (a fboundp-guarded check bolted onto org-supertag.el's
+;; the alternative (a fboundp-guarded check bolted onto supertag.el's
 ;; `supertag-init', which only covers ONE of the several places
 ;; `supertag-load-store' is actually called from -- see also
 ;; `supertag-vault-activate') this file instead hooks onto
@@ -108,7 +108,7 @@
 ;; The only requirement this places on load order is that THIS file be
 ;; `require'd (directly or transitively) before the first
 ;; `supertag-load-store' call happens to run -- true for the normal
-;; `org-supertag.el' startup path (which requires this file alongside its
+;; `supertag.el' startup path (which requires this file alongside its
 ;; other core-tier modules), and something any other caller (a test, a
 ;; batch script) opts into explicitly by requiring this file too.
 ;;

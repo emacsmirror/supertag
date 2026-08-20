@@ -2,7 +2,7 @@
 
 ## 🚀 概述
 
-`org-supertag` Automation System 2.0 是一个现代化的、事件驱动的自动化框架。它将强大的自动化能力赋予每一个标签，让您能够构建真正智能、无需手动干预的 org-mode 工作流。
+`supertag` Automation System 2.0 是一个现代化的、事件驱动的自动化框架。它将强大的自动化能力赋予每一个标签，让您能够构建真正智能、无需手动干预的 org-mode 工作流。
 
 ### 核心特性
 
@@ -104,7 +104,7 @@ graph LR
 ```
 **效果分析**: 规则被 `:on-tag-added` 触发器激活，执行了 `:actions` 列表中的 `:update-todo-state` 动作，自动设置 headline 的 TODO 关键字。
 
-> 注意：`org-supertag` 的标签是以内联 `#tag` 的形式呈现，并存储在 supertag 数据库中。
+> 注意：`supertag` 的标签是以内联 `#tag` 的形式呈现，并存储在 supertag 数据库中。
 > `M-x supertag-add-tag` / `M-x supertag-remove-tag-from-node` 是推荐的变更方式；
 > `org-set-tags-command` 修改的是 Org 原生的 `:tag:` 机制，与 supertag 标签不是一回事。
 
@@ -112,7 +112,7 @@ graph LR
 
 ## 核心概念：关系 (Relations)
 
-关系是 `org-supertag` 的核心能力之一，它负责在不同类型的数据（由标签定义）之间建立有意义的链接。例如，将“项目”笔记和“任务”笔记关联起来。
+关系是 `supertag` 的核心能力之一，它负责在不同类型的数据（由标签定义）之间建立有意义的链接。例如，将“项目”笔记和“任务”笔记关联起来。
 
 您可以使用 `supertag-relation-create` 函数来定义一个关系。
 
@@ -164,7 +164,7 @@ graph LR
 
 ## 核心概念：公式字段 (Formula Fields)
 
-公式字段是 `org-supertag` 的一项创新功能，它允许您在表格视图中定义“虚拟列”，这些列的值是根据其他字段实时计算得出的。公式字段的计算结果**不会**存储在节点的属性中，它们只在表格视图被渲染时计算并显示。
+公式字段是 `supertag` 的一项创新功能，它允许您在表格视图中定义“虚拟列”，这些列的值是根据其他字段实时计算得出的。公式字段的计算结果**不会**存储在节点的属性中，它们只在表格视图被渲染时计算并显示。
 
 ### 如何定义公式字段
 
@@ -612,7 +612,7 @@ graph LR
 ### 最小验证矩阵（手动）
 
 下面的矩阵提供一些“小而可重复”的场景，用于确认规则引擎的事件/索引/执行链路是否打通。
-在加载 `org-supertag` 后，您可以在 `*scratch*` 里执行这些片段。
+在加载 `supertag` 后，您可以在 `*scratch*` 里执行这些片段。
 
 #### 1) 标签触发：`(:on-tag-added "task")`
 
@@ -1129,14 +1129,14 @@ Automation System 2.0 的核心性能优势来自于智能索引系统：
 |---------|---------|------|
 | `supertag-behavior-create` | `supertag-automation-create` | 统一创建接口 |
 | `supertag-behavior-attach` | *自动索引* | 无需手动附加 |
-| `org-supertag-behavior-register` | `supertag-automation-create` | 现代化接口 |
+| `supertag-behavior-register` | `supertag-automation-create` | 现代化接口 |
 | `supertag-behavior-detach` | `supertag-automation-delete` | 删除规则 |
 
 ### 配置结构变化
 
 #### 1.0 配置格式：
 ```elisp
-(org-supertag-behavior-register
+(supertag-behavior-register
  "task"
  '(:trigger :on-property-change
    :condition (property-equals :status "Done")

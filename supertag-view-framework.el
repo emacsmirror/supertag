@@ -3,7 +3,7 @@
 ;;; Commentary:
 
 ;; This module provides a framework for developers to create custom views
-;; of org-supertag data.  It is NOT an end-user configuration tool - it is
+;; of supertag data.  It is NOT an end-user configuration tool - it is
 ;; a toolbox for Elisp developers.
 ;;
 ;; Quick start - register a view:

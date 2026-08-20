@@ -1,6 +1,6 @@
-## Org-Supertag – Global Field Database Migration
+## Supertag – Global Field Database Migration
 
-This guide describes how to upgrade an existing Org-Supertag database to the new global field model introduced in 5.2.0, where fields are first-class entities and no longer nested under individual tags.
+This guide describes how to upgrade an existing Supertag database to the new global field model introduced in 5.2.0, where fields are first-class entities and no longer nested under individual tags.
 
 > **Important:** Before running any migration, make a fresh backup of your Supertag data directory.
 
@@ -12,7 +12,7 @@ The global field model is now the only production read/write path. The obsolete
 Run the dedicated read-only audit first:
 
 ```elisp
-(require 'org-supertag)
+(require 'supertag)
 (require 'supertag-migration)
 (supertag-migration-audit-global-fields)
 ```

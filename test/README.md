@@ -4,13 +4,13 @@
 
 ### Step 1: Load the module (fresh Emacs session)
 ```elisp
-(add-to-list 'load-path "/Users/chenyibin/Documents/emacs/package/org-supertag")
-(load-file "/Users/chenyibin/Documents/emacs/package/org-supertag/supertag-virtual-column.el")
+(add-to-list 'load-path "/Users/chenyibin/Documents/emacs/package/supertag")
+(load-file "/Users/chenyibin/Documents/emacs/package/supertag/supertag-virtual-column.el")
 ```
 
 ### Step 2: Run quick test
 ```elisp
-(load-file "/Users/chenyibin/Documents/emacs/package/org-supertag/test/quick-test.el")
+(load-file "/Users/chenyibin/Documents/emacs/package/supertag/test/quick-test.el")
 ```
 
 Expected output:
@@ -31,13 +31,13 @@ Test 5: Delete column...
 
 ### Step 3: Run interactive demo
 ```elisp
-(load-file "/Users/chenyibin/Documents/emacs/package/org-supertag/test/demo-virtual-column.el")
+(load-file "/Users/chenyibin/Documents/emacs/package/supertag/test/demo-virtual-column.el")
 M-x supertag-demo-virtual-column
 ```
 
 ### Step 4: Run full ERT tests
 ```elisp
-(load-file "/Users/chenyibin/Documents/emacs/package/org-supertag/test/virtual-column-test.el")
+(load-file "/Users/chenyibin/Documents/emacs/package/supertag/test/virtual-column-test.el")
 M-x ert-run-tests-interactively
 ```
 
@@ -49,7 +49,7 @@ M-x ert-run-tests-interactively
 
 ### Error: `Module not loaded`
 **Cause**: `load-path` not set correctly  
-**Fix**: Ensure path includes the org-supertag directory
+**Fix**: Ensure path includes the supertag directory
 
 ### Error: `Feature not found`
 **Cause**: Module failed to load due to dependencies  

@@ -278,7 +278,7 @@
           (should (member "Open tagged nodes (default)" choices))
           (should (member "Rename tag..." choices))
           (should (member "Delete tag everywhere..." choices))
-          (should (member "All Org-Supertag commands..." choices))))))
+          (should (member "All Supertag commands..." choices))))))
   (let ((tag-actions (mapcar #'car
                              (supertag--assist-actions
                               '(:kind :tag :tag-id "paper"))))

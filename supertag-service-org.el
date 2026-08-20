@@ -20,11 +20,11 @@
 (require 'supertag-core-scan)
 
 (defgroup supertag-org-link nil
-  "Org link integration for Org-Supertag."
+  "Org link integration for Supertag."
   :group 'supertag)
 
 (defcustom supertag-org-id-open-link-auto-enable t
-  "When non-nil, let `org-id-open-link` resolve IDs via Org-Supertag first.
+  "When non-nil, let `org-id-open-link` resolve IDs via Supertag first.
 
 This avoids depending on `org-id-locations` when the target node exists in the
 Supertag store. The fallback remains the original Org behavior when the node is
@@ -60,7 +60,7 @@ This intentionally does not consult `org-id-locations'."
         t))))
 
 (defun supertag-service-org-follow-id (node-id)
-  "Open NODE-ID using Org-Supertag's node location and a robust `:ID:` search.
+  "Open NODE-ID using Supertag's node location and a robust `:ID:` search.
 
 Returns non-nil when NODE-ID was handled, nil otherwise."
   (let* ((node (and (stringp node-id) (supertag-node-get node-id)))
@@ -81,7 +81,7 @@ Returns non-nil when NODE-ID was handled, nil otherwise."
           t)))))
 
 (defun supertag-service-org--org-id-open-link-advice (orig-fn &rest args)
-  "Advice for `org-id-open-link` that prefers Org-Supertag lookup when available."
+  "Advice for `org-id-open-link` that prefers Supertag lookup when available."
   (let ((node-id (car args)))
     (if (and supertag-org-id-open-link-auto-enable
              (bound-and-true-p supertag--initialized)
@@ -252,7 +252,7 @@ preventing data loss from incorrect position calculations."
   (supertag-service-org-move-node-to-file node-id target-file leave-link target-level))
 
 (defun supertag-enable-org-id-open-link-integration ()
-  "Enable Org-Supertag integration for `org-id-open-link`."
+  "Enable Supertag integration for `org-id-open-link`."
   (interactive)
   (setq supertag-org-id-open-link-auto-enable t)
   (when (fboundp 'org-id-open-link)
@@ -260,7 +260,7 @@ preventing data loss from incorrect position calculations."
   (message "[supertag] org-id-open-link integration enabled"))
 
 (defun supertag-disable-org-id-open-link-integration ()
-  "Disable Org-Supertag integration for `org-id-open-link`."
+  "Disable Supertag integration for `org-id-open-link`."
   (interactive)
   (setq supertag-org-id-open-link-auto-enable nil)
   (when (fboundp 'org-id-open-link)

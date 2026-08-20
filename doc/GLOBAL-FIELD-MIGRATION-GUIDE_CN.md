@@ -1,4 +1,4 @@
-## Org-Supertag – 全局字段数据库迁移指引
+## Supertag – 全局字段数据库迁移指引
 
 本指南说明如何把旧的「按 Tag 嵌套字段」模型迁移到「全局字段模型」。在新模型中，字段是有稳定 ID 的一等实体，不再由单个 Tag 独占。
 
@@ -9,7 +9,7 @@
 ### 1. 先执行只读审计
 
 ```elisp
-(require 'org-supertag)
+(require 'supertag)
 (require 'supertag-migration)
 (supertag-migration-audit-global-fields)
 ```
@@ -21,7 +21,7 @@
 先做一次「演练」迁移，不写入任何数据，只查看将要发生的变更：
 
 ```elisp
-(require 'org-supertag)
+(require 'supertag)
 (require 'supertag-migration)
 
 ;; 确认 dry-run 打开（默认即为 t）

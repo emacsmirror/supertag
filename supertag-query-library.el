@@ -1,7 +1,7 @@
 ;;; supertag-query-library.el --- Saved queries, a guided builder, and a syntax reference -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file makes the Org-Supertag S-expression query language (defined in
+;; This file makes the Supertag S-expression query language (defined in
 ;; `supertag-services-query.el', see `supertag-query-node-ids' and
 ;; `supertag-query-fields') learnable and reusable, without changing
 ;; the engine or the query-block/dynamic-block UI layer:
@@ -30,13 +30,13 @@
 (require 'supertag-ops-node)
 
 (defgroup supertag-query-library nil
-  "Saved queries, guided builder, and syntax reference for Org-Supertag queries."
+  "Saved queries, guided builder, and syntax reference for Supertag queries."
   :group 'supertag)
 
 ;;; --- Saved queries ---------------------------------------------------
 
 (defcustom supertag-query-saved nil
-  "Legacy alist of saved Org-Supertag queries, imported once into the
+  "Legacy alist of saved Supertag queries, imported once into the
 `:queries' Store collection.  Kept only as the migration source; new
 saves go to the Store via `supertag-query-save'."
   :type '(alist :key-type (string :tag "Name")
@@ -423,7 +423,7 @@ COMBINATOR is \"and\"/\"or\" (a string) or the symbol `and'/`or'."
 
 ;;;###autoload
 (defun supertag-query-build ()
-  "Interactively assemble an Org-Supertag query S-expression.
+  "Interactively assemble an Supertag query S-expression.
 Prompts for a leaf condition (tag/field/term/after/before/between),
 then repeatedly offers to combine it with another condition using AND
 or OR, and finally offers to wrap the whole thing in NOT.  Tag and
@@ -447,7 +447,7 @@ as a block, run it immediately, or save it as a named query."
 ;;; --- Quick reference -------------------------------------------------------
 
 (defconst supertag-query-library--syntax-reference-text
-  "Org-Supertag Query Language -- Quick Reference
+  "Supertag Query Language -- Quick Reference
 ================================================
 
 Combinators
@@ -499,7 +499,7 @@ version of this same content.")
 
 ;;;###autoload
 (defun supertag-query-describe-syntax ()
-  "Show a quick reference for the Org-Supertag query language."
+  "Show a quick reference for the Supertag query language."
   (interactive)
   (let ((buf (get-buffer-create "*Supertag Query Syntax*")))
     (with-current-buffer buf

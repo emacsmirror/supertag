@@ -2,13 +2,13 @@
 
 ;; Copyright (C) 2026
 
-;; Author: Org-Supertag Team
+;; Author: Supertag Team
 ;; Keywords: org-mode, tags, fields
 ;; Version: 1.0
 
 ;;; Commentary:
 
-;; Virtual column system for Org-Supertag.
+;; Virtual column system for Supertag.
 ;; Provides computed fields: rollup, formula, aggregate, reference.
 
 ;;; Code:

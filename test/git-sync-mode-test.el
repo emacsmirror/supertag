@@ -47,7 +47,7 @@
 (defconst supertag-git-sync-test--repo-dir
   (expand-file-name ".." (file-name-directory
                           (or load-file-name buffer-file-name default-directory)))
-  "The org-supertag repository root, captured at load time -- see the
+  "The supertag repository root, captured at load time -- see the
 identical constant/rationale in test/git-integration-test.el.")
 
 (add-to-list 'load-path supertag-git-sync-test--repo-dir)
@@ -108,7 +108,7 @@ found on `exec-path'."
      ,@body))
 
 (ert-deftest supertag-git-sync-test-entrypoint-registers-public-commands ()
-  "Loading `org-supertag' directly must expose documented optional commands."
+  "Loading `supertag' directly must expose documented optional commands."
   (let* ((emacs (expand-file-name invocation-name invocation-directory))
          (form
           (concat

@@ -1,4 +1,4 @@
-;;; org-supertag/ops/node.el --- Node operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/node.el --- Node operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Note on Path Format:
@@ -7,7 +7,7 @@
 ;; For example, to get all nodes, use `'( :nodes )` instead of `:nodes`.
 ;;
 ;; This file provides standardized operations for Node entities in the
-;; Org-Supertag data-centric architecture. All operations leverage
+;; Supertag data-centric architecture. All operations leverage
 ;; the core transform mechanism and adhere to the defined schema.
 
 ;;; Code:
@@ -267,4 +267,4 @@ This is used when a node is moved from one file to another."
 
 (provide 'supertag-ops-node)
 
-;;; org-supertag/ops/node.el ends here
+;;; supertag/ops/node.el ends here

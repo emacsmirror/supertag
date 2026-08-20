@@ -1,6 +1,6 @@
-# Org-Supertag Query Language
+# Supertag Query Language
 
-Org-Supertag's query language is a small S-expression grammar: a handful of
+Supertag's query language is a small S-expression grammar: a handful of
 leaf conditions (`tag`, `field`, `term`, `after`, `before`, `between`)
 combined with three combinators (`and`, `or`, `not`). It is parsed and
 executed by `supertag-query--parse-sexp` / `supertag-query--execute-ast` in
@@ -181,7 +181,7 @@ instead of `(after "2025-06-01")`.
   in an Org file:
 
   ```org
-  #+BEGIN_SRC org-supertag-query-block :results raw
+  #+BEGIN_SRC supertag-query-block :results raw
   (and (tag "task") (field "status" "active"))
   #+END_SRC
   ```
@@ -189,12 +189,12 @@ instead of `(after "2025-06-01")`.
   Insert one with `M-x supertag-insert-query-block`. The block layer is also
   gaining extra babel header parameters (`:sort`, `:order`, `:limit`,
   `:columns`) for controlling result presentation without changing the query
-  itself — see the docstring of `org-babel-execute:org-supertag-query-block`
+  itself — see the docstring of `org-babel-execute:supertag-query-block`
   in `supertag-ui-query-block.el` for the current, authoritative parameter
   list, e.g.:
 
   ```org
-  #+BEGIN_SRC org-supertag-query-block :results raw :sort modified :order desc :limit 10
+  #+BEGIN_SRC supertag-query-block :results raw :sort modified :order desc :limit 10
   (tag "task")
   #+END_SRC
   ```

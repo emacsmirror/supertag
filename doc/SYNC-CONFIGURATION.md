@@ -1,8 +1,8 @@
-# Org-Supertag Sync Configuration Guide
+# Supertag Sync Configuration Guide
 
-This guide explains how Org-Supertag sync works, how to configure it for your
+This guide explains how Supertag sync works, how to configure it for your
 workflow, and how to troubleshoot common issues. It assumes you are familiar
-with Org-mode but not necessarily with Org-Supertag internals.
+with Org-mode but not necessarily with Supertag internals.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ with Org-mode but not necessarily with Org-Supertag internals.
 
 ## How Sync Works (in 30 Seconds)
 
-Org-Supertag maintains a local database of your Org headings (nodes), their
+Supertag maintains a local database of your Org headings (nodes), their
 tags, properties, and relationships. The **sync service** reads your `.org`
 files and keeps the database in sync with what is on disk.
 
@@ -30,7 +30,7 @@ files and keeps the database in sync with what is on disk.
   single database transaction. This avoids freezing Emacs on large file sets.
 - **Auto-save**: The database is periodically auto-saved and backed up (daily).
 
-You can sync **manually** on demand, or let Org-Supertag sync **automatically**
+You can sync **manually** on demand, or let Supertag sync **automatically**
 on a timer (auto-sync).
 
 ---
@@ -39,11 +39,11 @@ on a timer (auto-sync).
 
 ### Mode 1: Manual vs Auto-Sync
 
-Org-Supertag operates in one of two sync-trigger modes:
+Supertag operates in one of two sync-trigger modes:
 
 #### Manual Sync (default for uncustomized setups)
 
-If you have not set `org-supertag-sync-directories`, auto-sync will **not** run.
+If you have not set `supertag-sync-directories`, auto-sync will **not** run.
 You trigger sync explicitly when you want it:
 
 - `M-x supertag-reindex-org` — re-scan every managed `.org` file.
@@ -55,7 +55,7 @@ users**. You are always in control of when the database is updated.
 
 #### Safe Auto-Sync (enabled when directories are configured)
 
-When you set `org-supertag-sync-directories` to one or more directories,
+When you set `supertag-sync-directories` to one or more directories,
 auto-sync becomes active by default:
 
 - Emacs startup waits a few seconds, then starts a periodic sync timer.
@@ -80,26 +80,26 @@ You can still manually start auto-sync at any time with
 
 ### Mode 2: Unified vs Vault
 
-`org-supertag-sync-directories-mode` controls how multiple sync directories
+`supertag-sync-directories-mode` controls how multiple sync directories
 are treated:
 
 #### Unified Mode (default)
 
 ```elisp
-(setq org-supertag-sync-directories-mode 'unified)
+(setq supertag-sync-directories-mode 'unified)
 ```
 
-All directories in `org-supertag-sync-directories` share a **single database**.
+All directories in `supertag-sync-directories` share a **single database**.
 Nodes from different directory trees coexist in one store. This is the simplest
 setup and works well when all your Org files belong to one "knowledge base."
 
 #### Vault Mode
 
 ```elisp
-(setq org-supertag-sync-directories-mode 'vaults)
+(setq supertag-sync-directories-mode 'vaults)
 ```
 
-Each directory in `org-supertag-sync-directories` becomes an **isolated vault**
+Each directory in `supertag-sync-directories` becomes an **isolated vault**
 with its own database and sync state. Only one vault is active at a time.
 
 Benefits:
@@ -112,7 +112,7 @@ To switch vaults: `M-x supertag-vault-activate` (prompts you to pick a vault).
 Auto-switching on buffer change is off by default. To enable it:
 
 ```elisp
-(setq org-supertag-vault-auto-switch t)
+(setq supertag-vault-auto-switch t)
 ```
 
 > **Note**: Auto-switching loads the vault's entire database on every buffer
@@ -127,8 +127,8 @@ Auto-switching on buffer change is off by default. To enable it:
 
 | Variable | Default | Description |
 |---|---|---|
-| `org-supertag-sync-directories` | `nil` | List of absolute paths to monitor. If `nil`, auto-sync is effectively disabled. |
-| `org-supertag-sync-directories-mode` | `'unified` | `unified` (one DB) or `vaults` (one DB per directory). |
+| `supertag-sync-directories` | `nil` | List of absolute paths to monitor. If `nil`, auto-sync is effectively disabled. |
+| `supertag-sync-directories-mode` | `'unified` | `unified` (one DB) or `vaults` (one DB per directory). |
 | `supertag-sync-exclude-directories` | `nil` | Directories to exclude from sync. Takes precedence over include directories. |
 | `supertag-sync-file-pattern` | `"\\.org$"` | Regex matching filenames to sync. Default: all `.org` files. Change to `"\\.org\\'\|\\.org_archive\\'"` to include archive files. |
 
@@ -136,9 +136,9 @@ Auto-switching on buffer change is off by default. To enable it:
 
 | Variable | Default | Description |
 |---|---|---|
-| `org-supertag-active-sync-directory` | `nil` | Active vault root (internal; set by `supertag-vault-activate`). |
-| `org-supertag-vault-auto-switch` | `nil` | When `t`, entering an Org buffer auto-switches the active vault. |
-| `org-supertag-vault-modeline-indicator` | `t` | Show which vault the current Org buffer belongs to in the mode line. |
+| `supertag-active-sync-directory` | `nil` | Active vault root (internal; set by `supertag-vault-activate`). |
+| `supertag-vault-auto-switch` | `nil` | When `t`, entering an Org buffer auto-switches the active vault. |
+| `supertag-vault-modeline-indicator` | `t` | Show which vault the current Org buffer belongs to in the mode line. |
 
 ### Sync Timing & Rhythm
 
@@ -147,7 +147,7 @@ Auto-switching on buffer change is off by default. To enable it:
 | `supertag-sync-auto-interval` | `900` | Seconds between auto-sync timer ticks. Higher = less frequent background work. |
 | `supertag-sync-idle-delay` | `1.0` | Seconds of Emacs idle time before an idle-triggered sync runs. |
 | `supertag-sync-quiet-when-idle` | `t` | When `t`, suppress messages when an idle-triggered sync found nothing to do. |
-| `supertag-sync-auto-start` | `t` | Whether to schedule auto-sync on Emacs startup. Requires `org-supertag-sync-directories` to be set. |
+| `supertag-sync-auto-start` | `t` | Whether to schedule auto-sync on Emacs startup. Requires `supertag-sync-directories` to be set. |
 | `supertag-sync-auto-start-initial-delay` | `3` | Seconds to wait after startup before the first auto-start attempt. |
 | `supertag-sync-auto-start-retry-interval` | `5` | Seconds between retries when sync directories are not yet available (e.g., network mounts). |
 | `supertag-sync-auto-start-max-retries` | `24` | Max retries (~2 minutes total at default interval). Gives up if directories never become available. |
@@ -191,10 +191,10 @@ Auto-switching on buffer change is off by default. To enable it:
 For large repositories or cautious users who want full control:
 
 ```elisp
-(use-package org-supertag
+(use-package supertag
   :ensure nil  ; or :straight, depending on your setup
   :config
-  ;; Do NOT set org-supertag-sync-directories — this keeps auto-sync off.
+  ;; Do NOT set supertag-sync-directories — this keeps auto-sync off.
   ;; When you want to sync, run M-x supertag-reindex-org manually.
 
   ;; Optionally disable the auto-start flag (already inert without directories,
@@ -210,14 +210,14 @@ For large repositories or cautious users who want full control:
 For a moderate-sized Org directory (a few hundred files or fewer):
 
 ```elisp
-(use-package org-supertag
+(use-package supertag
   :ensure nil
   :config
   ;; Sync one directory
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
 
   ;; Keep unified mode (default)
-  (setq org-supertag-sync-directories-mode 'unified)
+  (setq supertag-sync-directories-mode 'unified)
 
   ;; Enable auto-sync (default: t, but explicit for clarity)
   (setq supertag-sync-auto-start t)
@@ -240,18 +240,18 @@ For a moderate-sized Org directory (a few hundred files or fewer):
 For separate knowledge domains with independent databases:
 
 ```elisp
-(use-package org-supertag
+(use-package supertag
   :ensure nil
   :config
   ;; Two isolated vaults
-  (setq org-supertag-sync-directories '("~/org/work/" "~/org/personal/"))
-  (setq org-supertag-sync-directories-mode 'vaults)
+  (setq supertag-sync-directories '("~/org/work/" "~/org/personal/"))
+  (setq supertag-sync-directories-mode 'vaults)
 
   ;; Auto-switch vaults when moving between buffers
-  (setq org-supertag-vault-auto-switch t)
+  (setq supertag-vault-auto-switch t)
 
   ;; Show vault name in mode line
-  (setq org-supertag-vault-modeline-indicator t)
+  (setq supertag-vault-modeline-indicator t)
 
   ;; Auto-start sync for whichever vault is active
   (setq supertag-sync-auto-start t)
@@ -266,10 +266,10 @@ For separate knowledge domains with independent databases:
 For repositories with thousands of Org files:
 
 ```elisp
-(use-package org-supertag
+(use-package supertag
   :ensure nil
   :config
-  (setq org-supertag-sync-directories '("~/org/big-repo/"))
+  (setq supertag-sync-directories '("~/org/big-repo/"))
 
   ;; Start manually — don't auto-sync at startup
   (setq supertag-sync-auto-start nil)
@@ -319,7 +319,7 @@ is skipped. Exclusions take priority over included directories.
 
 | Command | Description |
 |---|---|
-| `M-x supertag-vault-activate` | Switch to a different vault (prompts with a list). Only available when `org-supertag-sync-directories-mode` is `vaults`. Loads that vault's database and restarts auto-sync for it. |
+| `M-x supertag-vault-activate` | Switch to a different vault (prompts with a list). Only available when `supertag-sync-directories-mode` is `vaults`. Loads that vault's database and restarts auto-sync for it. |
 
 ### Diagnosis
 
@@ -360,7 +360,7 @@ is skipped. Exclusions take priority over included directories.
 
 ### Problem: Sync says "directories unavailable" and never starts
 
-**Cause**: One or more directories listed in `org-supertag-sync-directories`
+**Cause**: One or more directories listed in `supertag-sync-directories`
 don't exist (yet). Common with network mounts or symlinked directories that
 aren't mounted at Emacs startup.
 
@@ -368,7 +368,7 @@ aren't mounted at Emacs startup.
 
 1. Verify each directory exists:
    ```
-   M-: (mapcar #'file-exists-p org-supertag-sync-directories)
+   M-: (mapcar #'file-exists-p supertag-sync-directories)
    ```
 
 2. If directories are on a slow network mount, increase the retry window:
@@ -379,7 +379,7 @@ aren't mounted at Emacs startup.
 3. If the directories will never be available in this session, remove them from
    the list and restart auto-sync:
    ```elisp
-   (setq org-supertag-sync-directories (remove "/unavailable/path" org-supertag-sync-directories))
+   (setq supertag-sync-directories (remove "/unavailable/path" supertag-sync-directories))
    M-x supertag-sync-start-auto-sync
    ```
 
@@ -446,7 +446,7 @@ intervene to prevent accidental mass deletion.
 
 **Solution**:
 
-1. Add the new location to `org-supertag-sync-directories` before moving files.
+1. Add the new location to `supertag-sync-directories` before moving files.
 2. Run `M-x supertag-reindex-org` — this imports nodes at the new paths.
 3. After confirming everything is correct, run `M-x supertag-sync-cleanup-database`
    to remove nodes still pointing to the old (now non-existent) paths.
@@ -462,7 +462,7 @@ If sync timers get into a broken state (repeated errors, unexpected behavior):
 If problems persist across Emacs restarts, try clearing the sync state file:
 
 1. Quit Emacs.
-2. Delete the sync state file (usually `sync-state.el` in Org-Supertag's data
+2. Delete the sync state file (usually `sync-state.el` in Supertag's data
    directory — check `M-: supertag-sync-state-file` to find the exact path).
 3. Restart Emacs and run `M-x supertag-reindex-org` to rebuild state.
 
@@ -470,7 +470,7 @@ If problems persist across Emacs restarts, try clearing the sync state file:
 
 ## Safety Guards
 
-Org-Supertag has several built-in safety mechanisms to prevent accidental data
+Supertag has several built-in safety mechanisms to prevent accidental data
 loss. Understanding these helps you tune them or work around them when
 intentionally reorganizing your files.
 
@@ -525,7 +525,7 @@ a partially-loaded state leads to incorrect deletions.
 
 ### Internal Modification Detection
 
-When Org-Supertag itself modifies a file (e.g., writing tags to a headline), it
+When Supertag itself modifies a file (e.g., writing tags to a headline), it
 records the modification timestamp internally. The sync engine skips these
 files on the next scan cycle, avoiding unnecessary re-parsing of content it
 just wrote.

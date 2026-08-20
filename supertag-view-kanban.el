@@ -1,7 +1,7 @@
-;;; supertag-view-kanban.el --- Kanban board UI for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-view-kanban.el --- Kanban board UI for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module provides a Kanban-style board view for the Org-Supertag
+;; This module provides a Kanban-style board view for the Supertag
 ;; data-centric architecture. It follows the principle that UI components
 ;; should be stateless and only handle rendering and user interaction,
 ;; while data operations are delegated to dedicated service modules.

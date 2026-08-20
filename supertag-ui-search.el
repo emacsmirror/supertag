@@ -1,13 +1,12 @@
-;;; supertag-ui-search.el --- Interactive search window for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-ui-search.el --- Interactive search window for supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module provides the interactive search window functionality for org-supertag.
+;; This module provides the interactive search window functionality for supertag.
 ;; It includes:
 ;; - Card-based results display with navigation, marking, and export capabilities
 ;; - Query history management
 ;; - Keyword-based search across nodes, tags, and content
-;; - Functions renamed from org-supertag-query-* to supertag-search-*
-;; - Main entry point: supertag-search (alias: org-supertag-query for backward compatibility)
+;; - Main entry point: `supertag-search'
 
 ;;; Code:
 
@@ -44,7 +43,7 @@
 (defvar-local supertag-search--marked-nodes nil
   "List of marked node IDs in the search buffer.")
 
-(defconst supertag-search--buffer-name "*Org SuperTag Search*"
+(defconst supertag-search--buffer-name "*Supertag Search*"
   "Name of the Search results buffer.")
 
 (defun supertag-search--load-history ()
@@ -120,7 +119,7 @@ Handles both time stamps (list) and date strings."
 ;;; --- Search Window UI ---
 
 (defgroup supertag-search nil
-  "Customization for org-supertag search."
+  "Customization for supertag search."
   :group 'supertag)
 
 (defcustom supertag-search-preview-length 300
@@ -165,7 +164,7 @@ Handles both time stamps (list) and date strings."
     map))
 
 (define-minor-mode supertag-search-mode
-  "Minor mode for org-supertag search results buffer."
+  "Minor mode for supertag search results buffer."
   :lighter " SupertagSearch"
   (when supertag-search-mode
     (unless supertag-search-mode-map
@@ -489,7 +488,7 @@ Handles both time stamps (list) and date strings."
 (defun supertag-search-quit ()
   "Quit the search results buffer and return to previous buffer."
   (interactive)
-  (let ((results-buffer (get-buffer "*Org SuperTag Search*")))
+  (let ((results-buffer (get-buffer "*Supertag Search*")))
     (when (and supertag-search--original-buffer
                (buffer-live-p supertag-search--original-buffer))
       (switch-to-buffer supertag-search--original-buffer)
@@ -502,7 +501,7 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-search-get-selected-nodes ()
   "Get all marked node IDs from the search buffer."
-  (with-current-buffer (get-buffer "*Org SuperTag Search*")
+  (with-current-buffer (get-buffer "*Supertag Search*")
     (let ((selected-ids (cl-copy-list supertag-search--marked-nodes)))
       (when selected-ids
         (message "Found %d selected nodes" (length selected-ids)))

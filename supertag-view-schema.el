@@ -374,7 +374,7 @@ Reads global associations and definitions."
 Users can rebind keys in this map to avoid conflicts with modal editing.")
 
 (define-derived-mode supertag-schema-view-mode special-mode "Schema"
-  "A major mode for viewing the Org-Supertag schema.
+  "A major mode for viewing the Supertag schema.
 
 \\{supertag-schema-view-mode-map}"
   :keymap supertag-schema-view-mode-map

@@ -9,7 +9,7 @@
 ;; - Refresh manually via `M-x supertag-view-refresh`.
 ;;
 ;; Usage:
-;;   (add-to-list 'load-path "/path/to/org-supertag/doc/examples/")
+;;   (add-to-list 'load-path "/path/to/supertag/doc/examples/")
 ;;   (require 'supertag-view-demo-dashboard)
 ;;   M-x supertag-view-demo-dashboard-open
 

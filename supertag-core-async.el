@@ -1,7 +1,7 @@
-;;; org-supertag/core/async.el --- Asynchronous task queue for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/core/async.el --- Asynchronous task queue for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module implements an asynchronous job queue for Org-Supertag.
+;; This module implements an asynchronous job queue for Supertag.
 ;; It allows heavy operations (like file parsing and database sync) to be
 ;; performed in the background using idle timers, preventing UI freezes.
 ;;
@@ -12,7 +12,7 @@
 (require 'cl-lib)
 
 (defgroup supertag-async nil
-  "Asynchronous processing settings for Org-Supertag."
+  "Asynchronous processing settings for Supertag."
   :group 'supertag)
 
 (defcustom supertag-async-idle-delay 0.5

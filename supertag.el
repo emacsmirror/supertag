@@ -101,7 +101,7 @@ Files without the selected persistent identity remain ordinary Org files."
   "Cached mode line indicator for the current buffer.")
 
 (define-minor-mode supertag-vault-indicator-mode
-  "Show Org-Supertag vault indicator in the mode line."
+  "Show Supertag vault indicator in the mode line."
   :init-value nil
   :lighter (:eval (or supertag-vault--buffer-indicator "")))
 
@@ -404,7 +404,7 @@ active vault when `supertag-sync-auto-start` is non-nil."
 
 (defcustom supertag-project-root
   (file-name-directory (file-name-directory (or load-file-name buffer-file-name)))
-  "The root directory of the org-supertag project."
+  "The root directory of the supertag project."
   :type 'directory
   :group 'supertag)
 
@@ -480,22 +480,22 @@ active vault when `supertag-sync-auto-start` is non-nil."
   "Run Supertag health checks and guided repairs." t)
 
 ;; --- Git sync (optional) ---
-;; Keep the documented M-x commands discoverable even when Org-Supertag is
+;; Keep the documented M-x commands discoverable even when Supertag is
 ;; loaded directly from source and no package-generated autoload file exists.
 (autoload 'supertag-git-setup "supertag-git"
-  "Configure Git sync for the current Org-Supertag vault." t)
+  "Configure Git sync for the current Supertag vault." t)
 (autoload 'supertag-git-clone "supertag-git"
-  "Clone and configure an Org-Supertag Git vault." t)
+  "Clone and configure an Supertag Git vault." t)
 (autoload 'supertag-git-sync-mode "supertag-git"
   "Toggle automatic Git synchronization for the current vault." t)
 (autoload 'supertag-git-sync-now "supertag-git"
-  "Synchronize the current Org-Supertag Git vault immediately." t)
+  "Synchronize the current Supertag Git vault immediately." t)
 
 ;; --- Graph UI (optional) ---
 ;; Requires `websocket' and `simple-httpd' packages.
 ;; Not loaded by default; use M-x supertag-graph-ui-mode to activate.
 (autoload 'supertag-graph-ui-mode "supertag-graph-ui"
-  "Enable org-supertag graph visualization." t)
+  "Enable supertag graph visualization." t)
 (autoload 'supertag-graph-ui-open "supertag-graph-ui"
   "Open the graph UI in the default browser." t)
 (autoload 'supertag-graph-ui-follow-mode "supertag-graph-ui"
@@ -505,7 +505,7 @@ active vault when `supertag-sync-auto-start` is non-nil."
 ;; Heptabase-style whiteboard. Requires `websocket' package.
 ;; Not loaded by default; use M-x supertag-board-mode to activate.
 (autoload 'supertag-board-mode "supertag-board"
-  "Enable org-supertag whiteboard visualization." t)
+  "Enable supertag whiteboard visualization." t)
 (autoload 'supertag-board-follow-mode "supertag-board"
   "Sync the board UI focus to the current node in Emacs." t)
 

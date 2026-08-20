@@ -1,7 +1,7 @@
-;;; org-supertag/ui/commands.el --- User command interface for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ui/commands.el --- User command interface for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file provides the user-facing interactive commands for Org-Supertag.
+;; This file provides the user-facing interactive commands for Supertag.
 ;; These commands act as the entry points for user interaction, calling the
 ;; underlying operations and services.
 
@@ -761,7 +761,7 @@ This command reads the authoritative list of tags from the database."
           (message "Tag changed from '%s' to '%s'." current-tag new-tag))))))
 
 ;;; --- Tag Inheritance Model ---
-;; `org-supertag' implements a schematic inheritance model for tags, which is
+;; `supertag' implements a schematic inheritance model for tags, which is
 ;; distinct from Org-mode's default structural inheritance.
 ;;
 ;; - Inheritance is defined via the `:extends` property in a tag's definition,
@@ -778,7 +778,7 @@ This command reads the authoritative list of tags from the database."
   "Stores the ID of the last node created during capture for enrichment.")
 
 (defun supertag-capture (&optional target-file headline)
-  "Independent capture command for Org-Supertag.
+  "Independent capture command for Supertag.
 Creates a new node with optional tags and field values.
 TARGET-FILE is optional file path to capture to.
 HEADLINE is optional headline text."

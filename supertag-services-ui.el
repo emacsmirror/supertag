@@ -1,4 +1,4 @@
-;;; org-supertag/ui/services.el --- Reusable UI component services -*- lexical-binding: t; -*-
+;;; supertag/ui/services.el --- Reusable UI component services -*- lexical-binding: t; -*-
 
 (require 'cl-lib)
 (require 'org)

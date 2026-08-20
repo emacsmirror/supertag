@@ -1,4 +1,4 @@
-;;; supertag-view-table.el --- Table view for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-view-table.el --- Table view for supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This module provides a generic, responsive grid UI component that can display

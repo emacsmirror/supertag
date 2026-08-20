@@ -325,7 +325,7 @@ and failing on it would report a defect that does not exist."
 (ert-deftest test-view-runtime-search-show-results-opens-refreshable-buffer ()
   "The existing Search entry must open a Runtime-managed results buffer."
   (supertag-view-framework-init)
-  (let* ((buffer-name "*Org SuperTag Search*")
+  (let* ((buffer-name "*Supertag Search*")
          (node '(:id "search-1" :title "First result"))
          (results (list (cons node nil))))
     (unwind-protect
@@ -346,7 +346,7 @@ and failing on it would report a defect that does not exist."
 (ert-deftest test-view-runtime-search-refresh-preserves-selected-entity ()
   "Search refresh must preserve the selected result by common entity ID."
   (supertag-view-framework-init)
-  (let* ((buffer-name "*Org SuperTag Search*")
+  (let* ((buffer-name "*Supertag Search*")
          (results (list (cons '(:id "search-1" :title "First") nil)
                         (cons '(:id "search-2" :title "Second") nil))))
     (unwind-protect
@@ -371,7 +371,7 @@ and failing on it would report a defect that does not exist."
 (ert-deftest test-view-runtime-search-command-refreshes-from-store ()
   "The Search command must rebuild results from Store on manual refresh."
   (supertag-view-framework-init)
-  (let ((buffer-name "*Org SuperTag Search*")
+  (let ((buffer-name "*Supertag Search*")
         (origin (generate-new-buffer " *supertag-search-origin*"))
         (supertag--store (make-hash-table :test 'equal))
         (supertag-search-history-file
@@ -406,7 +406,7 @@ and failing on it would report a defect that does not exist."
 (ert-deftest test-view-runtime-search-quit-restores-origin ()
   "Search quit must kill results and restore the saved origin point."
   (supertag-view-framework-init)
-  (let ((buffer-name "*Org SuperTag Search*")
+  (let ((buffer-name "*Supertag Search*")
         (origin (generate-new-buffer " *supertag-search-quit-origin*")))
     (unwind-protect
         (progn

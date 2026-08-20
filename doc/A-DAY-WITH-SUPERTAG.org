@@ -1,11 +1,11 @@
-#+TITLE: A Day with Org-SuperTag — One Person's Complete Workflow
-#+AUTHOR: Org-SuperTag Community
+#+TITLE: A Day with Supertag — One Person's Complete Workflow
+#+AUTHOR: Supertag Community
 #+EMAIL: yibie@users.noreply.github.com
 #+OPTIONS: toc:3 num:t
 
 * How to Use This Document
 
-This is not a feature list.  This is /one person's real daily workflow/ with Org-SuperTag,
+This is not a feature list.  This is /one person's real daily workflow/ with Supertag,
 documented in the style of Bernt Hansen's legendary [[http://doc.norang.ca/org-mode.html][org-mode tutorial]].
 
 Every section shows:
@@ -17,16 +17,16 @@ Every section shows:
 You can load this file in Emacs and tangle it with =C-c C-v C-t= to extract all the
 Elisp examples into =supertag-workflow.el=, then include it in your =init.el=.
 
-This document assumes you have Org-SuperTag installed.  See the [[file:../README.md][README]] for installation.
+This document assumes you have Supertag installed.  See the [[file:../README.md][README]] for installation.
 
-中文版：[[file:A-DAY-WITH-ORG-SUPERTAG_CN.org][Org-SuperTag 的一天（中文）]]
+中文版：[[file:A-DAY-WITH-SUPERTAG_CN.org][Supertag 的一天（中文）]]
 
 * My Setup
 
 ** My Org Files
 
 I keep my life in a handful of Org files under =~/org/=.  Each file has a clear purpose,
-and Org-SuperTag treats them all as one unified knowledge base.
+and Supertag treats them all as one unified knowledge base.
 
 | File                  | Purpose                                    |
 |-----------------------+--------------------------------------------|
@@ -36,8 +36,8 @@ and Org-SuperTag treats them all as one unified knowledge base.
 | =meetings.org=        | Meeting notes with decisions and actions   |
 | =journal.org=         | Daily journal entries, ideas, reflections  |
 
-Why separate files?  Because Org-SuperTag queries /across/ all of them.  The file division
-is for /my/ brain — Org-SuperTag doesn't care which file a heading lives in.  A =#task= in
+Why separate files?  Because Supertag queries /across/ all of them.  The file division
+is for /my/ brain — Supertag doesn't care which file a heading lives in.  A =#task= in
 =meetings.org= and a =#task= in =projects.org= appear side by side in the Table View.
 
 ** Vault Configuration
@@ -46,11 +46,11 @@ I use a single vault for everything.  If I wanted work/personal separation, I'd 
 
 #+begin_src emacs-lisp
   ;; Single vault (my setup)
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
 
   ;; Multi-vault alternative — separate DBs for work and personal
-  ;; (setq org-supertag-sync-directories '("~/org/work/" "~/org/personal/"))
-  ;; (setq org-supertag-sync-directories-mode 'vaults)
+  ;; (setq supertag-sync-directories '("~/org/work/" "~/org/personal/"))
+  ;; (setq supertag-sync-directories-mode 'vaults)
 #+end_src
 
 ** Sync Configuration
@@ -60,7 +60,7 @@ balance — I never wait long for new content to appear, and Emacs stays respons
 
 #+begin_src emacs-lisp
   ;; Auto-sync every 60 seconds
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
   (setq supertag-auto-sync-interval 60)
 
   ;; Only do full validation every 10th tick (saves CPU)
@@ -162,7 +162,7 @@ Fifteen minutes, and I know exactly what I'm working on today.
 
 * Throughout the Day: Capture Without Breaking Flow
 
-This is the biggest win of Org-SuperTag over plain Org-mode.  Capture is /fast/ and
+This is the biggest win of Supertag over plain Org-mode.  Capture is /fast/ and
 /structured/ — I don't need to remember field names or syntax.
 
 ** Capture a Task Mid-Work
@@ -197,7 +197,7 @@ In a meeting, I open my =meetings.org= and type:
    - @bob: run load tests on staging
 #+end_example
 
-Org-SuperTag reads this and:
+Supertag reads this and:
 1. Extracts the =#meeting= tag
 2. Uses the /extractor pipeline/ to pull =todo= keywords, =scheduled=, etc.
 3. Makes it queryable alongside all other =#meeting= nodes
@@ -241,14 +241,14 @@ How to manage rules:
 - Enable/disable rules without deleting them: =supertag-automation-enable= / =disable=
 - Dry-run a rule to test it: see =doc/AUTOMATION-SYSTEM-GUIDE.md=
 
-Why automation matters:  I define the logic once, and Org-SuperTag applies it every time.
+Why automation matters:  I define the logic once, and Supertag applies it every time.
 No more "oops, forgot to set the date on that meeting note."
 
 * Working: Views That Feel Like Apps
 
 ** Table View — My Primary Interface
 
-I spend 60% of my Org-SuperTag time in the Table View.  It behaves like a lightweight
+I spend 60% of my Supertag time in the Table View.  It behaves like a lightweight
 database client, but it's all Emacs.
 
 Things I do regularly:
@@ -296,7 +296,7 @@ better for /doing/.
   └──────────┴──────────┴──────────┘
 #+end_example
 
-I drag tasks between columns as they progress.  Org-SuperTag updates the =status= field
+I drag tasks between columns as they progress.  Supertag updates the =status= field
 automatically.  If I have automation rules on =status= change (like recording completion
 time), they fire immediately.
 
@@ -365,7 +365,7 @@ without inserting reciprocal text into the target file.
 
 #+begin_src emacs-lisp
   ;; The source Org [[link]] owns the reference.
-  ;; Org-SuperTag projects it as a queryable :reference relation:
+  ;; Supertag projects it as a queryable :reference relation:
   ;;   1. The target file is never modified
   ;;   2. Backlinks are derived by querying relations-to
   ;;   3. It appears in the Table View Refs column
@@ -455,7 +455,7 @@ RAG (Retrieval-Augmented Generation) feature shines:
 #+begin_example
   > What decisions did we make about the API architecture this month?
 
-  Org-SuperTag:
+  Supertag:
   - Searches all #meeting nodes from the past month
   - Finds relevant passages about API architecture
   - Generates a structured answer with citations
@@ -545,7 +545,7 @@ I review my tags in the Schema View (=M-x supertag-view-schema=) and ask:
 
 ** Database Backup
 
-Org-SuperTag auto-saves snapshots daily (configurable):
+Supertag auto-saves snapshots daily (configurable):
 
 #+begin_src emacs-lisp
   (setq supertag-db-auto-save-interval 300)   ; auto-save every 5 minutes
@@ -553,7 +553,7 @@ Org-SuperTag auto-saves snapshots daily (configurable):
   (setq supertag-db-backup-keep-days 3)       ; keep 3 days of backups
 #+end_src
 
-Backups are stored in =~/.emacs.d/org-supertag/backups/=.
+Backups are stored in =~/.emacs.d/supertag/backups/=.
 
 ** Automation Review
 
@@ -572,13 +572,13 @@ file with =C-c C-v C-t= to produce =supertag-workflow.el=, then:
 #+end_src
 
 #+begin_src emacs-lisp :tangle supertag-workflow.el
-  ;;; supertag-workflow.el — My Org-SuperTag daily workflow configuration
+  ;;; supertag-workflow.el — My Supertag daily workflow configuration
 
   ;; ── Installation ──
-  ;; (straight-use-package '(org-supertag :host github :repo "yibie/org-supertag"))
+  ;; (straight-use-package '(supertag :host github :repo "yibie/supertag"))
 
   ;; ── Sync ──
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
   (setq supertag-auto-sync-interval 60)
   (setq supertag-sync-maintenance-every-n-ticks 10)
   (setq supertag-sync-snapshot-guard t)
@@ -669,7 +669,7 @@ README.
 
 I document what I /stopped/ using so others don't waste time:
 
-- =org-supertag-sync-directories-mode 'unified= with 10+ directories → switched to vault
+- =supertag-sync-directories-mode 'unified= with 10+ directories → switched to vault
   mode.  Too slow scanning everything every tick.
 - Automation rule with =:on-store-changed= trigger → too noisy.  Switched to specific
   triggers (=:on-field-changed=, =:on-node-create=).
@@ -686,4 +686,4 @@ I document what I /stopped/ using so others don't waste time:
 - [[file:VIEW_FRAMEWORK_DEV_GUIDE.md][View Framework]] — Build custom dashboards
 - [[file:VIRTUAL_COLUMNS.md][Virtual Columns]] — Computed fields API
 - [[file:ONTOLOGY-ARCHITECTURE_cn.md][Architecture]] — Internal design (Chinese)
-- [[file:ORG-SUPERTAG-PLUGIN-GUIDE.md][Plugin Guide]] — Build your own extractors and services
+- [[file:SUPERTAG-PLUGIN-GUIDE.md][Plugin Guide]] — Build your own extractors and services

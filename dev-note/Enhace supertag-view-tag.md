@@ -1,4 +1,4 @@
-理解你的取舍取向：**从 org-supertag-view-table 的现实边界出发，挑对 Emacs 友好的增强项**，而不是“照搬” Bases/Logseq。下面是一份精简的产品开发文档，只保留对你当前实现（如 `org-supertag-view-table-mode`、`org-supertag-view--get-related-nodes`、`org-supertag-get-all-fields-for-tag`）最契合、成本可控、收益明显的功能点。
+理解你的取舍取向：**从 supertag-view-table 的现实边界出发，挑对 Emacs 友好的增强项**，而不是“照搬” Bases/Logseq。下面是一份精简的产品开发文档，只保留对你当前实现（如 `supertag-view-table-mode`、`supertag-view--get-related-nodes`、`supertag-get-all-fields-for-tag`）最契合、成本可控、收益明显的功能点。
 
 # 功能概述
 
@@ -10,7 +10,7 @@
 
 1. **职责分层**
 
-   * *数据层*：继续用 `org-supertag-view--get-related-nodes` + `org-supertag-get-all-fields-for-tag` 产出行与字段。
+   * *数据层*：继续用 `supertag-view--get-related-nodes` + `supertag-get-all-fields-for-tag` 产出行与字段。
    * *视图层*：新增一层**视图状态**（列清单与顺序、排序链、分组键、筛选条件、选中集），只影响渲染与交互。
    * *配置层*：\*\*视图预设（View Preset）\*\*可保存/应用到某 tag；可设为该 tag 的默认视图。
 
@@ -30,8 +30,8 @@
 
 1. **视图预设（View Presets）**
 
-   * 定义：`(org-supertag-view-define NAME :columns … :sort … :group … :filters … :limit …)`
-   * 应用：`org-supertag-view-apply`（将预设套到当前 tag 视图）；可设为 tag 默认。
+   * 定义：`(supertag-view-define NAME :columns … :sort … :group … :filters … :limit …)`
+   * 应用：`supertag-view-apply`（将预设套到当前 tag 视图）；可设为 tag 默认。
    * 存储：buffer-local → 可序列化到项目文件（如 `.ostview`）或自定义变量。
 
 2. **列管理（选择/顺序/持久化）**
@@ -89,13 +89,13 @@
 
 * **状态容器**（buffer-local）：`columns`、`sort-spec`、`group-key`、`filters`、`selected-ids`、`limit`、`preset-name`。
 * **数据模型**：每行携带 `node-id title tags fields-alist`；列描述含 `name type getter formatter`.
-* **键位建议**（`org-supertag-view-table-mode`）：
+* **键位建议**（`supertag-view-table-mode`）：
 
   * 刷新 `g`；列管理 `c`；排序 `s/S`；分组 `g/G`（可换 `C-g` 清组以避免冲突）；
   * 标记 `m/u/t`；批量 `x`；编辑 `e`；筛选 `/` 切 AND/OR `A`。
 * **兼容点**：若当前实现仍有网格/图片调试键位，隔离到调试前缀（如 `C-c C-x …`），避免侵扰主流程。
-* **小修建议**：`org-supertag-view-table-setup-keys` 中对 `org-supertag-view-table-mode-map` 的引用需与 `define-derived-mode` 里创建的局部 keymap 对齐，避免绑定失效。
+* **小修建议**：`supertag-view-table-setup-keys` 中对 `supertag-view-table-mode-map` 的引用需与 `define-derived-mode` 里创建的局部 keymap 对齐，避免绑定失效。
 
 ---
 
-**总结**：以上是**为 Emacs 量身取舍**的增强清单：保留 Logseq 的“表格基本功”和 Bases 的“视图可复用”思想，但不引入沉重 UI/图片/公式 DSL。先做 *预设/列管理/多列排序/分组/批量/跳转式编辑* 六件事，就能把 `org-supertag-view-table` 从“能看”提升到“好用”。如果确认路线，我可以按这份文档拆成两个迭代包（A 组必做、B 组增强），给出最小补丁骨架与 keymap。
+**总结**：以上是**为 Emacs 量身取舍**的增强清单：保留 Logseq 的“表格基本功”和 Bases 的“视图可复用”思想，但不引入沉重 UI/图片/公式 DSL。先做 *预设/列管理/多列排序/分组/批量/跳转式编辑* 六件事，就能把 `supertag-view-table` 从“能看”提升到“好用”。如果确认路线，我可以按这份文档拆成两个迭代包（A 组必做、B 组增强），给出最小补丁骨架与 keymap。

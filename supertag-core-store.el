@@ -1,7 +1,7 @@
-;;; org-supertag/store.el --- Core data storage and atomic update for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/store.el --- Core data storage and atomic update for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file implements the physical Store for Org-Supertag.  The Store holds
+;; This file implements the physical Store for Supertag.  The Store holds
 ;; Semantic Facts, Document Projections, and derived state; ownership is defined
 ;; by doc/OWNERSHIP-CONSTITUTION_cn.md, not by physical residence here.
 

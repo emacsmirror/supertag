@@ -1,4 +1,4 @@
-;;; supertag-core-scan.el --- Scan-based query functions for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-core-scan.el --- Scan-based query functions for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides internal Document Projection queries.  Tag membership

@@ -36,7 +36,7 @@
 (defconst supertag-git-test--repo-dir
   (expand-file-name ".." (file-name-directory
                           (or load-file-name buffer-file-name default-directory)))
-  "The org-supertag repository root, captured at load time.
+  "The supertag repository root, captured at load time.
 Needed both to extend `load-path' (so this file's own `require's work when
 run standalone) and as the `-L' argument baked into the merge driver
 command line that `supertag-git--configure-clone' writes into each test
@@ -336,7 +336,7 @@ changed and no unchanged line between them, git's default line-merge
 algorithm has no context to tell the two single-line edits apart and
 folds them into one conflicting hunk even though the two EDITS
 themselves never touched the same entity -- this is a property of
-line-oriented diff3, not of anything Org-Supertag controls, and is
+line-oriented diff3, not of anything Supertag controls, and is
 exactly why real databases (routinely far more than 3 entities, so any
 given pair of edits is overwhelmingly unlikely to be gap-free) converge
 in practice; the untouched middle node here simply reproduces that

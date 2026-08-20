@@ -1,22 +1,25 @@
-# Org-SuperTag – 在 Emacs 里，把你的 Org 文件变成结构化知识库
+# Supertag – 在 Emacs 里，把你的 Org 文件变成结构化知识库
 
 [中文](./README_CN.md) | [English](./README.md)
 
-Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库**。不依赖外部服务，不需要 Python，你的 `.org` 文件始终是纯文本——我们只是让它变聪明了。
+Supertag 把普通的 Org 标题变成一个**可结构化查询的知识库**。不依赖外部服务，不需要 Python，你的 `.org` 文件始终是纯文本——我们只是让它变聪明了。
+
+> **从 Org-Supertag 升级？** 6.0 是不保留兼容别名、也不自动搬迁数据的
+> 破坏性改名。启动前请先阅读 **[迁移到 Supertag](doc/MIGRATING-TO-SUPERTAG.md)**。
 
 > **⚠️ 数据库仍在使用旧的 Tag 嵌套字段？**
 > 用当前版本编辑字段前，请**先完成全局字段迁移**。全局字段模型现已强制启用；`supertag-use-global-fields` 已废弃，设置它不会改变读写路径。
 > 具体步骤见 [`doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md`](doc/GLOBAL-FIELD-MIGRATION-GUIDE_CN.md)。
 
-> **为什么这很重要**：你有没有试过"找出所有还没读的论文"？或者"@小王负责的、本周到期的任务"？纯 Org-mode 做不到，除非你手动维护 PROPERTIES 抽屉再 grep。Org-SuperTag 让这件事变成点几下鼠标。
+> **为什么这很重要**：你有没有试过"找出所有还没读的论文"？或者"@小王负责的、本周到期的任务"？纯 Org-mode 做不到，除非你手动维护 PROPERTIES 抽屉再 grep。Supertag 让这件事变成点几下鼠标。
 
-> **📖 准备开始？** 先读 **[Org-SuperTag 的一天](doc/A-DAY-WITH-ORG-SUPERTAG_CN.org)**——一个人的完整日常工作流，所有 Elisp 配置都可以 copy-paste，用 `C-c C-v C-t` 提取到你的配置里。(English: [A Day with Org-SuperTag](doc/A-DAY-WITH-ORG-SUPERTAG.org))
+> **📖 准备开始？** 先读 **[Supertag 的一天](doc/A-DAY-WITH-SUPERTAG_CN.org)**——一个人的完整日常工作流，所有 Elisp 配置都可以 copy-paste，用 `C-c C-v C-t` 提取到你的配置里。(English: [A Day with Supertag](doc/A-DAY-WITH-SUPERTAG.org))
 
 ---
 
 ## 跟纯 Org-mode 比，到底方便在哪
 
-| 没有 Org-SuperTag | 有 Org-SuperTag |
+| 没有 Supertag | 有 Supertag |
 |---|---|
 | 每个字段都要手写 `:PROPERTIES:` 抽屉 | 打一次 `#tag`，定义一次字段，之后在表格视图里填 |
 | `grep` + 正则找"高优先级本周任务" | `M-x supertag-search`，结构化查询，秒出结果 |
@@ -24,7 +27,7 @@ Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库
 | 每开一个新项目都要从零搭跟踪系统 | 定义一次 `#project` 的字段模板，终身复用 |
 | "那个会议记录到底写在哪了？" | 按日期、参与人、决议查 `#meeting` |
 
-**核心理念**：你继续像往常一样写 Org 文件。Org-SuperTag 在后台读取它们，构建结构化索引，然后给你一个"类数据库"的视图层——建立在你的纯文本之上。
+**核心理念**：你继续像往常一样写 Org 文件。Supertag 在后台读取它们，构建结构化索引，然后给你一个"类数据库"的视图层——建立在你的纯文本之上。
 
 ---
 
@@ -32,7 +35,8 @@ Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库
 
 ```emacs-lisp
 ;; 用 straight.el 安装
-(straight-use-package '(org-supertag :host github :repo "yibie/org-supertag"))
+(straight-use-package '(supertag :host github :repo "yibie/supertag"))
+(require 'supertag)
 ```
 
 然后在 Emacs 里：
@@ -65,16 +69,16 @@ Org-SuperTag 把普通的 Org 标题变成一个**可结构化查询的知识库
 
 ```emacs-lisp
 ;; 默认：识别文件开头的 :ID:（Org-roam 风格）
-(setq org-supertag-file-id-source 'org-roam)
+(setq supertag-file-id-source 'org-roam)
 
 ;; 识别 #+IDENTIFIER:（Denote 风格）
-(setq org-supertag-file-id-source 'denote)
+(setq supertag-file-id-source 'denote)
 
 ;; 混合目录：逐个文件自动识别两种格式
-(setq org-supertag-file-id-source 'auto)
+(setq supertag-file-id-source 'auto)
 
 ;; 完全不创建文件级节点
-(setq org-supertag-file-id-source 'disabled)
+(setq supertag-file-id-source 'disabled)
 ```
 
 Org-roam 与 Denote 文件放在同一同步目录时，使用 `auto`。链接由每个节点自己的身份决定：Org-ID 节点使用 `id:`，Denote 文件节点使用 `denote:`。文件没有所选的持久化身份时，它仍是普通 Org 文件；SuperTag 不会为它生成临时 ID。
@@ -85,7 +89,7 @@ Org-roam 与 Denote 文件放在同一同步目录时，使用 `auto`。链接�
 
 ## 三个核心概念（2 分钟搞懂）
 
-Org-SuperTag 只建立在三个简单想法上：
+Supertag 只建立在三个简单想法上：
 
 ### 1. `#tag` 把标题变成一条记录
 
@@ -226,8 +230,8 @@ rating   →  数字（1–5）
 | 选择光标对象的相关动作 | `M-x supertag-assist` | 只显示对象相关动作，并保留完整菜单出口 |
 | 重建 Org 索引 | `M-x supertag-reindex-org` | 从一个完整快照重建 Document Projection；绝不恢复 Semantic Facts |
 
-除了单条命令，Org-Supertag 还提供一套小巧的 S-expression 查询语言，可以组合标签、字段、日期和全文搜索，例如
-`(and (tag "task") (not (field "status" "done")))`。可以把它写进 `org-supertag-query-block`
+除了单条命令，Supertag 还提供一套小巧的 S-expression 查询语言，可以组合标签、字段、日期和全文搜索，例如
+`(and (tag "task") (not (field "status" "done")))`。可以把它写进 `supertag-query-block`
 babel 代码块，用 `M-x supertag-query-save` 保存以便复用，或者用 `M-x supertag-query-build`
 交互式构建。完整语法见 `doc/QUERY.md`（英文）。
 
@@ -261,7 +265,7 @@ babel 代码块，用 `M-x supertag-query-save` 保存以便复用，或者用 `
 
 "结构化工具"最常见的担忧是：**"我会不会花更多时间在整理上，而不是真正工作？"**
 
-Org-SuperTag 从三个层面避免这个问题：
+Supertag 从三个层面避免这个问题：
 
 ### 1. 你的文件始终是纯 Org
 
@@ -273,7 +277,7 @@ Org-SuperTag 从三个层面避免这个问题：
 
 ### 3. 同步自动且安全
 
-Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。只有显式命令和 View 才会写入 Org；sync 与 reindex 不修改 Org 文件。`M-x supertag-reindex-org` 只重建现有 Store 中的 Document Projection；不可重建的 Semantic Facts 必须从数据库备份或同步副本恢复。
+Supertag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.md` 配置）。只有显式命令和 View 才会写入 Org；sync 与 reindex 不修改 Org 文件。`M-x supertag-reindex-org` 只重建现有 Store 中的 Document Projection；不可重建的 Semantic Facts 必须从数据库备份或同步副本恢复。
 
 ### 算一笔账
 
@@ -302,7 +306,7 @@ Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.
 | 基本查询 | **查询块**——在 Org 文件里嵌入动态查询结果 (`doc/ABOUT-QUERY-BLOCK_cn.md`) |
 | 默认视图 | **自定义视图**——用原生按钮和可编辑字段构建声明式仪表盘 (`doc/VIEW_FRAMEWORK_DEV_GUIDE.md`) |
 | 单资料库 | **多 Vault**——工作/个人分开管理 (`doc/SYNC-CONFIGURATION.md`) |
-| 写插件 | **插件开发指南**——自定义抽取器和扩展 (`doc/ORG-SUPERTAG-PLUGIN-GUIDE_cn.md`) |
+| 写插件 | **插件开发指南**——自定义抽取器和扩展 (`doc/SUPERTAG-PLUGIN-GUIDE_cn.md`) |
 
 ---
 
@@ -311,9 +315,9 @@ Org-SuperTag 按定时器读取你的文件（可通过 `doc/SYNC-CONFIGURATION.
 | 什么数据 | 存在哪 | 格式 |
 |---|---|---|
 | 你的 Org 文件 | 你配置的目录 | 纯 `.org` 文本 |
-| 结构化字段值 | `~/.emacs.d/org-supertag/supertag-db.el` | Emacs Lisp 数据 |
-| 同步状态 | `~/.emacs.d/org-supertag/sync-state.el` | 文件 mtime 和 hash |
-| 每日备份 | `~/.emacs.d/org-supertag/backups/` | 带时间戳的数据库快照 |
+| 结构化字段值 | `~/.emacs.d/supertag/supertag-db.el` | Emacs Lisp 数据 |
+| 同步状态 | `~/.emacs.d/supertag/sync-state.el` | 文件 mtime 和 hash |
+| 每日备份 | `~/.emacs.d/supertag/backups/` | 带时间戳的数据库快照 |
 
 **Org 文件拥有文档事实；数据库拥有语义事实。** 标题、正文、文档拓扑、Org properties、Tag Occurrence 和真实 Org link 属于文档；稳定 Tag identity、Schema、field value、Semantic Edge、Board、Automation 以及持久 Query/View 定义属于数据库。当前数据库也保存 Org 内容的可重建 Projection，但这些副本没有独立主权。
 
@@ -355,15 +359,15 @@ M-x supertag-git-clone
 
 ### 同步文件夹服务（Dropbox / iCloud / Syncthing）
 
-如果你不想用 git，也可以把 `~/.emacs.d/org-supertag/`（或你配置的 `supertag-db-file` 所在目录）放进 Dropbox / iCloud / Syncthing 之类的同步文件夹，让它跟着你在多台机器间走——请先了解其中的取舍：
+如果你不想用 git，也可以把 `~/.emacs.d/supertag/`（或你配置的 `supertag-db-file` 所在目录）放进 Dropbox / iCloud / Syncthing 之类的同步文件夹，让它跟着你在多台机器间走——请先了解其中的取舍：
 
 **最安全的做法：同一时间只有一台机器在写。** `supertag-db.el` 是单个序列化文件。同步服务的工作方式是"整份文件复制，最后写入者赢"——它并不知道两个 Emacs 会话分别改动了文件的哪些部分，所以无法帮你合并。只要两台机器都保存过，后保存的会静默覆盖先保存的。可靠的做法是：**在机器 B 上开始编辑之前，先在机器 A 上彻底退出 Emacs（`C-x C-c`，而不是只关掉窗口）。**
 
 即使你觉得自己在机器 A 上"只是看看，没有编辑"，这条建议依然成立：自动保存定时器（`supertag-db-auto-save-interval`，默认 300 秒）只要会话中有任何改动被标记为脏（dirty），就会在后台把数据库写入磁盘——所以一个开着的 Emacs 进程本身就是一个后台写入者，不管你有没有在主动敲键盘。
 
-**5.9.0 的数据库锁并不能解决这个问题。** 从 5.9.0 起，Org-SuperTag 会对数据库文件加一个建议性的锁（`supertag-db-lock`），防止*同一台机器*上的两个 Emacs 实例互相踩踏。当前版本默认把本机锁放在 `temporary-file-directory/org-supertag-locks/`，不再把新锁写入网络/同步目录；它仍然只能保护"同机双开"，对跨机器场景没有意义。升级后，如果数据库旁还残留旧版本的 `.#supertag-db.el`，先确认没有旧版本 Emacs 正在使用该 vault，再删除这个陈旧锁文件即可。
+**5.9.0 的数据库锁并不能解决这个问题。** 从 5.9.0 起，Supertag 会对数据库文件加一个建议性的锁（`supertag-db-lock`），防止*同一台机器*上的两个 Emacs 实例互相踩踏。当前版本默认把本机锁放在 `temporary-file-directory/supertag-locks/`，不再把新锁写入网络/同步目录；它仍然只能保护"同机双开"，对跨机器场景没有意义。升级后，如果数据库旁还残留旧版本的 `.#supertag-db.el`，先确认没有旧版本 Emacs 正在使用该 vault，再删除这个陈旧锁文件即可。
 
-**presence（在场）告警。** 为了至少给同步文件夹的用户一个提醒（这不是锁——同步服务动辄几分钟的传播延迟决定了它在物理上不可能是锁），Org-SuperTag 会在数据库文件旁边写一个很小的 `supertag-presence.json` 文件，记录"最后是哪台主机碰过它、什么时候"。当你加载数据库时，如果发现另一台主机大约在最近 5 分钟内（`supertag-presence-stale-seconds`）还活跃过，就会弹出一条醒目的告警，点名那台主机并说明风险。**看到告警后怎么办：** 如果你确定另一台机器已经退出 Emacs，可以放心继续——这条告警只出现一次，不会重复弹出，直到另一台主机再次声明 presence 为止。如果不确定，先去那台机器上退出 Emacs。随时可以用 `M-x supertag-doctor` 查看当前 presence 文件记录的主机、距今时长和判定结果（本机 / 异机活跃 / 异机过期）。将 `supertag-presence-enable` 设为 `nil` 可以完全关闭这个功能。
+**presence（在场）告警。** 为了至少给同步文件夹的用户一个提醒（这不是锁——同步服务动辄几分钟的传播延迟决定了它在物理上不可能是锁），Supertag 会在数据库文件旁边写一个很小的 `supertag-presence.json` 文件，记录"最后是哪台主机碰过它、什么时候"。当你加载数据库时，如果发现另一台主机大约在最近 5 分钟内（`supertag-presence-stale-seconds`）还活跃过，就会弹出一条醒目的告警，点名那台主机并说明风险。**看到告警后怎么办：** 如果你确定另一台机器已经退出 Emacs，可以放心继续——这条告警只出现一次，不会重复弹出，直到另一台主机再次声明 presence 为止。如果不确定，先去那台机器上退出 Emacs。随时可以用 `M-x supertag-doctor` 查看当前 presence 文件记录的主机、距今时长和判定结果（本机 / 异机活跃 / 异机过期）。将 `supertag-presence-enable` 设为 `nil` 可以完全关闭这个功能。
 
 **不要同步 `sync-state.el` 和 `backups/`。** 这两者虽然和数据库放在同一个数据目录下，但都是本机专属的记录（`sync-state.el` 追踪的是*这台机器*文件系统的 mtime/hash；`backups/` 只是磁盘占用，没必要在多台机器间重复保留）。如果你的同步工具是整个数据目录一起同步，请在工具允许的范围内把这两个路径排除掉；就算被覆盖了，最坏结果也只是多做一次 Org reindex，不会丢数据。
 
@@ -380,7 +384,7 @@ M-x supertag-git-clone
 ### 从 SuperTag 4.x 升级
 
 ```emacs-lisp
-;; 1. 备份数据目录 (~/.emacs.d/org-supertag/)
+;; 1. 备份数据目录 (~/.emacs.d/supertag/)
 ;; 2. 加载并运行迁移
 M-x load-file RET supertag-migration.el RET
 M-x supertag-migrate-database-to-new-arch RET
@@ -392,7 +396,7 @@ M-x supertag-migrate-database-to-new-arch RET
 
 ### 旧 reciprocal reference link
 
-旧版 Org-SuperTag 可能同时在 source 与 target 文件插入同一 reference。这类自动生成的
+旧版 Supertag 可能同时在 source 与 target 文件插入同一 reference。这类自动生成的
 link 与用户手写 link 完全同形，因此系统绝不自动删除。先运行
 `M-x supertag-migration-preview-reciprocal-links`，只读查看每一条互相指向的物理 link；
 确定其中某条已经多余后，再运行 `M-x supertag-migrate-reciprocal-links`，逐条选择并二次
@@ -407,7 +411,7 @@ link 与用户手写 link 完全同形，因此系统绝不自动删除。先运
 |---|---|
 | 不知道从哪查起 | `M-x supertag-doctor` —— 8 个板块的健康检查，并引导你逐项修复 |
 | Org 派生节点或链接看起来过期 | `M-x supertag-reindex-org` |
-| 自动同步没启动 | 检查 `org-supertag-sync-directories` 是否正确配置 |
+| 自动同步没启动 | 检查 `supertag-sync-directories` 是否正确配置 |
 | 某个文件没同步 | `M-x supertag-sync-analyze-file` |
 | 字段值不见了 | reindex 不能恢复 Semantic Facts；请从数据库备份或同步副本恢复 |
 | 同步导致 Emacs 卡顿 | 参见 `doc/SYNC-CONFIGURATION.md` 的性能调优 |
@@ -416,7 +420,7 @@ link 与用户手写 link 完全同形，因此系统绝不自动删除。先运
 
 ## 与其他工具的关系
 
-| 工具 | Org-SuperTag 的定位 |
+| 工具 | Supertag 的定位 |
 |---|---|
 | **Org-roam** | Org-roam 是笔记关联图谱；SuperTag 是结构化表格。可以共存。 |
 | **Notion** | Notion 把数据锁在云端。SuperTag 离线，数据在你自己的文件里。 |
@@ -427,17 +431,17 @@ link 与用户手写 link 完全同形，因此系统绝不自动删除。先运
 
 ## 延伸阅读
 
-- **📖 Org-SuperTag 的一天**（中文）：`doc/A-DAY-WITH-ORG-SUPERTAG_CN.org` — 完整工作流教程，含可 tangle 的 Elisp 配置
-- **📖 A Day with Org-SuperTag** (English)：`doc/A-DAY-WITH-ORG-SUPERTAG.org`
+- **📖 Supertag 的一天**（中文）：`doc/A-DAY-WITH-SUPERTAG_CN.org` — 完整工作流教程，含可 tangle 的 Elisp 配置
+- **📖 A Day with Supertag** (English)：`doc/A-DAY-WITH-SUPERTAG.org`
 - **同步配置**：`doc/SYNC-CONFIGURATION.md`
 - **自动化规则**：`doc/AUTOMATION-SYSTEM-GUIDE_cn.md`
 - **捕获系统**：`doc/CAPTURE-GUIDE_cn.md`
 - **虚拟列**：`doc/VIRTUAL_COLUMNS.md`
-- **插件开发**：`doc/ORG-SUPERTAG-PLUGIN-GUIDE_cn.md`
+- **插件开发**：`doc/SUPERTAG-PLUGIN-GUIDE_cn.md`
 - **架构深度解析**：`doc/ONTOLOGY-ARCHITECTURE_cn.md`
 - **视图框架**：`doc/VIEW_FRAMEWORK_DEV_GUIDE.md`
 - **新旧架构对比**：`doc/COMPARE-NEW-OLD-ARCHITECHTURE_cn.md`
 
 ---
 
-Org-SuperTag 以 GPLv3 自由软件协议开发。欢迎在 GitHub 上贡献代码、提交 bug 或功能请求。
+Supertag 以 GPLv3 自由软件协议开发。欢迎在 GitHub 上贡献代码、提交 bug 或功能请求。

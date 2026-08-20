@@ -1,23 +1,27 @@
-# Org-SuperTag – Structured knowledge, inside Emacs, on your own files
+# Supertag – Structured knowledge, inside Emacs, on your own files
 
 [中文](./README_CN.md) | [English](./README.md)
 
-Org-SuperTag turns your plain Org headings into a **structured, queryable knowledge base**.  
+Supertag turns your plain Org headings into a **structured, queryable knowledge base**.
 No external services. No Python. No lock-in. Your `.org` files stay yours — we just make them smarter.
+
+> **Upgrading from Org-Supertag?** Version 6.0 is a breaking rename with no
+> compatibility aliases or automatic data move. Follow
+> **[Migrating to Supertag](doc/MIGRATING-TO-SUPERTAG.md)** before starting it.
 
 > **⚠️ Upgrading a database that still uses nested Tag fields?**
 > Complete the **global field migration** before editing fields with this version. The global field model is now mandatory; `supertag-use-global-fields` is obsolete and ignored.
 > See [`doc/GLOBAL-FIELD-MIGRATION-GUIDE.md`](doc/GLOBAL-FIELD-MIGRATION-GUIDE.md) for step-by-step instructions.
 
-> **Why this matters**: Ever tried to find "all papers I haven't read yet" across your notes? Or "all tasks due this week assigned to @alice"? Plain Org-mode can't do this without painful manual tagging and grep. Org-SuperTag makes it as easy as clicking a column header.
+> **Why this matters**: Ever tried to find "all papers I haven't read yet" across your notes? Or "all tasks due this week assigned to @alice"? Plain Org-mode can't do this without painful manual tagging and grep. Supertag makes it as easy as clicking a column header.
 
-> **📖 Ready to dive in?** Start with **[A Day with Org-SuperTag](doc/A-DAY-WITH-ORG-SUPERTAG.org)** — a complete walkthrough of one person's daily workflow, with copy-paste Elisp you can tangle into your config. (中文版：[Org-SuperTag 的一天](doc/A-DAY-WITH-ORG-SUPERTAG_CN.org))
+> **📖 Ready to dive in?** Start with **[A Day with Supertag](doc/A-DAY-WITH-SUPERTAG.org)** — a complete walkthrough of one person's daily workflow, with copy-paste Elisp you can tangle into your config. (中文版：[Supertag 的一天](doc/A-DAY-WITH-SUPERTAG_CN.org))
 
 ---
 
 ## What you get (and why it's easier)
 
-| Without Org-SuperTag | With Org-SuperTag |
+| Without Supertag | With Supertag |
 |---|---|
 | Manually typing `:PROPERTIES:` drawers for every field | Type `#tag` once, define fields once, fill values in a Table View |
 | `grep` + regex to find "high priority tasks this week" | `M-x supertag-search` — structured query, instant results |
@@ -25,7 +29,7 @@ No external services. No Python. No lock-in. Your `.org` files stay yours — we
 | Every new project means rebuilding your tracking system from scratch | Define a `#project` tag schema once, reuse forever |
 | "Where did I write that meeting note?" | Query `#meeting` by date, participant, or decision |
 
-**The core idea**: You keep writing Org files normally. Org-SuperTag reads them, builds a structured index, and gives you database-like views *on top of* your plain text.
+**The core idea**: You keep writing Org files normally. Supertag reads them, builds a structured index, and gives you database-like views *on top of* your plain text.
 
 ---
 
@@ -33,7 +37,8 @@ No external services. No Python. No lock-in. Your `.org` files stay yours — we
 
 ```emacs-lisp
 ;; With straight.el
-(straight-use-package '(org-supertag :host github :repo "yibie/org-supertag"))
+(straight-use-package '(supertag :host github :repo "yibie/supertag"))
+(require 'supertag)
 ```
 
 Then, in Emacs:
@@ -66,16 +71,16 @@ This setting only affects file-level nodes. Heading nodes continue to use Org ID
 
 ```emacs-lisp
 ;; Default: files with a top-level :ID: (Org-roam style)
-(setq org-supertag-file-id-source 'org-roam)
+(setq supertag-file-id-source 'org-roam)
 
 ;; Files with #+IDENTIFIER: (Denote style)
-(setq org-supertag-file-id-source 'denote)
+(setq supertag-file-id-source 'denote)
 
 ;; Mixed directory: recognize either format per file
-(setq org-supertag-file-id-source 'auto)
+(setq supertag-file-id-source 'auto)
 
 ;; Do not create file-level nodes
-(setq org-supertag-file-id-source 'disabled)
+(setq supertag-file-id-source 'disabled)
 ```
 
 Use `auto` when Org-roam and Denote files share a sync directory. Links are generated from each node's own identity: Org-ID nodes use `id:`, while Denote file nodes use `denote:`. A file without the selected persistent identity remains an ordinary Org file; SuperTag does not invent a temporary ID for it.
@@ -86,7 +91,7 @@ After changing the setting, run `M-x supertag-reindex-org`.
 
 ## The three things you need to know
 
-Org-SuperTag is built on three simple ideas:
+Supertag is built on three simple ideas:
 
 ### 1. `#tag` turns a heading into a record
 
@@ -227,10 +232,10 @@ Define fields on `#meeting`: `date`, `participants`, `decisions`, `action-items`
 | Choose actions for the object at point | `M-x supertag-assist` | Shows only relevant actions, with the complete menu as a fallback |
 | Reindex Org documents | `M-x supertag-reindex-org` | Rebuilds Document Projections from one complete snapshot; never restores Semantic Facts |
 
-Beyond single-command lookups, Org-Supertag has a small S-expression query
+Beyond single-command lookups, Supertag has a small S-expression query
 language for combining tags, fields, dates, and full-text search, e.g.
 `(and (tag "task") (not (field "status" "done")))`. Write one in a
-`org-supertag-query-block` babel block, save it with `M-x supertag-query-save`
+`supertag-query-block` babel block, save it with `M-x supertag-query-save`
 for reuse, or build one interactively with `M-x supertag-query-build`. See
 `doc/QUERY.md` for the full grammar.
 
@@ -265,7 +270,7 @@ Neither command has a default keybinding, so existing Org and View keys are unch
 
 The most common fear about "structured tools" is: *"Will I spend more time organizing than actually working?"*
 
-Org-SuperTag avoids this in three ways:
+Supertag avoids this in three ways:
 
 ### 1. Your files are still plain Org
 
@@ -277,7 +282,7 @@ You define `status`, `priority`, `due` for `#task` **one time**. Every `#task` n
 
 ### 3. Sync is automatic and safe
 
-Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). User edits reach Org only through explicit commands and views; sync and reindex never modify Org files. `M-x supertag-reindex-org` rebuilds Org-derived Document Projections in the existing Store. Restore non-rebuildable Semantic Facts from a database backup or synced copy instead.
+Supertag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATION.md`). User edits reach Org only through explicit commands and views; sync and reindex never modify Org files. `M-x supertag-reindex-org` rebuilds Org-derived Document Projections in the existing Store. Restore non-rebuildable Semantic Facts from a database backup or synced copy instead.
 
 ### Compare the effort
 
@@ -297,7 +302,7 @@ Org-SuperTag reads your files on a timer (configurable via `doc/SYNC-CONFIGURATI
 
 ## When to go deeper
 
-Org-SuperTag grows with you. Start simple, add power when you need it:
+Supertag grows with you. Start simple, add power when you need it:
 
 | After you're comfortable with... | Try this |
 |---|---|
@@ -306,7 +311,7 @@ Org-SuperTag grows with you. Start simple, add power when you need it:
 | Basic queries | **Query Blocks** — embed live query results inside Org files (`doc/ABOUT-QUERY-BLOCK.md`) |
 | Default views | **Custom Views** — build declarative dashboards with native buttons and editable fields (`doc/VIEW_FRAMEWORK_DEV_GUIDE.md`) |
 | Single vault | **Multi-Vault** — separate databases for work/personal (`doc/SYNC-CONFIGURATION.md`) |
-| Writing plugins | **Plugin Guide** — extend with your own extractors and services (`doc/ORG-SUPERTAG-PLUGIN-GUIDE.md`) |
+| Writing plugins | **Plugin Guide** — extend with your own extractors and services (`doc/SUPERTAG-PLUGIN-GUIDE.md`) |
 
 ---
 
@@ -315,9 +320,9 @@ Org-SuperTag grows with you. Start simple, add power when you need it:
 | What | Where | Format |
 |---|---|---|
 | Your Org files | Whatever directories you configure | Plain `.org` text |
-| Structured field values | `~/.emacs.d/org-supertag/supertag-db.el` | Emacs Lisp data |
-| Sync state | `~/.emacs.d/org-supertag/sync-state.el` | File mtimes and hashes |
-| Daily backups | `~/.emacs.d/org-supertag/backups/` | Timestamped DB snapshots |
+| Structured field values | `~/.emacs.d/supertag/supertag-db.el` | Emacs Lisp data |
+| Sync state | `~/.emacs.d/supertag/sync-state.el` | File mtimes and hashes |
+| Daily backups | `~/.emacs.d/supertag/backups/` | Timestamped DB snapshots |
 
 **Org files own document facts; the database owns semantic facts.** Titles, body text, document topology, Org properties, tag occurrences, and physical Org links belong to the documents. Stable tag identities, schemas, field values, semantic relations, boards, automations, and persisted query/view definitions belong to the database. The current database also contains rebuildable projections of Org content; those copies are not independent owners.
 
@@ -357,19 +362,19 @@ Use `M-x supertag-git-sync-now` to skip the debounce and synchronize immediately
 
 **Conflicts.** The database's own edits merge automatically in the common case — different nodes or fields touched on each side. When the *same* field is edited differently on both sides, or plain `.org` prose is edited on the same line by both sides, git leaves that file with a real, unresolved conflict: for `supertag-db.el` itself, it refuses to load until resolved (the error names the file and points here); for `.org` files, the sync scanner skips importing anything still conflict-marked rather than ingesting garbage. Either way, `M-x supertag-doctor` (section "8. Git Sync") lists exactly what's unresolved — resolve it by hand or with `magit`/`git checkout --merge`, same as any other git conflict.
 
-**Upgrade all synced machines together.** The 6.0 database format (see "Data storage" above) is readable only by 6.0+. A 5.9.x machine that pulls a database saved by a 6.0 machine will *appear* to load it successfully but show an empty store — old code reads only the file's first line and never errors. Its save guards prevent actual data loss (an empty in-memory store refuses to overwrite a non-trivial file), but everything will look gone until you upgrade that machine. So: upgrade org-supertag on **every** machine that shares the vault before any of them saves under 6.0.
+**Upgrade all synced machines together.** The 6.0 database format (see "Data storage" above) is readable only by 6.0+. A 5.9.x machine that pulls a database saved by a 6.0 machine will *appear* to load it successfully but show an empty store — old code reads only the file's first line and never errors. Its save guards prevent actual data loss (an empty in-memory store refuses to overwrite a non-trivial file), but everything will look gone until you upgrade that machine. So: upgrade supertag on **every** machine that shares the vault before any of them saves under 6.0.
 
 ### Sync-folder services (Dropbox/iCloud/Syncthing)
 
-If you'd rather not use git, you can keep `~/.emacs.d/org-supertag/` (or wherever `supertag-db-file` lives) inside a Dropbox/iCloud/Syncthing-style folder so it follows you between machines — know the tradeoffs before you rely on it:
+If you'd rather not use git, you can keep `~/.emacs.d/supertag/` (or wherever `supertag-db-file` lives) inside a Dropbox/iCloud/Syncthing-style folder so it follows you between machines — know the tradeoffs before you rely on it:
 
 **Safest mode: one writer at a time.** `supertag-db.el` is a single serialized file. The sync service's job is "replicate the whole file, last writer wins" — it has no idea two Emacs sessions edited different parts of it, so it cannot merge them. If both machines save, one save clobbers the other, silently. The reliable workflow is: **fully quit Emacs on machine A (`C-x C-c`, not just closing the frame) before you start editing on machine B.**
 
 This matters even if you think you're "just reading" on machine A: the auto-save timer (`supertag-db-auto-save-interval`, default 300 seconds) writes the database in the background whenever anything in the session marked it dirty, so an Emacs process left open is a background writer whether you're actively typing or not.
 
-**The 5.9.0 database lock does not cover this.** Since 5.9.0, Org-SuperTag takes an advisory lock (`supertag-db-lock`) on the database file to stop two Emacs instances *on the same machine* from stepping on each other. The current version keeps that host-local lock under `temporary-file-directory/org-supertag-locks/` instead of writing new locks into a network/sync folder; it still only protects against a same-machine double-open and has no meaning across machines. After upgrading, if an old `.#supertag-db.el` remains next to the database, confirm that no older Emacs is using the vault before deleting that stale artifact.
+**The 5.9.0 database lock does not cover this.** Since 5.9.0, Supertag takes an advisory lock (`supertag-db-lock`) on the database file to stop two Emacs instances *on the same machine* from stepping on each other. The current version keeps that host-local lock under `temporary-file-directory/supertag-locks/` instead of writing new locks into a network/sync folder; it still only protects against a same-machine double-open and has no meaning across machines. After upgrading, if an old `.#supertag-db.el` remains next to the database, confirm that no older Emacs is using the vault before deleting that stale artifact.
 
-**The presence warning.** To give sync-folder users at least a heads-up (not a lock — a sync service's multi-minute propagation delay means it can't physically be one), Org-SuperTag writes a small `supertag-presence.json` file next to the database recording which host last touched it and when. When you load the database and another host's presence looks like it was active in roughly the last 5 minutes (`supertag-presence-stale-seconds`), you'll see a loud warning naming that host and the risk. **What to do when you see it:** if you're sure the other machine is done (Emacs quit there), it's safe to proceed — the warning is one-shot and won't repeat until the other host claims presence again. If you're not sure, go quit Emacs on that other machine first. Run `M-x supertag-doctor` any time to see the current presence file's host, age, and verdict (own / foreign-active / foreign-stale). Set `supertag-presence-enable` to `nil` to turn this off entirely.
+**The presence warning.** To give sync-folder users at least a heads-up (not a lock — a sync service's multi-minute propagation delay means it can't physically be one), Supertag writes a small `supertag-presence.json` file next to the database recording which host last touched it and when. When you load the database and another host's presence looks like it was active in roughly the last 5 minutes (`supertag-presence-stale-seconds`), you'll see a loud warning naming that host and the risk. **What to do when you see it:** if you're sure the other machine is done (Emacs quit there), it's safe to proceed — the warning is one-shot and won't repeat until the other host claims presence again. If you're not sure, go quit Emacs on that other machine first. Run `M-x supertag-doctor` any time to see the current presence file's host, age, and verdict (own / foreign-active / foreign-stale). Set `supertag-presence-enable` to `nil` to turn this off entirely.
 
 **Do not sync `sync-state.el` or `backups/`.** Both live in the same data directory as the database but are local, per-machine bookkeeping (`sync-state.el` tracks file mtimes/hashes for *this machine's* filesystem; `backups/` is disk space you don't need to duplicate across machines). If your sync tool syncs the whole data directory, exclude those two paths where the tool allows it; at worst, having them get overwritten just costs an extra Org reindex, it doesn't lose data.
 
@@ -386,7 +391,7 @@ This is a stopgap, not a solution — real multi-machine sync needs something th
 ### From SuperTag 4.x
 
 ```emacs-lisp
-;; 1. Back up your data directory (~/.emacs.d/org-supertag/)
+;; 1. Back up your data directory (~/.emacs.d/supertag/)
 ;; 2. Load and run migration
 M-x load-file RET supertag-migration.el RET
 M-x supertag-migrate-database-to-new-arch RET
@@ -398,9 +403,9 @@ No migration needed. Add `#tag` to headings, define fields, and start using view
 
 ### Old reciprocal reference links
 
-Older Org-SuperTag versions could insert the same reference in both source and
+Older Supertag versions could insert the same reference in both source and
 target files. Those generated links are indistinguishable from links you wrote
-yourself, so Org-SuperTag never deletes them automatically. Run
+yourself, so Supertag never deletes them automatically. Run
 `M-x supertag-migration-preview-reciprocal-links` for a read-only list of exact
 mutual link occurrences. If you decide some are obsolete, run
 `M-x supertag-migrate-reciprocal-links`, select the individual occurrences, and
@@ -416,7 +421,7 @@ and every file is restored if reprojection fails.
 |---|---|
 | Not sure where to start | `M-x supertag-doctor` — an 8-section health check with guided repairs |
 | Org-derived nodes or links look stale | `M-x supertag-reindex-org` |
-| Auto-sync not starting | Check `org-supertag-sync-directories` is set correctly |
+| Auto-sync not starting | Check `supertag-sync-directories` is set correctly |
 | Specific file not syncing | `M-x supertag-sync-analyze-file` |
 | Field values are missing | Reindex cannot restore Semantic Facts; restore the database from a backup or synced copy |
 | Sync freezes Emacs | See `doc/SYNC-CONFIGURATION.md` for performance tuning |
@@ -425,7 +430,7 @@ and every file is restored if reprojection fails.
 
 ## Comparison with other tools
 
-| Tool | Org-SuperTag's difference |
+| Tool | Supertag's difference |
 |---|---|
 | **Org-roam** | Org-roam is a graph of linked notes. SuperTag is structured tables on top of Org. They can coexist. |
 | **Notion** | Notion locks your data in a proprietary cloud. SuperTag works offline on your own files. |
@@ -437,15 +442,15 @@ and every file is restored if reprojection fails.
 ## Further reading
 
 - **Sync configuration**: `doc/SYNC-CONFIGURATION.md`
-- **📖 A Day with Org-SuperTag**: `doc/A-DAY-WITH-ORG-SUPERTAG.org` — complete workflow tutorial with tangleable Elisp
+- **📖 A Day with Supertag**: `doc/A-DAY-WITH-SUPERTAG.org` — complete workflow tutorial with tangleable Elisp
 - **Automation rules**: `doc/AUTOMATION-SYSTEM-GUIDE.md`
 - **Capture system**: `doc/CAPTURE-GUIDE.md`
 - **Virtual columns**: `doc/VIRTUAL_COLUMNS.md`
-- **Plugin development**: `doc/ORG-SUPERTAG-PLUGIN-GUIDE.md`
+- **Plugin development**: `doc/SUPERTAG-PLUGIN-GUIDE.md`
 - **Architecture deep-dive**: `doc/ONTOLOGY-ARCHITECTURE_cn.md`
 - **View framework**: `doc/VIEW_FRAMEWORK_DEV_GUIDE.md`
 - **vs old architecture**: `doc/COMPARE-NEW-OLD-ARCHITECTURE.md`
 
 ---
 
-Org-SuperTag is developed as free software under the GPLv3. Contributions, bug reports, and feature requests are welcome on GitHub.
+Supertag is developed as free software under the GPLv3. Contributions, bug reports, and feature requests are welcome on GitHub.

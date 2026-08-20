@@ -1,8 +1,8 @@
-;;; org-supertag/ops/batch.el --- Batch operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/batch.el --- Batch operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides standardized batch operations for entities in the
-;; Org-Supertag data-centric architecture. These operations leverage
+;; Supertag data-centric architecture. These operations leverage
 ;; individual entity operations and the core transform mechanism for atomicity.
 
 ;;; Code:

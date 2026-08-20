@@ -1,9 +1,9 @@
-;;; supertag-services-scheduler.el --- Unified task scheduler for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-services-scheduler.el --- Unified task scheduler for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;
 ;; This module provides a unified, robust scheduler for managing all background
-;; and periodic tasks within Org-Supertag. It replaces scattered timer
+;; and periodic tasks within Supertag. It replaces scattered timer
 ;; implementations with a centralized, efficient system.
 ;;
 ;; Features:

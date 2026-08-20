@@ -1,4 +1,4 @@
-;;; org-supertag/supertag-view-helper.el --- Reusable view helpers for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/supertag-view-helper.el --- Reusable view helpers for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides common, reusable functions for building view buffers,

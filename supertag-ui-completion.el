@@ -1,6 +1,6 @@
-;;; supertag-ui-completion.el --- Universal and robust completion for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-ui-completion.el --- Universal and robust completion for supertag -*- lexical-binding: t; -*-
 
-;; This file provides a completion-at-point function (CAPF) for org-supertag.
+;; This file provides a completion-at-point function (CAPF) for supertag.
 ;; It uses the classic, most compatible CAPF design pattern to ensure it works
 ;; correctly across all completion UIs, including company-mode and corfu.
 ;;
@@ -51,7 +51,7 @@
 ;;;----------------------------------------------------------------------
 
 (defgroup supertag-completion nil
-  "Completion settings for org-supertag."
+  "Completion settings for supertag."
   :group 'supertag
   :prefix "supertag-completion-")
 
@@ -475,7 +475,7 @@ CAPF `[New]' candidate."
 
 ;;;###autoload
 (defun supertag-completion-setup ()
-  "Setup completion for org-supertag."
+  "Setup completion for supertag."
   (add-hook 'completion-at-point-functions
             #'supertag-completion-at-point nil t)
   (add-hook 'post-self-insert-hook
@@ -483,7 +483,7 @@ CAPF `[New]' candidate."
 
 ;;;###autoload
 (define-minor-mode supertag-ui-completion-mode
-  "Enhanced tag completion for org-supertag."
+  "Enhanced tag completion for supertag."
   :lighter " ST-C"
   (if supertag-ui-completion-mode
       (supertag-completion-setup)

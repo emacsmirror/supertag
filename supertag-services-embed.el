@@ -149,7 +149,7 @@ This function runs OUTSIDE of inhibit-modification-hooks to allow buffer updates
   (remove-hook 'after-save-hook #'supertag-services-embed-on-source-save)
   (message "Embed services cleaned up"))
 
-;; Note: Initialization is handled by the main org-supertag system
+;; Note: Initialization is handled by the main supertag system
 ;; Do not auto-initialize to avoid circular dependencies
 
 (provide 'supertag-services-embed)

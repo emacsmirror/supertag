@@ -2,7 +2,7 @@
 
 ## 🚀 Overview
 
-`org-supertag` Automation System 2.0 is a modern, event-driven automation framework. It empowers every tag with powerful automation capabilities, allowing you to build truly intelligent, hands-free org-mode workflows.
+`supertag` Automation System 2.0 is a modern, event-driven automation framework. It empowers every tag with powerful automation capabilities, allowing you to build truly intelligent, hands-free org-mode workflows.
 
 ### Core Features
 
@@ -104,14 +104,14 @@ Under the new system, you no longer need to "attach" behaviors. You simply **def
 ```
 **Effect Analysis**: The rule is activated by the `:on-tag-added` trigger, executing the `:update-todo-state` action in the `:actions` list, automatically setting the headline TODO keyword.
 
-> Note: `org-supertag` tags are represented as inline `#tag` text and stored in the supertag database.
+> Note: `supertag` tags are represented as inline `#tag` text and stored in the supertag database.
 > Use `M-x supertag-add-tag` / `M-x supertag-remove-tag` to mutate tags; `org-set-tags-command` edits Org's native `:tag:` mechanism and is not the same thing.
 
 ---
 
 ## Core Concept: Relationships
 
-Relationships are one of `org-supertag`'s core capabilities, responsible for establishing meaningful links between different types of data (defined by tags). For example, linking "project" notes with "task" notes.
+Relationships are one of `supertag`'s core capabilities, responsible for establishing meaningful links between different types of data (defined by tags). For example, linking "project" notes with "task" notes.
 
 You can define a relationship using the `supertag-relation-create` function.
 
@@ -163,7 +163,7 @@ The system has built-in several commonly used calculation functions:
 
 ## Core Concept: Formula Fields
 
-Formula fields are an innovative feature of `org-supertag` that allows you to define "virtual columns" in table views, whose values are calculated in real-time based on other fields. The calculation results of formula fields are **not** stored in node properties; they are only calculated and displayed when the table view is rendered.
+Formula fields are an innovative feature of `supertag` that allows you to define "virtual columns" in table views, whose values are calculated in real-time based on other fields. The calculation results of formula fields are **not** stored in node properties; they are only calculated and displayed when the table view is rendered.
 
 ### How to Define Formula Fields
 
@@ -625,7 +625,7 @@ After creating automation rules, you can use the following methods to test and d
 ### Minimal Verification Matrix (Manual)
 
 The following matrix gives you small, repeatable scenarios to verify that the rule engine is wired correctly.
-You can run these snippets in `*scratch*` after loading `org-supertag`.
+You can run these snippets in `*scratch*` after loading `supertag`.
 
 #### 1) Tag trigger: `(:on-tag-added "task")`
 
@@ -1133,14 +1133,14 @@ Run system health checks regularly to ensure data integrity:
 |---------|---------|------|
 | `supertag-behavior-create` | `supertag-automation-create` | Unified creation interface |
 | `supertag-behavior-attach` | *Automatic Indexing* | No manual attachment needed |
-| `org-supertag-behavior-register` | `supertag-automation-create` | Modern interface |
+| `supertag-behavior-register` | `supertag-automation-create` | Modern interface |
 | `supertag-behavior-detach` | `supertag-automation-delete` | Delete rules |
 
 ### Configuration Structure Changes
 
 #### 1.0 Configuration Format:
 ```elisp
-(org-supertag-behavior-register
+(supertag-behavior-register
  "task"
  '(:trigger :on-property-change
    :condition (property-equals :status "Done")

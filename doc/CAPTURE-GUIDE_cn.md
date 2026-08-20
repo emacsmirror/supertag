@@ -1,12 +1,12 @@
-# Org-Supertag 捕获系统
+# Supertag 捕获系统
 
 ## 🚀 什么是捕获系统？
 
-Org-Supertag 捕获系统提供了一个强大而灵活的节点创建机制，支持动态模板、内容生成器和自动字段填充。该系统遵循数据分离原则，将节点内容与扩展属性分别存储在 Org 文件和数据库中。
+Supertag 捕获系统提供了一个强大而灵活的节点创建机制，支持动态模板、内容生成器和自动字段填充。该系统遵循数据分离原则，将节点内容与扩展属性分别存储在 Org 文件和数据库中。
 
 ### 🎯 核心理念
 
-传统 Org-mode 中，创建节点需要手动输入标题、标签和属性。在 Org-Supertag 捕获系统中：
+传统 Org-mode 中，创建节点需要手动输入标题、标签和属性。在 Supertag 捕获系统中：
 
 - 🔄 **模板驱动** - 使用预定义模板快速创建结构化节点
 - 🧠 **智能填充** - 自动从剪贴板、选区或函数获取内容
@@ -461,7 +461,7 @@ M-x supertag-capture-with-template
 
 ### 与 org-capture 的集成（可选）
 
-Org-Supertag 可以作为 `org-capture` 的一个“后处理层”：  
+Supertag 可以作为 `org-capture` 的一个“后处理层”：
 继续使用你原本的 `org-capture-templates`，只在 capture 完成后，由 Supertag 负责：
 
 - 确保节点有稳定的 `ID`
@@ -624,4 +624,4 @@ org-capture 集成和 `supertag-capture-with-template` 内部都使用了这个�
 
 ---
 
-_本文档描述了 Org-Supertag v2.0 捕获系统的完整功能和使用方法。_
+_本文档描述了 Supertag v2.0 捕获系统的完整功能和使用方法。_

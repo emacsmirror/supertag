@@ -1,6 +1,6 @@
-# ORG-SUPERTAG-PLUGIN-GUIDE: Full Plugin Developer Guide
+# SUPERTAG-PLUGIN-GUIDE: Full Plugin Developer Guide
 
-This is the canonical developer guide for building org-supertag plugins.
+This is the canonical developer guide for building supertag plugins.
 
 Core principles:
 
@@ -15,13 +15,13 @@ Working example plugin:
 
 Chinese version:
 
-- `doc/ORG-SUPERTAG-PLUGIN-GUIDE_cn.md`
+- `doc/SUPERTAG-PLUGIN-GUIDE_cn.md`
 
 ## 0) Data model & conventions
 
 ### Entities and storage
 
-org-supertag currently stores Semantic Facts, Document Projections, and derived
+supertag currently stores Semantic Facts, Document Projections, and derived
 state in one central hash-table Store. The Store is a physical container, not
 the owner of every fact in it. See `doc/OWNERSHIP-CONSTITUTION_cn.md`.
 
@@ -153,7 +153,7 @@ Data conventions for writes:
 
 ## 2.5) Schema Registration (Advanced)
 
-org-supertag allows users to register/override schemas at init time.
+supertag allows users to register/override schemas at init time.
 This is intended for advanced setups (custom entities or extended validation),
 and does not provide automatic migrations.
 
@@ -209,7 +209,7 @@ It demonstrates:
 1. Load the demo:
 
 ```elisp
-(add-to-list 'load-path "/path/to/org-supertag/doc/examples/")
+(add-to-list 'load-path "/path/to/supertag/doc/examples/")
 (require 'supertag-view-demo-dashboard)
 ```
 

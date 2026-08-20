@@ -5,7 +5,7 @@
 Add to your Emacs config:
 
 ```elisp
-(add-to-list 'load-path "/path/to/org-supertag")
+(add-to-list 'load-path "/path/to/supertag")
 (require 'supertag-virtual-column)
 (supertag-virtual-column-init)
 ```
@@ -182,7 +182,7 @@ M-x supertag-benchmark-formula-suite  ; Formula complexity
 Run the interactive demo:
 
 ```elisp
-(load-file "/path/to/org-supertag/test/demo-virtual-column.el")
+(load-file "/path/to/supertag/test/demo-virtual-column.el")
 M-x supertag-demo-virtual-column
 ```
 

@@ -1,12 +1,12 @@
-;;; supertag-board.el --- Heptabase-style whiteboard for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-board.el --- Heptabase-style whiteboard for supertag -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024-2026
 
-;; This file is part of org-supertag.
+;; This file is part of supertag.
 
 ;;; Commentary:
 
-;; Provides a Heptabase-style whiteboard visualization of org-supertag nodes.
+;; Provides a Heptabase-style whiteboard visualization of supertag nodes.
 ;; Uses React Flow (xyflow) for the canvas engine with a custom HTTP server
 ;; and WebSocket communication.
 ;;
@@ -28,7 +28,7 @@
 ;;; --- Configuration ---
 
 (defgroup supertag-board nil
-  "Whiteboard visualization for org-supertag."
+  "Whiteboard visualization for supertag."
   :group 'supertag
   :prefix "supertag-board-")
 
@@ -241,7 +241,7 @@ Set up filter and coding for the new client process."
 
 ;;;###autoload
 (define-minor-mode supertag-board-mode
-  "Enable org-supertag whiteboard visualization.
+  "Enable supertag whiteboard visualization.
 Starts HTTP and WebSocket servers to serve the board UI."
   :lighter " board"
   :global t

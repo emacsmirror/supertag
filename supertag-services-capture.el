@@ -1,7 +1,7 @@
-;;; org-supertag/services/capture.el --- Capture services for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/services/capture.el --- Capture services for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file provides reusable capture services for the Org-Supertag system,
+;; This file provides reusable capture services for the Supertag system,
 ;; focusing on standalone capture functionality.
 
 ;;; Code:
@@ -112,7 +112,7 @@ This function correctly uses the Tag -> Field -> Value data model."
 ;;; --- Dynamic Capture Template System ---
 
 (defcustom supertag-capture-templates nil
-  "User-defined dynamic capture templates for Org-Supertag.
+  "User-defined dynamic capture templates for Supertag.
 Each template is a list: (KEY DESCRIPTION PLIST)
 - KEY: A short string to identify the template (e.g., \"t\").
 - DESCRIPTION: A string describing what the template does.
@@ -550,7 +550,7 @@ TAG-POSITION determines where tags are placed in the headline."
 ;;; --- Core Finalization API ---
 
 (defgroup supertag-capture nil
-  "Capture-related configuration and integration for Org-Supertag."
+  "Capture-related configuration and integration for Supertag."
   :group 'supertag)
 
 (defun supertag-capture-finalize-node-at-point (&optional field-specs explicit-node-id)

@@ -27,7 +27,7 @@ interface NodePaletteProps {
 }
 
 // Data key used for drag-and-drop transfers
-export const PALETTE_DND_TYPE = 'application/org-supertag-node-id'
+export const PALETTE_DND_TYPE = 'application/supertag-node-id'
 
 const NodeItem = ({
   node,

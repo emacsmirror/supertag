@@ -1,4 +1,4 @@
-;;; org-supertag/automation/sync.el --- Synchronous Event Processing for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/automation/sync.el --- Synchronous Event Processing for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file implements synchronous event processing for the automation system.
@@ -23,7 +23,7 @@
 ;;; Customization
 
 (defgroup supertag-automation-sync nil
-  "Synchronous automation execution settings for Org-Supertag."
+  "Synchronous automation execution settings for Supertag."
   :group 'supertag)
 
 (defcustom supertag-automation-sync-use-commit-hooks nil

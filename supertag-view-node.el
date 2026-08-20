@@ -1,7 +1,7 @@
-;;; org-supertag/supertag-view-node.el --- Node-centric view for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/supertag-view-node.el --- Node-centric view for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file provides the node-centric view for Org-Supertag. It defines
+;; This file provides the node-centric view for Supertag. It defines
 ;; a major mode and commands to display and interact with a single node's
 ;; metadata in a dedicated buffer.
 
@@ -278,7 +278,7 @@ You can customize this list to match your org-mode TODO keywords."
 Users can rebind keys in this map to avoid conflicts with modal editing.")
 
 (define-derived-mode supertag-view-node-mode special-mode "Supertag Node"
-  "A modern major mode for viewing and editing an Org-Supertag node.
+  "A modern major mode for viewing and editing an Supertag node.
 
 \{supertag-view-node-mode-map}
 
@@ -845,7 +845,7 @@ Falls back to beginning of buffer when no field is found."
   (supertag-view-node--buffer))
 
 (defun supertag-view-node ()
-  "Toggle the Org-Supertag node view as a side window that follows context."
+  "Toggle the Supertag node view as a side window that follows context."
   (interactive)
   (let ((node-id (supertag-view-node--current-entity-id)))
     (if supertag-view-node--enabled

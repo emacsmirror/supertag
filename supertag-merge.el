@@ -206,7 +206,7 @@
 ;; `supertag-core-transform' (plus `cl-lib'/`ht'/`json'/`parse-time', all
 ;; either built in or a normal package.el dependency).  Collectively this is
 ;; ~2800 lines of pure data-structure/persistence code.  It does NOT require
-;; or load `org-supertag.el' itself, so no UI, no `org' integration, no
+;; or load `supertag.el' itself, so no UI, no `org' integration, no
 ;; automation, and no view code is ever pulled in.
 ;;
 ;; Loading this chain has exactly one top-level (load-time) side effect
@@ -221,7 +221,7 @@
 ;; `data-directory' file is touched, purely by requiring this chain.
 ;;
 ;; `ht' itself is expected to already be installed as a normal ELPA package
-;; (as it is for every other org-supertag module); since `-Q' skips init
+;; (as it is for every other supertag module); since `-Q' skips init
 ;; files but does NOT change `package-user-dir', this file calls
 ;; `(package-initialize)' itself, guarded, before requiring the supertag
 ;; chain below -- so the driver invocation does not also need `-L' to point
@@ -230,7 +230,7 @@
 ;; Git invocation (S3b wires this up automatically via `supertag-git-setup';
 ;; documented here so this file is independently testable/usable meanwhile):
 ;;
-;;   emacs -Q --batch -L <org-supertag-dir> -l supertag-merge.el \
+;;   emacs -Q --batch -L <supertag-dir> -l supertag-merge.el \
 ;;         -f supertag-merge-driver-main %O %A %B
 ;;
 ;; Per the git merge-driver protocol, %O/%A/%B are BASE/OURS/THEIRS; the

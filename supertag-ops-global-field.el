@@ -1,4 +1,4 @@
-;;; supertag-ops-global-field.el --- Global field operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-ops-global-field.el --- Global field operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Minimal ops layer for the global field model:

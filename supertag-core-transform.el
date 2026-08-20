@@ -1,8 +1,8 @@
-;;; org-supertag/transform.el --- Core data transformation mechanism for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/transform.el --- Core data transformation mechanism for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file implements the central data transformation mechanism for the
-;; Org-Supertag data-centric architecture. It provides a functional,
+;; Supertag data-centric architecture. It provides a functional,
 ;; atomic, and consistent way to modify the application state.
 
 ;;; Code:
@@ -370,4 +370,4 @@ region is parsed as secondary Org text using RESTRICTION."
 
 (provide 'supertag-core-transform)
 
-;;; org-supertag/transform.el ends here
+;;; supertag/transform.el ends here

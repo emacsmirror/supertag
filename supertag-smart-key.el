@@ -1,13 +1,13 @@
 ;;; supertag-smart-key.el --- Semantic activation at point -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; `supertag-smart-key' turns existing Org-Supertag text properties and
+;; `supertag-smart-key' turns existing Supertag text properties and
 ;; ordinary Emacs interaction primitives into one context-sensitive command.
 ;; Targets are transient data; recognition never mutates the buffer or store.
 ;;
 ;; `supertag-smart-key-mode' is an optional global minor mode that binds
 ;; `C-c s' to `supertag-smart-key' and `C-c S' to `supertag-menu', so users
-;; who enable it always have a way back into Org-Supertag's discoverable
+;; who enable it always have a way back into Supertag's discoverable
 ;; command menu without having to remember either command's name.
 
 ;;; Code:
@@ -170,7 +170,7 @@ This recognizer is read-only; it does not create Org IDs or mutate the store."
     (call-interactively command)))
 
 (defun supertag--open-main-menu ()
-  "Open the complete Org-Supertag command menu."
+  "Open the complete Supertag command menu."
   (supertag--assist-call 'supertag-menu 'supertag-menu))
 
 (defun supertag--target-label (target)
@@ -263,7 +263,7 @@ This recognizer is read-only; it does not create Org IDs or mutate the store."
                                          'supertag-services-ui 'supertag-goto-node node-id)))))))))
     (append (list default-action)
             specific-actions
-            (list (cons "All Org-Supertag commands..." #'supertag--open-main-menu)))))
+            (list (cons "All Supertag commands..." #'supertag--open-main-menu)))))
 
 ;;;###autoload
 (defun supertag-assist ()
@@ -288,7 +288,7 @@ With prefix argument ASSIST, offer actions relevant to that object."
       (supertag-assist)
     (if-let* ((target (supertag--target-at-point)))
         (supertag--activate-target target)
-      (user-error "No Org-Supertag target at point"))))
+      (user-error "No Supertag target at point"))))
 
 (defvar supertag-smart-key-mode-map
   (let ((map (make-sparse-keymap)))
@@ -300,7 +300,7 @@ With prefix argument ASSIST, offer actions relevant to that object."
 ;;;###autoload
 (define-minor-mode supertag-smart-key-mode
   "Global minor mode binding `C-c s' to `supertag-smart-key' and `C-c S' to
-`supertag-menu', so Org-Supertag's context-sensitive activation and its
+`supertag-menu', so Supertag's context-sensitive activation and its
 discoverable command menu are always one keystroke away."
   :global t
   :group 'supertag

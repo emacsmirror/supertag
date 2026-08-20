@@ -30,3 +30,17 @@ Verification：PR/FAQ FAQ 编号 1-13 连续；phase 文档互相一致；
 Verification：`./test/run-tests.sh persist query git` 117/117；隔离
 `user-emacs-directory` 的 `(require 'supertag)` 成功，且
 `(locate-library "org-supertag")` 返回 nil；`git diff --check` 通过。
+
+## 2026-08-19 — task003 当前仓库材料切换
+
+- Rename 5 个仍带旧品牌的开发/用户文档文件，所有当前 README、指南、源码
+  标题/提示、测试描述与开发说明统一使用 Supertag。
+- Add `doc/MIGRATING-TO-SUPERTAG.md`：记录默认数据目录人工改名、安装/require、
+  7 个剩余公开配置与 Babel 语言的 before/after 清单；不提供自动迁移。
+- Modify `CONTEXT.md` 与 Board UI DnD MIME type，使当前领域名与前端协议同样
+  使用 `supertag`。
+- Modify `test/force-reload-test.el`：从脚本位置推导仓库根，删除开发者机器的
+  checkout 绝对路径。
+
+Verification：非历史/迁移白名单范围的 `git grep` 只剩 README 中指向旧名称的
+升级提示；`git diff --check` 通过。

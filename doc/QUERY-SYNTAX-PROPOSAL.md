@@ -11,7 +11,7 @@ task001-009 完成于 2026-08-13）。本文件保留拍板记录。
 4. 聚合渲染 = 仅 query block ✅
 5. Automation 条件一步切换，无长期兼容期 ✅（旧条件评估时确定性转换）
 
-目标：让 org-supertag 的查询语法达到 logseq v1 simple/advanced query 的
+目标：让 supertag 的查询语法达到 logseq v1 simple/advanced query 的
 日常功能水平。写侧已有 Automation 兜底，本提案只动读侧语法。
 
 现状事实（代码核实）：

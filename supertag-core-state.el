@@ -1,8 +1,8 @@
-;;; org-supertag/core/state.el --- Core state variables for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/core/state.el --- Core state variables for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file defines core state variables used across multiple modules
-;; in the Org-Supertag data-centric architecture, particularly for
+;; in the Supertag data-centric architecture, particularly for
 ;; managing batch operations and transactions.
 
 ;;; Code:
@@ -74,4 +74,4 @@ Ensures proper cleanup of notification state even if an error occurs."
 
 (provide 'supertag-core-state)
 
-;;; org-supertag/core/state.el ends here
+;;; supertag/core/state.el ends here

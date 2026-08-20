@@ -1,4 +1,4 @@
-## `org-supertag` Architecture Comparison: New vs Old
+## `supertag` Architecture Comparison: New vs Old
 
 ### Code Size Comparison
 
@@ -35,13 +35,13 @@ The new architecture represents a complete philosophical evolution, centered on 
 
 **New Features:**
 - `supertag-capture`: Enhanced information capture functionality
-- `supertag-automation`: Upgraded behavior automation system (formerly `org-supertag-behavior`)
+- `supertag-automation`: Upgraded behavior automation system (formerly `supertag-behavior`)
 
 **Features in Migration:**
 - `supertag-completion`: Auto-completion for tags
 
 **Removed Features:**
-- Discovery view (`org-supertag-view-discovery`)
+- Discovery view (`supertag-view-discovery`)
 - Python backend (`simtag`) and its AI and RAG support
 
 **Improved Features:**

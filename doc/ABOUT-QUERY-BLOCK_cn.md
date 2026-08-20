@@ -1,4 +1,4 @@
-# Org Supertag Query-Block 示例
+# Supertag Query-Block 示例
 
 作者: 重构完成  
 日期: 2025-08-23
@@ -7,17 +7,17 @@
 
 ### 新的语言名称
 
-现在使用 `org-supertag-query-block` 作为新的 Org Babel 语言名称：
+现在使用 `supertag-query-block` 作为新的 Org Babel 语言名称：
 
-```org-supertag-query-block
+```supertag-query-block
 (tag "work")
 ```
 
 ### 向后兼容
 
-旧的 `org-supertag-query` 语言名称仍然可以使用（向后兼容）：
+旧的 `supertag-query` 语言名称仍然可以使用（向后兼容）：
 
-```org-supertag-query
+```supertag-query
 (and (tag "project") (field "priority" "high"))
 ```
 
@@ -25,19 +25,19 @@
 
 #### 标签查询
 
-```org-supertag-query-block
+```supertag-query-block
 (tag "work")
 ```
 
 #### 字段查询
 
-```org-supertag-query-block
+```supertag-query-block
 (field "status" "active")
 ```
 
 #### 全文搜索
 
-```org-supertag-query-block
+```supertag-query-block
 (term "meeting")
 ```
 
@@ -46,29 +46,29 @@
 逻辑组合是 Query-Block 的强大功能，支持复杂的查询条件：
 
 ##### AND 组合
-```org-supertag-query-block
+```supertag-query-block
 (and (tag "project") (field "priority" "high"))
 ```
 
 ##### OR 组合
-```org-supertag-query-block
+```supertag-query-block
 (or (tag "work") (tag "personal"))
 ```
 
 ##### NOT 组合
-```org-supertag-query-block
+```supertag-query-block
 (not (tag "archived"))
 ```
 
 ##### 嵌套逻辑组合
-```org-supertag-query-block
+```supertag-query-block
 (or 
   (and (tag "project") (field "status" "active"))
   (and (tag "task") (after "2025-06-01")))
 ```
 
 ##### 复杂逻辑组合示例
-```org-supertag-query-block
+```supertag-query-block
 (and 
   (or (tag "work") (tag "project"))
   (not (field "status" "completed"))
@@ -80,41 +80,41 @@
 时间查询支持多种时间相关的条件：
 
 ##### 指定日期之后
-```org-supertag-query-block
+```supertag-query-block
 (after "2025-01-01")
 ```
 
 ##### 指定日期之前
-```org-supertag-query-block
+```supertag-query-block
 (before "2025-12-31")
 ```
 
 ##### 日期范围
-```org-supertag-query-block
+```supertag-query-block
 (and (after "2025-01-01") (before "2025-12-31"))
 ```
 
 ##### 最近天数
-```org-supertag-query-block
+```supertag-query-block
 ;; 查询最近7天创建的节点
 (recent-days 7)
 ```
 
 ##### 特定月份
-```org-supertag-query-block
+```supertag-query-block
 ;; 查询指定月份的节点
 (in-month "2025-06")
 ```
 
 ##### 特定年份
-```org-supertag-query-block
+```supertag-query-block
 ;; 查询指定年份的节点
 (in-year "2025")
 ```
 
 #### 复杂查询示例
 
-```org-supertag-query-block
+```supertag-query-block
 (or 
   (and (tag "project") (field "status" "active"))
   (and (tag "task") (after "2025-06-01")))
@@ -124,7 +124,7 @@
 
 查询结果默认以表格形式展示，包含节点标题、标签和查询的字段值：
 
-```org-supertag-query-block
+```supertag-query-block
 (field "priority" "high")
 ```
 
@@ -140,7 +140,7 @@
 
 #### 带时间条件的查询结果示例
 
-```org-supertag-query-block
+```supertag-query-block
 (and (tag "task") (after "2025-06-01"))
 ```
 
@@ -168,7 +168,7 @@
 
 #### 关系查询
 
-```org-supertag-query-block
+```supertag-query-block
 ;; 查询与指定实体相关的所有实体
 ;; (注意：此功能需要在 supertag-services-query.el 中实现)
 (tag "ProjectA")
@@ -176,7 +176,7 @@
 
 #### 数据库记录查询
 
-```org-supertag-query-block
+```supertag-query-block
 ;; 查询特定数据库中的所有记录
 ;; (注意：此功能需要在 supertag-services-query.el 中实现)
 (tag "Tasks")

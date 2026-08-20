@@ -1,6 +1,6 @@
-# Org-Supertag
+# Supertag
 
-Org-Supertag gives Org documents typed semantics without transferring ownership of the documents themselves to the database.
+Supertag gives Org documents typed semantics without transferring ownership of the documents themselves to the database.
 
 ## Language
 

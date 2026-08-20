@@ -1,8 +1,8 @@
-;;; org-supertag/ops/relation.el --- Relation operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/relation.el --- Relation operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides standardized operations for Relation entities in the
-;; Org-Supertag data-centric architecture. All operations leverage
+;; Supertag data-centric architecture. All operations leverage
 ;; the core transform mechanism and adhere to the defined schema.
 
 ;;; Code:

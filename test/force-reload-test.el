@@ -14,7 +14,9 @@
 (setq supertag--virtual-column-compute-stack nil)
 
 ;; Step 3: Set load path
-(let ((project-dir "/Users/chenyibin/Documents/emacs/package/org-supertag"))
+(let ((project-dir
+       (expand-file-name ".." (file-name-directory
+                               (or load-file-name buffer-file-name)))))
   (unless (member project-dir load-path)
     (add-to-list 'load-path project-dir))
   

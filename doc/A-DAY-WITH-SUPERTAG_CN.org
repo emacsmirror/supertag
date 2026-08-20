@@ -1,11 +1,11 @@
-#+TITLE: Org-SuperTag 的一天 — 一个人的完整工作流
-#+AUTHOR: Org-SuperTag 社区
+#+TITLE: Supertag 的一天 — 一个人的完整工作流
+#+AUTHOR: Supertag 社区
 #+EMAIL: yibie@users.noreply.github.com
 #+OPTIONS: toc:3 num:t
 
 * 如何使用本文档
 
-这不是功能列表。这是 /一个人真实使用 Org-SuperTag 的日常/，仿照 Bernt Hansen 的经典 [[http://doc.norang.ca/org-mode.html][org-mode 教程]] 风格写成。
+这不是功能列表。这是 /一个人真实使用 Supertag 的日常/，仿照 Bernt Hansen 的经典 [[http://doc.norang.ca/org-mode.html][org-mode 教程]] 风格写成。
 
 每个章节都告诉你：
 
@@ -15,15 +15,15 @@
 
 你可以在 Emacs 中加载这个文件，用 =C-c C-v C-t= 将所有 Elisp 示例提取到 =supertag-workflow.el=，然后 =require= 到你的 =init.el= 中。
 
-本文档假设你已经安装了 Org-SuperTag。安装说明见 [[file:../README_CN.md][README]]。
+本文档假设你已经安装了 Supertag。安装说明见 [[file:../README_CN.md][README]]。
 
-如果你想看英文版：[[file:A-DAY-WITH-ORG-SUPERTAG.org][A Day with Org-SuperTag (English)]]
+如果你想看英文版：[[file:A-DAY-WITH-SUPERTAG.org][A Day with Supertag (English)]]
 
 * 我的环境配置
 
 ** 我的 Org 文件
 
-我把生活放在 =~/org/= 下的几个文件中。每个文件有清晰的目的，而 Org-SuperTag 把它们当作一个统一的知识库。
+我把生活放在 =~/org/= 下的几个文件中。每个文件有清晰的目的，而 Supertag 把它们当作一个统一的知识库。
 
 | 文件                  | 用途                                       |
 |-----------------------+--------------------------------------------|
@@ -33,18 +33,18 @@
 | =meetings.org=        | 会议记录，包含决议和待办                    |
 | =journal.org=         | 日记、想法、反思                            |
 
-为什么分开多个文件？因为 Org-SuperTag 可以 /跨所有文件/ 查询。文件分隔是为了 /我/ 的脑袋——Org-SuperTag 不在乎标题在哪个文件里。=meetings.org= 里的 =#task= 和 =projects.org= 里的 =#task= 在表格视图中并列显示。 
+为什么分开多个文件？因为 Supertag 可以 /跨所有文件/ 查询。文件分隔是为了 /我/ 的脑袋——Supertag 不在乎标题在哪个文件里。=meetings.org= 里的 =#task= 和 =projects.org= 里的 =#task= 在表格视图中并列显示。
 ** Vault 配置
 
 我目前用一个 vault 管理所有东西。如果以后想区分工作和个人，我会这样配：
 
 #+begin_src emacs-lisp
   ;; 单 vault（我现在的配置）
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
 
   ;; 多 vault 方案——工作和个人分开的独立数据库
-  ;; (setq org-supertag-sync-directories '("~/org/work/" "~/org/personal/"))
-  ;; (setq org-supertag-sync-directories-mode 'vaults)
+  ;; (setq supertag-sync-directories '("~/org/work/" "~/org/personal/"))
+  ;; (setq supertag-sync-directories-mode 'vaults)
 #+end_src
 
 ** 同步配置
@@ -53,7 +53,7 @@
 
 #+begin_src emacs-lisp
   ;; 每 60 秒自动同步
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
   (setq supertag-auto-sync-interval 60)
 
   ;; 每 10 次 tick 才做一次全量校验（节省 CPU）
@@ -146,7 +146,7 @@
 
 * 白天：捕获但不中断心流
 
-这是 Org-SuperTag 相对纯 Org-mode 最大的优势。捕获 /快/ 且 /结构化/——不需要记忆字段名或语法。
+这是 Supertag 相对纯 Org-mode 最大的优势。捕获 /快/ 且 /结构化/——不需要记忆字段名或语法。
 
 ** 工作中捕获一个任务
 
@@ -179,7 +179,7 @@
    - @小红：在 staging 上跑负载测试
 #+end_example
 
-Org-SuperTag 读取后：
+Supertag 读取后：
 1. 提取 =#meeting= 标签
 2. 通过 /extractor 流水线/ 拉取 =todo= 关键字、=scheduled= 等结构信息
 3. 使其可以与所有其他 =#meeting= 节点一起查询
@@ -222,13 +222,13 @@ Org-SuperTag 读取后：
 - 无需删除即可启用/禁用：=supertag-automation-enable= / =disable=
 - 测试规则效果：详见 =doc/AUTOMATION-SYSTEM-GUIDE_cn.md=
 
-自动化的意义：我定义逻辑 /一次/，Org-SuperTag 每次自动应用。"哎呀，忘了给会议记录填日期"这种事不会再发生。
+自动化的意义：我定义逻辑 /一次/，Supertag 每次自动应用。"哎呀，忘了给会议记录填日期"这种事不会再发生。
 
 * 工作中：像 App 一样的视图
 
 ** Table View——我的主操作界面
 
-我 60% 的 Org-SuperTag 时间都在 Table View 里。它用起来像一个轻量级数据库客户端，但完全在 Emacs 里。
+我 60% 的 Supertag 时间都在 Table View 里。它用起来像一个轻量级数据库客户端，但完全在 Emacs 里。
 
 我常做的操作：
 
@@ -273,7 +273,7 @@ Org-SuperTag 读取后：
   └──────────┴──────────┴──────────┘
 #+end_example
 
-我拖拽任务在各列之间推进。Org-SuperTag 自动更新 =status= 字段。如果我设置了 =status= 变更的自动化规则（比如记录完成时间），它们会立刻触发。
+我拖拽任务在各列之间推进。Supertag 自动更新 =status= 字段。如果我设置了 =status= 变更的自动化规则（比如记录完成时间），它们会立刻触发。
 
 ** Node View——带自动补全的详细编辑
 
@@ -335,7 +335,7 @@ Org-SuperTag 读取后：
 
 #+begin_src emacs-lisp
   ;; source Org [[链接]]拥有该引用。
-  ;; Org-SuperTag 将它投影成可查询的 :reference relation：
+  ;; Supertag 将它投影成可查询的 :reference relation：
   ;;   1. target 文件不会被修改
   ;;   2. Backlink 通过 relations-to 查询派生
   ;;   3. 出现在 Table View 的 Refs 列
@@ -420,7 +420,7 @@ Board UI 最适合 /探索/ 和 /理解/——当我想搞清楚想法之间怎�
 #+begin_example
   > 这个月关于 API 架构我们做了什么决定？
 
-  Org-SuperTag:
+  Supertag:
   - 搜索过去一个月所有 #meeting 节点
   - 找到与 API 架构相关的段落
   - 生成带引用的结构化答案
@@ -509,7 +509,7 @@ RAG 有三种模式：
 
 ** 数据库备份
 
-Org-SuperTag 每天自动保存快照（可配置）：
+Supertag 每天自动保存快照（可配置）：
 
 #+begin_src emacs-lisp
   (setq supertag-db-auto-save-interval 300)   ; 每 5 分钟自动保存
@@ -517,7 +517,7 @@ Org-SuperTag 每天自动保存快照（可配置）：
   (setq supertag-db-backup-keep-days 3)       ; 保留最近 3 天的备份
 #+end_src
 
-备份存储在 =~/.emacs.d/org-supertag/backups/=。
+备份存储在 =~/.emacs.d/supertag/backups/=。
 
 ** 自动化规则审查
 
@@ -535,13 +535,13 @@ Org-SuperTag 每天自动保存快照（可配置）：
 #+end_src
 
 #+begin_src emacs-lisp :tangle supertag-workflow.el
-  ;;; supertag-workflow.el — 我的 Org-SuperTag 日常配置
+  ;;; supertag-workflow.el — 我的 Supertag 日常配置
 
   ;; ── 安装 ──
-  ;; (straight-use-package '(org-supertag :host github :repo "yibie/org-supertag"))
+  ;; (straight-use-package '(supertag :host github :repo "yibie/supertag"))
 
   ;; ── 同步 ──
-  (setq org-supertag-sync-directories '("~/org/"))
+  (setq supertag-sync-directories '("~/org/"))
   (setq supertag-auto-sync-interval 60)
   (setq supertag-sync-maintenance-every-n-ticks 10)
   (setq supertag-sync-snapshot-guard t)
@@ -631,7 +631,7 @@ Org-SuperTag 每天自动保存快照（可配置）：
 
 我把 /不用的/ 也记录下来，帮别人少走弯路：
 
-- =org-supertag-sync-directories-mode 'unified= 配 10+ 目录 → 切换到了 vault 模式。
+- =supertag-sync-directories-mode 'unified= 配 10+ 目录 → 切换到了 vault 模式。
   每次 tick 扫描所有目录太慢了。
 - 用 =:on-store-changed= 做触发器的自动化规则 → 太吵了。改为特定触发器（=:on-field-changed=、
   =:on-node-create=）。
@@ -641,11 +641,11 @@ Org-SuperTag 每天自动保存快照（可配置）：
 * 延伸阅读
 
 - [[file:../README_CN.md][README]] — 安装和 5 分钟上手
-- [[file:A-DAY-WITH-ORG-SUPERTAG.org][英文版教程]]
+- [[file:A-DAY-WITH-SUPERTAG.org][英文版教程]]
 - [[file:AUTOMATION-SYSTEM-GUIDE_cn.md][自动化指南]] — 完整的 trigger/condition/action 参考
 - [[file:CAPTURE-GUIDE_cn.md][捕获指南]] — 捕获系统深入解析
 - [[file:SYNC-CONFIGURATION.md][同步配置]] — 性能调优、vault 模式、故障排查
 - [[file:VIEW_FRAMEWORK_DEV_GUIDE.md][视图框架]] — 构建自定义仪表盘
 - [[file:VIRTUAL_COLUMNS.md][虚拟列]] — 计算字段 API
 - [[file:ONTOLOGY-ARCHITECTURE_cn.md][架构深度解析]]
-- [[file:ORG-SUPERTAG-PLUGIN-GUIDE_cn.md][插件开发指南]] — 构建自己的 extractor 和服务
+- [[file:SUPERTAG-PLUGIN-GUIDE_cn.md][插件开发指南]] — 构建自己的 extractor 和服务

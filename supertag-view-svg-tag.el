@@ -1,4 +1,4 @@
-;;; supertag-view-svg-tag.el --- SVG tag rendering for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-view-svg-tag.el --- SVG tag rendering for supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Renders #tag inline tags as SVG pill badges using Emacs' built-in svg library.
@@ -16,7 +16,7 @@
 ;;;----------------------------------------------------------------------
 
 (defgroup supertag-view-svg-tag nil
-  "SVG tag rendering for org-supertag inline #tags."
+  "SVG tag rendering for supertag inline #tags."
   :group 'supertag)
 
 (defcustom supertag-svg-tag-enable t
@@ -252,7 +252,7 @@ Returns the appropriate display spec for the matched tag."
 
 ;;;###autoload
 (defun supertag-svg-tag-mode-enable ()
-  "Enable SVG tag rendering for org-supertag."
+  "Enable SVG tag rendering for supertag."
   (interactive)
   (setq supertag-svg-tag-enable t)
   (supertag-svg-tag--refresh-all-buffers)

@@ -1,15 +1,15 @@
-# Org-SuperTag 本体三层架构视图（数据 / 逻辑 / 行为）
+# Supertag 本体三层架构视图（数据 / 逻辑 / 行为）
 
-> org-supertag is an ontological system where data defines what exists, logic defines what it means, and behavior defines what can be done.
+> supertag is an ontological system where data defines what exists, logic defines what it means, and behavior defines what can be done.
 
-本文把“本体论三分法”落到 org-supertag 当前代码结构上，给出可执行的架构视图与边界约束，并回答它与 `supertag-automation` 规则系统的差异。
+本文把“本体论三分法”落到 supertag 当前代码结构上，给出可执行的架构视图与边界约束，并回答它与 `supertag-automation` 规则系统的差异。
 
 三层架构回答“代码负责什么”；[《数据主权宪章》](OWNERSHIP-CONSTITUTION_cn.md)
 另外回答“事实由谁拥有”。两条轴必须同时成立。
 
 ## 0. 给初中生的 3 分钟版本（用户能得到什么）
 
-把 org-supertag 想象成一个“整理知识的游戏”，你在玩的时候最关心三件事：
+把 supertag 想象成一个“整理知识的游戏”，你在玩的时候最关心三件事：
 
 1. **数据层（Data）**：我有哪些“东西”？（笔记/节点、标签、字段、关系）  
    - 它只负责“记账”，不负责判断对不对。
@@ -40,7 +40,7 @@
 
 - **允许**：实体/字段/关系定义、持久化与扫描、数据模型与索引。
 - **禁止**：推理、规则、自动化、条件判断、UI 交互。
-- **在 org-supertag 中的体现**：
+- **在 supertag 中的体现**：
   - `supertag-core-store.el`：当前物理容器；混装 Semantic Facts、Document Projections 与 derived state，不是系统整体的单一真相源
   - `supertag-core-schema.el`：实体类型与字段/关系的结构性定义
   - `supertag-core-persistence.el`：落盘/加载
@@ -53,7 +53,7 @@
 
 - **允许**：派生事实、约束、语义不变量、语义视图（只读）。
 - **禁止**：直接修改 store、执行外部动作、UI 交互。
-- **在 org-supertag 中的当前形态**（分散，但用户入口已经很清晰）：
+- **在 supertag 中的当前形态**（分散，但用户入口已经很清晰）：
   - `supertag-services-query.el`：`supertag-query` / `supertag-query-sexp`（语义视图/筛选器的主要实现）
   - `supertag-core-scan.el`：扫描式查询（内部 API、O(N) 扫描 store），是 query 的基础依赖之一
   - `supertag-services-formula.el`：公式求值（只读计算，适合“派生列/派生字段”）
@@ -76,7 +76,7 @@
 - **允许**：自动化执行、同步、调度、UI 交互、对外系统调用。
 - **输入**：数据层对象 + 逻辑层结论。
 - **输出**：对 Org 世界的修改或外部动作。
-- **在 org-supertag 中的体现**：
+- **在 supertag 中的体现**：
   - `supertag-automation.el` / `supertag-automation-sync.el`：事件驱动规则与动作执行
   - `supertag-ops-*.el`：具象写操作（字段/节点/关系）
   - `supertag-services-sync.el`：同步机制（Org ↔ Store）
@@ -168,7 +168,7 @@ Semantic command -> Semantic transaction -> 使相关 Projection 失效
 
 1. **Query-Block（推荐，最符合逻辑层）**：把逻辑写进 Org 文档，结果可重复计算、可分享、可版本化。  
    - 入口：`M-x supertag-insert-query-block`（实现见 `supertag-ui-query-block.el`）  
-   - 用法：在插入的 `org-supertag-query-block` 代码块里写查询 S-expression，`C-c C-c` 执行，得到表格结果。  
+   - 用法：在插入的 `supertag-query-block` 代码块里写查询 S-expression，`C-c C-c` 执行，得到表格结果。
 
 2. **交互式视图（Table / Search）**：把逻辑作为“视图条件”来用，体验更爽快，但默认不持久化。  
    - Table：`M-x supertag-view-table`（目前交互入口按 tag 打开，再用 `/` 过滤、`C-c v S` 保存为 named view；named view 目前是 buffer-local）。  
@@ -212,7 +212,7 @@ Semantic command -> Semantic transaction -> 使相关 Projection 失效
 ### 7.2 工具/迁移
 
 **`supertag-migration.el`**：数据迁移脚本
-- 职责：从旧 `org-supertag-db.el` 格式迁移到新架构
+- 职责：从旧 `supertag-db.el` 格式迁移到新架构
 - 特点：一次性运行脚本，非常规业务代码
 - 边界：独立工具，不属于三层架构
 
@@ -237,7 +237,7 @@ Semantic command -> Semantic transaction -> 使相关 Projection 失效
 
 ### 7.5 入口/配置
 
-**`org-supertag.el`**：主入口文件
+**`supertag.el`**：主入口文件
 - 职责：包入口、配置定义、依赖管理
 - 特点：不包含业务逻辑，仅作为包的入口点
 - 边界：配置层，不属于三层架构

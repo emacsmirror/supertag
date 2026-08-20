@@ -1,4 +1,4 @@
-# Org Supertag Query-Block Examples
+# Supertag Query-Block Examples
 
 Author: Refactoring Completed  
 Date: 2025-08-23
@@ -7,17 +7,17 @@ Date: 2025-08-23
 
 ### New Language Name
 
-`org-supertag-query-block` is now used as the new Org Babel language name:
+`supertag-query-block` is now used as the new Org Babel language name:
 
-```org-supertag-query-block
+```supertag-query-block
 (tag "work")
 ```
 
 ### Backward Compatibility
 
-The old `org-supertag-query` language name can still be used (backward compatible):
+The old `supertag-query` language name can still be used (backward compatible):
 
-```org-supertag-query
+```supertag-query
 (and (tag "project") (field "priority" "high"))
 ```
 
@@ -25,19 +25,19 @@ The old `org-supertag-query` language name can still be used (backward compatibl
 
 #### Tag Query
 
-```org-supertag-query-block
+```supertag-query-block
 (tag "work")
 ```
 
 #### Field Query
 
-```org-supertag-query-block
+```supertag-query-block
 (field "status" "active")
 ```
 
 #### Full-text Search
 
-```org-supertag-query-block
+```supertag-query-block
 (term "meeting")
 ```
 
@@ -46,29 +46,29 @@ The old `org-supertag-query` language name can still be used (backward compatibl
 Logical combinations are a powerful feature of Query-Block, supporting complex query conditions:
 
 ##### AND Combination
-```org-supertag-query-block
+```supertag-query-block
 (and (tag "project") (field "priority" "high"))
 ```
 
 ##### OR Combination
-```org-supertag-query-block
+```supertag-query-block
 (or (tag "work") (tag "personal"))
 ```
 
 ##### NOT Combination
-```org-supertag-query-block
+```supertag-query-block
 (not (tag "archived"))
 ```
 
 ##### Nested Logical Combinations
-```org-supertag-query-block
+```supertag-query-block
 (or 
   (and (tag "project") (field "status" "active"))
   (and (tag "task") (after "2025-06-01")))
 ```
 
 ##### Complex Logical Combination Example
-```org-supertag-query-block
+```supertag-query-block
 (and 
   (or (tag "work") (tag "project"))
   (not (field "status" "completed"))
@@ -80,41 +80,41 @@ Logical combinations are a powerful feature of Query-Block, supporting complex q
 Time queries support multiple time-related conditions:
 
 ##### After a Specific Date
-```org-supertag-query-block
+```supertag-query-block
 (after "2025-01-01")
 ```
 
 ##### Before a Specific Date
-```org-supertag-query-block
+```supertag-query-block
 (before "2025-12-31")
 ```
 
 ##### Date Range
-```org-supertag-query-block
+```supertag-query-block
 (and (after "2025-01-01") (before "2025-12-31"))
 ```
 
 ##### Recent Days
-```org-supertag-query-block
+```supertag-query-block
 ;; Query nodes created in the last 7 days
 (recent-days 7)
 ```
 
 ##### Specific Month
-```org-supertag-query-block
+```supertag-query-block
 ;; Query nodes in a specific month
 (in-month "2025-06")
 ```
 
 ##### Specific Year
-```org-supertag-query-block
+```supertag-query-block
 ;; Query nodes in a specific year
 (in-year "2025")
 ```
 
 #### Complex Query Example
 
-```org-supertag-query-block
+```supertag-query-block
 (or 
   (and (tag "project") (field "status" "active"))
   (and (tag "task") (after "2025-06-01")))
@@ -124,7 +124,7 @@ Time queries support multiple time-related conditions:
 
 Query results are displayed in table format by default, including node titles, tags, and queried field values:
 
-```org-supertag-query-block
+```supertag-query-block
 (field "priority" "high")
 ```
 
@@ -140,7 +140,7 @@ Here is a simulated query result display:
 
 #### Query Result Example with Time Conditions
 
-```org-supertag-query-block
+```supertag-query-block
 (and (tag "task") (after "2025-06-01"))
 ```
 
@@ -168,7 +168,7 @@ In addition to S-expression query blocks, there is also a standalone interactive
 
 #### Relationship Queries
 
-```org-supertag-query-block
+```supertag-query-block
 ;; Query all entities related to a specified entity
 ;; (Note: This feature needs to be implemented in supertag-services-query.el)
 (tag "ProjectA")
@@ -176,7 +176,7 @@ In addition to S-expression query blocks, there is also a standalone interactive
 
 #### Database Record Queries
 
-```org-supertag-query-block
+```supertag-query-block
 ;; Query all records in a specific database
 ;; (Note: This feature needs to be implemented in supertag-services-query.el)
 (tag "Tasks")

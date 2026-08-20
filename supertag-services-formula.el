@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 ;; This module owns the single formula grammar and evaluator for
-;; Org-Supertag.  The canonical grammar is infix arithmetic over field
+;; Supertag.  The canonical grammar is infix arithmetic over field
 ;; references, e.g. "(done / total) * 100".  Legacy formulas using the
 ;; "{{key}}"-placeholder prefix syntax (e.g. "(- 10 {{:progress}})") are
 ;; translated to the canonical grammar at evaluation time, so existing

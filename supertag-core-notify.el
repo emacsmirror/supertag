@@ -1,7 +1,7 @@
-;;; org-supertag/core/notify.el --- Change notification system for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/core/notify.el --- Change notification system for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file implements the change notification system for the Org-Supertag
+;; This file implements the change notification system for the Supertag
 ;; data-centric architecture. It provides mechanisms for notifying subscribers
 ;; about data changes, especially in batch operations.
 

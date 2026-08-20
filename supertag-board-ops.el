@@ -1,8 +1,8 @@
-;;; supertag-board-ops.el --- Board CRUD operations for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-board-ops.el --- Board CRUD operations for supertag -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024-2026
 
-;; This file is part of org-supertag.
+;; This file is part of supertag.
 
 ;;; Commentary:
 

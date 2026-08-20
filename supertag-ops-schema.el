@@ -1,4 +1,4 @@
-;;; org-supertag/ops/schema.el --- Tag schema materialization for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/schema.el --- Tag schema materialization for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Centralizes tag schema resolution, including inheritance handling
@@ -173,4 +173,4 @@
 
 (provide 'supertag-ops-schema)
 
-;;; org-supertag/ops/schema.el ends here
+;;; supertag/ops/schema.el ends here

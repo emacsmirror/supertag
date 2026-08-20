@@ -1,6 +1,6 @@
-# ORG-SUPERTAG-PLUGIN-GUIDE（中文版）：完整插件开发文档
+# SUPERTAG-PLUGIN-GUIDE（中文版）：完整插件开发文档
 
-这份文档是 org-supertag 插件开发的事实来源（开发者指南）。
+这份文档是 supertag 插件开发的事实来源（开发者指南）。
 
 核心原则：
 
@@ -17,7 +17,7 @@
 
 ### 实体与存储
 
-org-supertag 当前把 Semantic Facts、Document Projections 与 derived state
+supertag 当前把 Semantic Facts、Document Projections 与 derived state
 集中存放在一个 hash-table Store 中。Store 是物理容器，不是其中每个事实的 Owner。
 完整定义见 `doc/OWNERSHIP-CONSTITUTION_cn.md`。
 
@@ -144,7 +144,7 @@ View Data API 是 **内部公开（internal public）** 且 **UI 无关** 的数
 
 ## 2.5）Schema 注册（高级用法）
 
-org-supertag 支持用户在初始化阶段注册/覆写 schema。
+supertag 支持用户在初始化阶段注册/覆写 schema。
 这主要面向高级场景（自定义实体类型或扩展校验/字段），不包含自动迁移机制。
 
 推荐配置方式：
@@ -197,7 +197,7 @@ API：
 1. 加载示例：
 
 ```elisp
-(add-to-list 'load-path "/path/to/org-supertag/doc/examples/")
+(add-to-list 'load-path "/path/to/supertag/doc/examples/")
 (require 'supertag-view-demo-dashboard)
 ```
 

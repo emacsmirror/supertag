@@ -1,7 +1,7 @@
-;;; org-supertag/services/sync.el --- Synchronization mechanism for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/services/sync.el --- Synchronization mechanism for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file implements the synchronization mechanism for the Org-Supertag
+;; This file implements the synchronization mechanism for the Supertag
 ;; data-centric architecture. It handles importing data from Org files into the
 ;; central store and exporting data from the store back to Org files.
 
@@ -28,10 +28,10 @@
 (defvar supertag-file-id-source 'org-roam
   "Policy for recognizing stable file node IDs.")
 
-;;; Customization (from org-supertag-old/org-supertag-sync.el)
+;;; Customization (from supertag-old/supertag-sync.el)
 
 (defgroup supertag-sync nil
-  "Synchronization settings for Org-Supertag."
+  "Synchronization settings for Supertag."
   :group 'supertag)
 
 (defcustom supertag-sync-state-file
@@ -67,7 +67,7 @@ If nil, no automatic synchronization will occur."
 - `vaults`: each directory is treated as an isolated vault with its own DB/state,
   and sync only runs for the currently active vault directory.
 
-Vault activation is handled by `org-supertag.el` (see `supertag-vault-activate`)."
+Vault activation is handled by `supertag.el` (see `supertag-vault-activate`)."
   :type '(choice (const :tag "Unified DB" unified)
                  (const :tag "Vaults (isolated per directory)" vaults))
   :group 'supertag-sync)
@@ -75,7 +75,7 @@ Vault activation is handled by `org-supertag.el` (see `supertag-vault-activate`)
 (defun supertag-sync--effective-directories ()
   "Return effective sync directories.
 
-When Org-Supertag is running in vault mode, this resolves to the active vault's
+When Supertag is running in vault mode, this resolves to the active vault's
 directory (single-element list). Otherwise returns `supertag-sync-directories`."
   (if (and (eq supertag-sync-directories-mode 'vaults)
            (fboundp 'supertag--effective-sync-directories))
@@ -178,7 +178,7 @@ If candidate deletions exceed this number, the deletion pass is aborted."
 ;;; Auto-start configuration (safer defaults to reduce user setup)
 
 (defcustom supertag-sync-auto-start t
-  "Automatically start Org-Supertag auto-sync after Emacs startup.
+  "Automatically start Supertag auto-sync after Emacs startup.
 Start is delayed and retried until sync directories are available
 to avoid race conditions at early startup."
   :type 'boolean
@@ -758,7 +758,7 @@ Returns the loaded or initialized sync state."
 ;;     (message "WARNING: Function supertag-sync--check-and-sync is NOT defined"))
 ;;   (message "Emergency recovery completed. You can now try M-x supertag-sync-start-auto-sync"))
 
-;;; Core Functions - Node Hash Support (from org-supertag-old/org-supertag-sync.el)
+;;; Core Functions - Node Hash Support (from supertag-old/supertag-sync.el)
 
 (defun supertag--node-hash--properties-to-alist (props)
   "Normalize PROPS into an alist of (key . value) pairs for hashing."
@@ -2416,7 +2416,7 @@ COUNTERS is an optional plist for tracking migration statistics.
 ALLOW-NO-ID is retained for caller compatibility; ID-less headings are skipped.
 Returns a plist containing summary information.
 
-This is a one-time operation for initializing user data when first using org-supertag.
+This is a one-time operation for initializing user data when first using supertag.
 It will create entities of type :node and :tag, and establish relations between them."
   (let* ((counters (or counters (list :files-processed 0
                                      :nodes-created 0

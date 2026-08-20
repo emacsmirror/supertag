@@ -1,4 +1,4 @@
-;;; supertag-diagnostics.el --- Interactive diagnostic helpers for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-diagnostics.el --- Interactive diagnostic helpers for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Interactive, read-only diagnostic utilities for inspecting node logic,
@@ -22,7 +22,7 @@
 (require 'supertag-ops-node)
 
 (defgroup supertag-diagnostics nil
-  "Experimental helpers for Org-Supertag."
+  "Experimental helpers for Supertag."
   :group 'supertag)
 
 (defcustom supertag-diagnostics-ref-stale-days 7

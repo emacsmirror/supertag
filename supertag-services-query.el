@@ -1,7 +1,7 @@
-;;; org-supertag/services/query.el --- Query system for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/services/query.el --- Query system for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module is the read boundary for composed Org-Supertag data.  Concrete
+;; This module is the read boundary for composed Supertag data.  Concrete
 ;; queries hide Store/index joins from UI consumers.  The legacy generic query
 ;; helpers remain temporarily for compatibility and must not gain new callers.
 
@@ -253,7 +253,7 @@ Returns a list of (id . node-data) pairs."
 
 
 ;;; --- S-expression Query Engine ---
-;; This is the new high-performance query engine that replaces the old org-supertag-query.el
+;; This is the new high-performance query engine that replaces the old supertag-query.el
 ;; It uses indexes for O(1) lookups instead of O(n) table scans
 
 (require 'cl-lib)

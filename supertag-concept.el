@@ -1,4 +1,4 @@
-;;; supertag-concept.el --- Concept mentions for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-concept.el --- Concept mentions for supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; CJK-friendly concept mentions:
@@ -20,7 +20,7 @@
 (require 'supertag-view-helper)
 
 (defgroup supertag-concept nil
-  "Concept mention support for Org-Supertag."
+  "Concept mention support for Supertag."
   :group 'supertag)
 
 (defcustom supertag-concept-min-term-length 2

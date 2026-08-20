@@ -1,8 +1,8 @@
-;;; org-supertag/ops/field.el --- Field operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/field.el --- Field operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides standardized operations for managing field values
-;; associated with nodes and tags in the Org-Supertag data-centric architecture.
+;; associated with nodes and tags in the Supertag data-centric architecture.
 
 ;;; Code:
 

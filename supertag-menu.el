@@ -1,11 +1,11 @@
-;;; supertag-menu.el --- Discoverable transient menu for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-menu.el --- Discoverable transient menu for Supertag -*- lexical-binding: t; -*-
 
 ;; Keywords: convenience
 
 ;;; Commentary:
 
 ;; `supertag-menu' is a single entry point that surfaces the most useful
-;; Org-Supertag commands in one discoverable `transient' pop-up, so users
+;; Supertag commands in one discoverable `transient' pop-up, so users
 ;; do not have to hunt through `M-x' to remember command names.
 ;;
 ;; `transient' has shipped with Emacs since 28.1, so this file adds no new
@@ -23,9 +23,9 @@
 ;;   across the whole menu is unique; the lowercase "q" is left untouched
 ;;   so `transient's default quit binding keeps working.
 ;; - Every command referenced here already exists elsewhere in
-;;   Org-Supertag; none are (re)defined in this file. Commands whose
+;;   Supertag; none are (re)defined in this file. Commands whose
 ;;   owning feature carries an `;;;###autoload' cookie (or is guaranteed
-;;   to already be loaded as part of Org-Supertag's own core `require'
+;;   to already be loaded as part of Supertag's own core `require'
 ;;   chain) are wired directly by symbol. Commands whose owning feature
 ;;   is NOT unconditionally loaded (or has no autoload cookie) are wired
 ;;   through a thin `supertag-menu--*' wrapper that `require's the owning
@@ -42,10 +42,10 @@
 (require 'transient)
 
 ;;; --- Forward declarations ---
-;; These commands live in other Org-Supertag modules. None of those
+;; These commands live in other Supertag modules. None of those
 ;; modules are `require'd unconditionally here (to keep this file cheap
 ;; to load); each is either pulled in lazily by a wrapper below, or is
-;; already guaranteed to be loaded by the time a real Org-Supertag session
+;; already guaranteed to be loaded by the time a real Supertag session
 ;; calls `supertag-menu' (see the module-by-module notes below).
 
 ;; supertag-view-table.el (no autoload cookie; wrapped)
@@ -55,7 +55,7 @@
 ;; supertag-view-node.el (no autoload cookie; wrapped)
 (declare-function supertag-view-node "supertag-view-node" ())
 ;; supertag-view-schema.el (;;;###autoload; also unconditionally required
-;; by org-supertag.el, so it is safe to reference directly)
+;; by supertag.el, so it is safe to reference directly)
 (declare-function supertag-view-schema "supertag-view-schema" ())
 ;; supertag-board.el (;;;###autoload; optional feature, requires the
 ;; external `websocket' package; guarded with :if fboundp below)
@@ -78,7 +78,7 @@
 (declare-function supertag-capture "supertag-ui-commands" (&optional target-file headline))
 
 ;; supertag-concept.el (;;;###autoload; also unconditionally required by
-;; org-supertag.el, so it is safe to reference directly)
+;; supertag.el, so it is safe to reference directly)
 (declare-function supertag-promote-concept "supertag-concept" (beg end))
 
 ;; supertag-ui-search.el (no autoload cookie; wrapped)
@@ -91,18 +91,18 @@
 (declare-function supertag-query-describe-syntax "supertag-query-library" ())
 
 ;; supertag-services-capture.el (;;;###autoload; also unconditionally
-;; required by org-supertag.el, so it is safe to reference directly)
+;; required by supertag.el, so it is safe to reference directly)
 (declare-function supertag-capture-with-template "supertag-services-capture" (&optional template-key))
 
 ;; supertag-ui-commands.el / supertag-services-sync.el (;;;###autoload;
-;; unconditionally required by org-supertag.el, so it is safe to
+;; unconditionally required by supertag.el, so it is safe to
 ;; reference these directly)
 (declare-function supertag-sync-check-now "supertag-ui-commands" ())
 (declare-function supertag-sync-cleanup-database "supertag-ui-commands" ())
 (declare-function supertag-sync-status "supertag-ui-commands" ())
 (declare-function supertag-reindex-org "supertag-services-sync" ())
 
-;; supertag-doctor.el (;;;###autoload, but NOT part of org-supertag.el's
+;; supertag-doctor.el (;;;###autoload, but NOT part of supertag.el's
 ;; own `require' chain; wrapped for robustness)
 (declare-function supertag-doctor "supertag-doctor" (&optional report-only))
 ;; supertag-core-persistence.el (no autoload cookie; wrapped)
@@ -112,21 +112,21 @@
 ;; like `supertag-db-retry-lock' above rather than assumed present)
 (declare-function supertag-restore "supertag-core-persistence" ())
 
-;; supertag-git.el (;;;###autoload, but NOT part of org-supertag.el's own
+;; supertag-git.el (;;;###autoload, but NOT part of supertag.el's own
 ;; `require' chain; wrapped for robustness, same as `supertag-doctor')
 (declare-function supertag-git-setup "supertag-git" ())
 (declare-function supertag-git-clone "supertag-git" (remote-url local-directory))
 (declare-function supertag-git-sync-mode "supertag-git" (&optional arg))
 
 ;; supertag-conflicts.el (;;;###autoload; also unconditionally required by
-;; org-supertag.el, so it is safe to reference directly)
+;; supertag.el, so it is safe to reference directly)
 (declare-function supertag-conflicts-resolve "supertag-conflicts" ())
 (declare-function supertag-conflicts-use-ours-all "supertag-conflicts" ())
 (declare-function supertag-conflicts-use-theirs-all "supertag-conflicts" ())
 
 ;; supertag-automation-sync.el / supertag-automation.el (no autoload
-;; cookie; unconditionally required by org-supertag.el, but wrapped
-;; anyway since Org-Supertag's own menu entries for this file wrap every
+;; cookie; unconditionally required by supertag.el, but wrapped
+;; anyway since Supertag's own menu entries for this file wrap every
 ;; non-autoloaded command)
 (declare-function supertag-automation-sync-enable "supertag-automation-sync" ())
 (declare-function supertag-automation-sync-disable "supertag-automation-sync" ())
@@ -151,18 +151,18 @@
 (declare-function supertag-view-effort-distribution-demo "supertag-view-effort-distribution" ())
 
 ;; supertag-migration.el (;;;###autoload; also unconditionally required by
-;; org-supertag.el, so it is safe to reference directly)
+;; supertag.el, so it is safe to reference directly)
 (declare-function supertag-migrate-database-to-new-arch "supertag-migration" ())
 (declare-function supertag-batch-convert-properties-to-fields "supertag-migration" ())
 (declare-function supertag-migration-add-ids-to-org-headings "supertag-migration" (directory))
 (declare-function supertag-migration-preview-reciprocal-links "supertag-migration" (&optional displayp))
 (declare-function supertag-migrate-reciprocal-links "supertag-migration" ())
 ;; supertag-migrate-tag-ids.el (no autoload cookie; NOT part of
-;; org-supertag.el's own `require' chain; wrapped)
+;; supertag.el's own `require' chain; wrapped)
 (declare-function supertag-migrate-tag-ids "supertag-migrate-tag-ids" ())
 
 ;; supertag-view-svg-tag.el / supertag-concept.el (;;;###autoload; also
-;; unconditionally required by org-supertag.el, so it is safe to
+;; unconditionally required by supertag.el, so it is safe to
 ;; reference these directly)
 (declare-function supertag-svg-tag-mode-toggle "supertag-view-svg-tag" ())
 (declare-function supertag-concept-link-mode "supertag-concept" (&optional arg))
@@ -176,10 +176,10 @@
 
 ;;; --- Thin lazy-loading wrappers ---
 ;; Each wrapper `require's the owning feature (safe: these files have no
-;; load-time side effects of their own -- unlike `org-supertag.el', which
+;; load-time side effects of their own -- unlike `supertag.el', which
 ;; runs `supertag-init' at load time) and then calls the real, already
 ;;-interactive command. This keeps `supertag-menu' usable even when only
-;; part of Org-Supertag has been loaded so far.
+;; part of Supertag has been loaded so far.
 
 (defmacro supertag-menu--defwrapper (name feature command doc)
   "Define NAME as a command that `require's FEATURE, then calls COMMAND.
@@ -362,7 +362,7 @@ first if needed.")
 
 ;;;###autoload
 (transient-define-prefix supertag-menu ()
-  "Top-level discoverable menu for Org-Supertag commands."
+  "Top-level discoverable menu for Supertag commands."
   [["Views"
     ("vt" "Table"          supertag-menu--view-table)
     ("vk" "Kanban board"   supertag-menu--view-kanban)
@@ -429,7 +429,7 @@ first if needed.")
 
 ;;;###autoload
 (transient-define-prefix supertag-menu-more ()
-  "Secondary menu for less-common Org-Supertag commands.
+  "Secondary menu for less-common Supertag commands.
 Reached from `supertag-menu''s Setup group; kept separate so the
 top-level popup does not get crowded with rarely-used virtual column,
 analytic demo view, and database migration commands."

@@ -67,7 +67,7 @@
 ;; ## Package-manager independence
 ;;
 ;; This file is intentionally NOT part of the same require chain as
-;; `org-supertag.el' proper (no `org' integration, no UI) so that
+;; `supertag.el' proper (no `org' integration, no UI) so that
 ;; `supertag-git-check' stays cheap to call from `supertag-doctor', and so
 ;; the driver command line this file writes only ever needs `-L
 ;; <package-dir>' (see `supertag-git--package-dir'), matching the
@@ -79,13 +79,13 @@
 (require 'supertag-core-persistence)
 
 (defgroup supertag-git nil
-  "Git integration for Org-Supertag's semantic database merge driver."
+  "Git integration for Supertag's semantic database merge driver."
   :group 'supertag)
 
-;; --- Free-variable declarations for symbols owned by org-supertag.el /
+;; --- Free-variable declarations for symbols owned by supertag.el /
 ;; supertag-services-sync.el ---
 ;;
-;; This file deliberately does NOT `require' `org-supertag' or
+;; This file deliberately does NOT `require' `supertag' or
 ;; `supertag-services-sync' (see the Commentary, "Package-manager
 ;; independence"): every reference to a symbol owned by either of those
 ;; files below is guarded at runtime with `boundp'/`fboundp' and simply
@@ -95,11 +95,11 @@
 ;; these symbols are genuinely special (dynamically bound) variables, which
 ;; matters in exactly one place below: `supertag-git--apply-data-directory-wiring'
 ;; binds `supertag--config-guard-allow' with a plain `let' to replicate
-;; `supertag-config-guard--with-allow' (org-supertag.el's own macro, which
+;; `supertag-config-guard--with-allow' (supertag.el's own macro, which
 ;; this file cannot call directly without requiring that whole package —
 ;; see that function's docstring). Under `lexical-binding: t' (this file's
 ;; default), a `let' on an UNDECLARED symbol creates an ordinary lexical
-;; binding instead of a dynamic one — invisible to org-supertag.el's own
+;; binding instead of a dynamic one — invisible to supertag.el's own
 ;; `supertag-config-guard--watch', which reads the symbol dynamically —
 ;; silently defeating the bypass in compiled code specifically (interpreted
 ;; code would happen to work, which is exactly the kind of latent
@@ -214,7 +214,7 @@ whole reason each clone needs its own `.git/config' entry is that this
 path is machine-local."
   (let ((lib (locate-library "supertag-merge")))
     (unless lib
-      (error "supertag-git: cannot locate supertag-merge.el on `load-path' -- is org-supertag properly installed?"))
+      (error "supertag-git: cannot locate supertag-merge.el on `load-path' -- is supertag properly installed?"))
     (file-name-directory (expand-file-name lib))))
 
 (defun supertag-git--driver-command (package-dir)
@@ -298,7 +298,7 @@ applies. Found by a real-environment E2E run, not code review."
          (package-dir (directory-file-name (supertag-git--package-dir)))
          (driver-cmd (supertag-git--driver-command package-dir)))
     (supertag-git--set-config root "merge.supertag-db.name"
-                              "Org-Supertag semantic 3-way database merge")
+                              "Supertag semantic 3-way database merge")
     (supertag-git--set-config root "merge.supertag-db.driver" driver-cmd)
     (let* ((db-dir (file-name-directory (expand-file-name db-file)))
            (ignore-file (expand-file-name ".gitignore" db-dir))
@@ -318,7 +318,7 @@ applies. Found by a real-environment E2E run, not code review."
 ;;
 ;; Per the plan's "S4 用户旅程" -> "仓库布局": the merge driver requires the
 ;; database file to be a tracked, in-repo path, but the pre-S4 common case
-;; is a database living at `~/.emacs.d/org-supertag/' -- entirely outside
+;; is a database living at `~/.emacs.d/supertag/' -- entirely outside
 ;; whatever git repository the user's `.org' vault lives in. Migration is:
 ;;
 ;;   0. if the LIVE in-memory store has unsaved changes (`supertag-dirty-p'),
@@ -364,7 +364,7 @@ applies. Found by a real-environment E2E run, not code review."
 (defun supertag-git--apply-data-directory-wiring (data-dir)
   "Point this session's persistence variables at DATA-DIR (a directory).
 
-Mirrors `supertag-vault--apply' in org-supertag.el (config-guard bypassed
+Mirrors `supertag-vault--apply' in supertag.el (config-guard bypassed
 via a dynamic `let' on `supertag--config-guard-allow', then the guard's
 expected-state snapshot re-captured so it agrees with the new values) --
 but computes DATA-DIR itself very differently: `supertag-vault--apply'
@@ -374,9 +374,9 @@ match what git sync requires (`<repo-root>/.supertag/', a *predictable*,
 human-inspectable, in-repo path). This function does not call
 `supertag-vault--apply' or replicate its vault-registry bookkeeping at
 all — see this file's Commentary for why (V1 is single-root only, and
-`org-supertag.el' is deliberately not part of this file's require chain).
+`supertag.el' is deliberately not part of this file's require chain).
 
-Safe to call whether or not `org-supertag.el' has been loaded at all: the
+Safe to call whether or not `supertag.el' has been loaded at all: the
 config-guard bypass and vault-mode bookkeeping are both best-effort no-ops
 in that case (this matters for this file's own standalone batch tests)."
   (let ((data-dir (file-name-as-directory (expand-file-name data-dir))))
@@ -717,7 +717,7 @@ and we cannot prompt (`noninteractive')."
       (let ((root (file-name-as-directory
                    (expand-file-name
                     (read-directory-name
-                     "No git repo found for the Org-Supertag database; initialize one at: "
+                     "No git repo found for the Supertag database; initialize one at: "
                      db-dir nil t)))))
         (unless (supertag-git--ancestor-p root db-dir)
           (user-error "supertag-git-setup: refusing -- %s does not contain the database directory %s. Git sync (V1) requires the database to live inside the chosen repo root."
@@ -1005,7 +1005,7 @@ root at all with a non-interactive caller."
 session's git-sync vault: append it to `supertag-sync-directories'
 \(if bound and not already present) and switch persistence wiring to
 `<ROOT>/.supertag/'. Degrades to just the wiring switch when
-`supertag-sync-directories' is not bound (e.g. `org-supertag.el' /
+`supertag-sync-directories' is not bound (e.g. `supertag.el' /
 `supertag-services-sync.el' not loaded in this session)."
   (let ((root (file-name-as-directory (expand-file-name root))))
     (when (boundp 'supertag-sync-directories)
@@ -1054,7 +1054,7 @@ if the relevant collections are not (yet) hash tables."
 
 ;;;###autoload
 (defun supertag-git-clone (remote-url local-directory)
-  "Clone REMOTE-URL into LOCAL-DIRECTORY as a new Org-Supertag git vault.
+  "Clone REMOTE-URL into LOCAL-DIRECTORY as a new Supertag git vault.
 
 This is machine N of the plan's \"一个 URL 完成配置\" (\"one URL to
 finish setup\") user journey -- the counterpart to `supertag-git-setup' on
@@ -1116,7 +1116,7 @@ Returns a plist: (:repo-root ROOT :db-file FILE :loaded BOOL :rebuilt BOOL
                 (when (fboundp 'supertag-save-store)
                   (funcall #'supertag-save-store))
                 (message "supertag-git-clone: Org projection reindex complete; restore Semantic Facts from a backup if needed."))
-            (message "supertag-git-clone: Org reindex unavailable or incomplete; once the vault is readable and org-supertag has fully started, run `M-x supertag-reindex-org'.")))
+            (message "supertag-git-clone: Org reindex unavailable or incomplete; once the vault is readable and supertag has fully started, run `M-x supertag-reindex-org'.")))
         (let* ((counts (supertag-git--current-node-tag-counts))
                (node-count (car counts))
                (tag-count (cdr counts)))
@@ -1158,7 +1158,7 @@ Returns a plist: (:repo-root ROOT :db-file FILE :loaded BOOL :rebuilt BOOL
 ;; code never sets it.
 
 (defgroup supertag-git-sync nil
-  "Automatic git commit/fetch/merge/push loop for Org-Supertag git vaults."
+  "Automatic git commit/fetch/merge/push loop for Supertag git vaults."
   :group 'supertag-git)
 
 (defcustom supertag-git-sync-pull-interval 300
@@ -1856,7 +1856,7 @@ cycle. Returns non-nil when a sync operation was started."
       (message "supertag-git-sync: waiting for the running synchronization, then Emacs will exit")
       nil)
      ((not (supertag-git-sync--pending-p)) t)
-     ((y-or-n-p "Org-Supertag Git sync is unfinished. Sync now before exiting? ")
+     ((y-or-n-p "Supertag Git sync is unfinished. Sync now before exiting? ")
       (let ((started
              (condition-case err
                  (supertag-git-sync-now)
@@ -1870,7 +1870,7 @@ cycle. Returns non-nil when a sync operation was started."
       nil)
      (t
       (yes-or-no-p
-       "Exit now with Org-Supertag changes kept only in the local Git vault? ")))))
+       "Exit now with Supertag changes kept only in the local Git vault? ")))))
 
 ;;; --- Post-merge handling: DB reload + org text-conflict guard ---
 
@@ -2034,7 +2034,7 @@ state."
 
 ;;;###autoload
 (define-minor-mode supertag-git-sync-mode
-  "Automatic git commit/fetch/merge/push loop for the current Org-Supertag
+  "Automatic git commit/fetch/merge/push loop for the current Supertag
 vault (S4 of .phrase/phases/phase-git-sync-20260713/PLAN.md). Off by
 default (opt-in) -- see this file's Commentary above this mode's
 definition for the full design (serialization, async, offline

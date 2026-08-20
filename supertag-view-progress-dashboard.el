@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 
-;; A production-ready progress dashboard view for org-supertag.
+;; A production-ready progress dashboard view for supertag.
 ;;
 ;; This view displays projects with their progress bars, task counts,
 ;; and effort totals.  It integrates with virtual columns for dynamic data.

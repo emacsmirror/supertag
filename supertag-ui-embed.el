@@ -1,7 +1,7 @@
 ;;; supertag-ui-embed.el --- UI functions for embed blocks -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module provides UI-related functions for embed blocks in org-supertag.
+;; This module provides UI-related functions for embed blocks in supertag.
 ;; It handles finding blocks, generating content, and UI operations.
 
 ;;; Code:

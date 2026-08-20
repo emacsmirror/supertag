@@ -15,7 +15,7 @@
 
 ## 概述
 
-Virtual Columns（虚拟列）是 org-supertag 的计算字段系统，允许你创建基于其他字段或节点动态计算的值，而无需手动维护。
+Virtual Columns（虚拟列）是 supertag 的计算字段系统，允许你创建基于其他字段或节点动态计算的值，而无需手动维护。
 
 ### 核心特性
 
@@ -161,8 +161,8 @@ Virtual Columns（虚拟列）是 org-supertag 的计算字段系统，允许你
 ### 安装与初始化
 
 ```elisp
-;; 确保 org-supertag 已加载
-(require 'org-supertag)
+;; 确保 supertag 已加载
+(require 'supertag)
 
 ;; 初始化虚拟列系统
 (supertag-virtual-column-init)

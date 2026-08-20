@@ -1,4 +1,4 @@
-;;; supertag-setup.el --- First-run setup wizard for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-setup.el --- First-run setup wizard for Supertag -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024 Yibie
 
@@ -15,7 +15,7 @@
 ;;; Commentary:
 
 ;; `M-x supertag-setup' is a first-run configuration wizard for
-;; Org-Supertag.  It is meant to save new users from having to hand-edit
+;; Supertag.  It is meant to save new users from having to hand-edit
 ;; their init file before anything works: it walks through picking sync
 ;; directories, a file-ID source, how to persist those choices, and
 ;; (optionally) running the initial database scan.
@@ -57,7 +57,7 @@
         (when (hash-table-p nodes) (hash-table-count nodes))))))
 
 (defun supertag-setup--status-report ()
-  "Collect a plist describing the current Org-Supertag configuration."
+  "Collect a plist describing the current Supertag configuration."
   (let ((db-file (supertag-setup--db-file)))
     (list :directories (supertag-setup--current-directories)
           :file-id-source (supertag-setup--current-file-id-source)
@@ -72,7 +72,7 @@
         (db-file (plist-get status :db-file))
         (db-exists (plist-get status :db-exists))
         (node-count (plist-get status :node-count)))
-    (message "Org-Supertag setup -- current status:\n  Sync directories : %s\n  File-ID source   : %s\n  Database file    : %s (%s)\n  Nodes loaded     : %s"
+    (message "Supertag setup -- current status:\n  Sync directories : %s\n  File-ID source   : %s\n  Database file    : %s (%s)\n  Nodes loaded     : %s"
              (if dirs (mapconcat #'abbreviate-file-name dirs ", ") "(not configured)")
              file-id
              (if db-file (abbreviate-file-name db-file) "(unknown)")
@@ -170,7 +170,7 @@ we also require `user-init-file' to be non-nil."
 (defun supertag-setup--snippet-text (dirs file-id-source)
   "Return a copy-pastable Elisp snippet for DIRS and FILE-ID-SOURCE."
   (concat
-   ";; Org-Supertag configuration snippet\n"
+   ";; Supertag configuration snippet\n"
    ";; Paste into your init file, or adapt for `use-package''s :custom.\n\n"
    (if dirs
        (format "(setq supertag-sync-directories\n      '(%s))\n\n"
@@ -229,7 +229,7 @@ Returns the chosen method: `save', `session', or `snippet'."
   "Run SCAN-FN (a symbol) if bound, reporting node counts before/after.
 LABEL names the operation for the confirmation prompt."
   (if (not (fboundp scan-fn))
-      (message "%s is not available in this build; run it manually once Org-Supertag is fully loaded." scan-fn)
+      (message "%s is not available in this build; run it manually once Supertag is fully loaded." scan-fn)
     (when (y-or-n-p (format "Run %s now? This may take a while on large vaults. " label))
       (let ((before (or (supertag-setup--node-count) 0)))
         (when (fboundp 'supertag-persistence-ensure-data-directory)
@@ -241,20 +241,20 @@ LABEL names the operation for the confirmation prompt."
 ;;; --- Step: finish ----------------------------------------------------------
 
 (defun supertag-setup--doc-path ()
-  "Return the path to the \"A Day with Org-SuperTag\" walkthrough, if found."
+  "Return the path to the \"A Day with Supertag\" walkthrough, if found."
   (let ((lib (locate-library "supertag")))
     (when lib
-      (let ((path (expand-file-name "doc/A-DAY-WITH-ORG-SUPERTAG.org" (file-name-directory lib))))
+      (let ((path (expand-file-name "doc/A-DAY-WITH-SUPERTAG.org" (file-name-directory lib))))
         (and (file-exists-p path) path)))))
 
 (defun supertag-setup--finish ()
   "Print a closing message pointing at further reading and next steps."
   (let ((doc (supertag-setup--doc-path))
         (entry-point (if (fboundp 'supertag-menu) "M-x supertag-menu" "M-x supertag-view-table")))
-    (message "Org-Supertag setup finished. Explore your data with %s.%s"
+    (message "Supertag setup finished. Explore your data with %s.%s"
              entry-point
              (if doc
-                 (format "  For a guided tour, read \"A Day with Org-SuperTag\": %s" (abbreviate-file-name doc))
+                 (format "  For a guided tour, read \"A Day with Supertag\": %s" (abbreviate-file-name doc))
                ""))))
 
 ;;; --- Already-configured branch ------------------------------------------
@@ -266,7 +266,7 @@ Returns `reconfigure', `rescan', or `skip'."
                     "Reconfigure (directories / file-ID source / persistence)"
                     "Nothing -- I only wanted to see the status"))
          (choice (completing-read
-                  "Org-Supertag is already configured. What would you like to do? "
+                  "Supertag is already configured. What would you like to do? "
                   options nil t nil nil (car options))))
     (cond
      ((string-prefix-p "Just rescan" choice) 'rescan)
@@ -306,7 +306,7 @@ optionally runs the initial scan, and finishes."
 
 ;;;###autoload
 (defun supertag-setup ()
-  "Interactive first-run configuration wizard for Org-Supertag.
+  "Interactive first-run configuration wizard for Supertag.
 
 Walks through:
   1. Showing the current status (sync directories, file-ID source,
@@ -318,7 +318,7 @@ Walks through:
      for this session only, or as a copy-pastable Elisp snippet.
   5. Optionally running the initial database scan.
   6. Pointing at `\\[supertag-menu]' (or `\\[supertag-view-table]') and the
-     \"A Day with Org-SuperTag\" walkthrough.
+     \"A Day with Supertag\" walkthrough.
 
 Every step is skippable, and nothing is written to a live variable until
 step 4; hitting \\`C-g\\' before then leaves your configuration untouched.
@@ -326,7 +326,7 @@ The wizard is safe to run more than once."
   (interactive)
   (condition-case nil
       (supertag-setup--run)
-    (quit (message "Org-Supertag setup cancelled -- no changes were made.") nil)))
+    (quit (message "Supertag setup cancelled -- no changes were made.") nil)))
 
 (provide 'supertag-setup)
 

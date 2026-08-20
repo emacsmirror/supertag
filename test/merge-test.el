@@ -28,7 +28,7 @@
 (defconst supertag-merge-test--repo-dir
   (expand-file-name ".." (file-name-directory
                           (or load-file-name buffer-file-name default-directory)))
-  "The org-supertag repository root, captured at load time.
+  "The supertag repository root, captured at load time.
 `load-file-name' is only valid while this file is actively being loaded --
 NOT later, when a test function runs -- so this must be a constant
 computed here at top level, not recomputed inside a test/helper.")
@@ -573,8 +573,8 @@ recorded, and *Messages*-equivalent stderr/stdout has no DB-init noise."
              (exit (car run))
              (output (cdr run)))
         (should (= exit 0))
-        ;; No org-supertag.el / DB-init / auto-save chatter.
-        (should-not (string-match-p "auto-save\\|Loading org-supertag\\|supertag-db-file" output))
+        ;; No supertag.el / DB-init / auto-save chatter.
+        (should-not (string-match-p "auto-save\\|Loading supertag\\|supertag-db-file" output))
         (let ((merged (supertag-merge--parse-file ours-path)))
           ;; Neither side set :modified-at, so the tiebreak defaults to ours.
           (should (equal (plist-get (supertag-merge-test--entity merged :nodes "n1") :title)

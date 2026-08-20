@@ -1,8 +1,8 @@
-;;; org-supertag/ops/tag.el --- Tag operations for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/ops/tag.el --- Tag operations for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides standardized operations for Tag entities in the
-;; Org-Supertag data-centric architecture. All operations leverage
+;; Supertag data-centric architecture. All operations leverage
 ;; the core transform mechanism and adhere to the defined schema.
 
 ;;; Code:
@@ -915,4 +915,4 @@ internal whitespace to single underscores."
 
 (provide 'supertag-ops-tag)
 
-;;; org-supertag/ops/tag.el ends here
+;;; supertag/ops/tag.el ends here

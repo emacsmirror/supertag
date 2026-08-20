@@ -1,8 +1,8 @@
-;;; supertag-automation.el --- Unified Automation System for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-automation.el --- Unified Automation System for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file implements the complete Automation System 2.0 for the
-;; Org-Supertag system. It unifies all automation-related functionality
+;; Supertag system. It unifies all automation-related functionality
 ;; including:
 ;;
 ;; 1. Rule indexing and CRUD operations
@@ -45,7 +45,7 @@
 ;;; Customization
 
 (defgroup supertag-automation nil
-  "Automation settings for Org-Supertag."
+  "Automation settings for Supertag."
   :group 'supertag)
 
 (defcustom supertag-automation-verbose nil

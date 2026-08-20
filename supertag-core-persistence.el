@@ -1,7 +1,7 @@
-;;; org-supertag/supertag-persistence.el --- Data persistence for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-core-persistence.el --- Data persistence for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file provides functions for persisting the Org-Supertag
+;; This file provides functions for persisting the Supertag
 ;; in-memory store to a file and loading it back.
 
 ;;; Code:
@@ -166,7 +166,7 @@ databases are left as-is after loading; migrate manually with
   "When non-nil, write and check an advisory presence file for cross-machine
 awareness.
 
-Org-SuperTag's database is a single serialized file. Users who sync it via
+Supertag's database is a single serialized file. Users who sync it via
 Dropbox/iCloud/etc. get that sync service's \"whole file, last writer wins,
 no warning\" semantics — running Emacs against the same synced database on
 two machines at once can silently discard one side's edits. This is NOT a
@@ -1846,7 +1846,7 @@ lock already held for it; this is reserved for the restore critical section."
                    (mapconcat (lambda (f) (format "%s: %s" (abbreviate-file-name (car f)) (cdr f)))
                               failures "; ")
                    (mapcar #'abbreviate-file-name candidates))
-        (message "Initialized empty Org-Supertag store (no readable DB found; candidates=%S)."
+        (message "Initialized empty Supertag store (no readable DB found; candidates=%S)."
                  (mapcar #'abbreviate-file-name candidates))))
         (supertag-index-rebuild-all)))
 
@@ -2346,7 +2346,7 @@ live database is touched."
 
 ;;;###autoload
 (defun supertag-restore ()
-  "Interactively restore the Org-Supertag database from a snapshot.
+  "Interactively restore the Supertag database from a snapshot.
 Offers every daily, pre-restore, pre-migration, and pre-format6 snapshot in
 `supertag-db-backup-directory' (see `supertag--restore-snapshot-list'), newest
 first, via `completing-read'. Shows a preview comparing the chosen snapshot
@@ -2363,7 +2363,7 @@ downgrade."
       (user-error "No snapshots found in %s"
                   (abbreviate-file-name supertag-db-backup-directory)))
     (let* ((labels (mapcar #'supertag--restore-snapshot-describe snapshots))
-           (choice (completing-read "Restore Org-Supertag database from snapshot: "
+           (choice (completing-read "Restore Supertag database from snapshot: "
                                     labels nil t))
            (snapshot (nth (cl-position choice labels :test #'string=) snapshots))
            (file (plist-get snapshot :file))
@@ -2400,7 +2400,7 @@ downgrade."
           (let ((supertag-db-auto-migrate
                  (and supertag-db-auto-migrate (not downgrade-p))))
             (supertag-load-store supertag-db-file t))
-          (message "Restored Org-Supertag database from %s (%d nodes). Recovery point: %s.%s"
+          (message "Restored Supertag database from %s (%d nodes). Recovery point: %s.%s"
                    (file-name-nondirectory file)
                    (supertag--count-nodes)
                    (abbreviate-file-name recovery-file)

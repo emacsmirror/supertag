@@ -1,11 +1,11 @@
-;;; supertag-doctor.el --- Health check and repair for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag-doctor.el --- Health check and repair for Supertag -*- lexical-binding: t; -*-
 
 ;; Keywords: convenience
 
 ;;; Commentary:
 
 ;; `supertag-doctor' is an interactive health-check command for the
-;; Org-Supertag persistence layer.  It inspects the on-disk database
+;; Supertag persistence layer.  It inspects the on-disk database
 ;; file(s), in-memory store guards, lock state, data version, and
 ;; referential integrity, then renders a report to the
 ;; "*Supertag Doctor*" buffer.
@@ -44,7 +44,7 @@
 (declare-function supertag-conflicts-count "supertag-conflicts")
 
 (defgroup supertag-doctor nil
-  "Health check and repair tools for Org-Supertag."
+  "Health check and repair tools for Supertag."
   :group 'supertag)
 
 (defconst supertag-doctor--buffer-name "*Supertag Doctor*"
@@ -506,7 +506,7 @@ visibility\")."
 
 ;;;###autoload
 (defun supertag-doctor (&optional report-only)
-  "Run health checks on the Org-Supertag database and report to a buffer.
+  "Run health checks on the Supertag database and report to a buffer.
 
 Produces a report in the \"*Supertag Doctor*\" buffer covering
 database files, guards, lock state, data version, integrity, and

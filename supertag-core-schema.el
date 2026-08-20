@@ -1,4 +1,4 @@
-;;; org-supertag/schema.el --- Data schema definitions and validation for Org-Supertag -*- lexical-binding: t; -*-
+;;; supertag/schema.el --- Data schema definitions and validation for Supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file provides essential type definitions and conversion functions
@@ -737,4 +737,4 @@ TIME-VALUE 应该是四元素列表 (high low micro pico)。"
 
 (provide 'supertag-core-schema)
 
-;;; org-supertag/schema.el ends here
+;;; supertag/schema.el ends here

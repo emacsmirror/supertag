@@ -1,8 +1,8 @@
-# Org-Supertag 标签补全指南
+# Supertag 标签补全指南
 
 ## 功能概述
 
-Org-Supertag 提供了强大的标签补全功能，让你可以通过输入 `#` 来快速添加标签到 org 节点。
+Supertag 提供了强大的标签补全功能，让你可以通过输入 `#` 来快速添加标签到 org 节点。
 
 ## 使用方法
 
@@ -36,10 +36,10 @@ Org-Supertag 提供了强大的标签补全功能，让你可以通过输入 `#`
 
 ### 自动启用
 
-Org-Supertag 会在初始化时自动启用补全功能。如果你的配置中包含：
+Supertag 会在初始化时自动启用补全功能。如果你的配置中包含：
 
 ```elisp
-(require 'org-supertag)
+(require 'supertag)
 ```
 
 那么补全功能会自动在所有 org-mode 缓冲区中启用。
@@ -69,7 +69,7 @@ M-x global-supertag-ui-completion-mode (再次执行以切换)
 (setq supertag-completion-auto-enable t)
 ```
 
-识别到前导 `#` 后，Org-Supertag 会直接启用 Tag CAPF，不需要为了它把
+识别到前导 `#` 后，Supertag 会直接启用 Tag CAPF，不需要为了它把
 `corfu-auto-prefix` 全局改成 1；其他补全场景继续使用用户原有阈值。
 
 ## 故障排除
@@ -80,7 +80,7 @@ M-x global-supertag-ui-completion-mode (再次执行以切换)
 
 1. **删除旧的编译文件**：
    ```bash
-   cd /path/to/org-supertag
+   cd /path/to/supertag
    rm -f *.elc
    ```
 
@@ -91,7 +91,7 @@ M-x global-supertag-ui-completion-mode (再次执行以切换)
 
 3. **重启 Emacs** 或重新加载：
    ```elisp
-   M-x load-file RET org-supertag.el RET
+   M-x load-file RET supertag.el RET
    ```
 
 ### 输入 # 后没有反应
@@ -189,7 +189,7 @@ A: 目前固定为 `#`，如需修改需要编辑 `supertag-ui-completion.el`。
 
 ### 修改代码后
 
-如果你修改了 org-supertag 的源代码：
+如果你修改了 supertag 的源代码：
 
 1. **删除字节编译缓存**：
    ```bash
@@ -198,7 +198,7 @@ A: 目前固定为 `#`，如需修改需要编辑 `supertag-ui-completion.el`。
 
 2. **重新加载**：
    ```elisp
-   M-x load-file RET org-supertag.el RET
+   M-x load-file RET supertag.el RET
    ```
 
 3. **或重新编译**（可选，用于性能）：

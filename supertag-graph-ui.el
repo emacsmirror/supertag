@@ -1,13 +1,13 @@
-;;; supertag-graph-ui.el --- Web-based graph visualization for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-graph-ui.el --- Web-based graph visualization for supertag -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024-2025
 
-;; This file is part of org-supertag.
+;; This file is part of supertag.
 ;; Based on org-roam-ui by Sidharth Arya (GPL-3.0).
 
 ;;; Commentary:
 
-;; Provides a force-directed graph visualization of org-supertag nodes
+;; Provides a force-directed graph visualization of supertag nodes
 ;; and relations in the browser, forked from org-roam-ui.
 ;;
 ;; Requires optional packages `websocket' and `simple-httpd'.
@@ -27,7 +27,7 @@
 ;;; --- Configuration ---
 
 (defgroup supertag-graph-ui nil
-  "Graph visualization for org-supertag."
+  "Graph visualization for supertag."
   :group 'supertag
   :prefix "supertag-graph-ui-")
 
@@ -84,7 +84,7 @@
 
 ;;;###autoload
 (define-minor-mode supertag-graph-ui-mode
-  "Enable org-supertag graph visualization.
+  "Enable supertag graph visualization.
 Starts HTTP and WebSocket servers to serve the graph UI."
   :lighter " graph-ui"
   :global t

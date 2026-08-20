@@ -1,7 +1,7 @@
-;;; supertag-ops-embed.el --- Embed operations for org-supertag -*- lexical-binding: t; -*-
+;;; supertag-ops-embed.el --- Embed operations for supertag -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module provides embed-related operations for the org-supertag system.
+;; This module provides embed-related operations for the supertag system.
 ;; It handles finding embed blocks by source files and other embed operations.
 
 ;;; Code:

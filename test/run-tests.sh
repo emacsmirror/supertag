@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run all org-supertag ERT tests
+# Run all supertag ERT tests
 #
 # Usage:
 #   ./test/run-tests.sh              # Run all tests

@@ -1,5 +1,16 @@
 * Changelog
 * [Unreleased]
+** Breaking: project renamed from Org-Supertag to Supertag
+- The repository, package entry, feature, current Lisp interfaces,
+  Customization group, and documentation now use =supertag= exclusively.
+- Removed =org-supertag.el=, compatibility aliases, and the old Babel language
+  names. Load the package with =(require 'supertag)= and use
+  =supertag-query-block=.
+- The default data directory is now =~/.emacs.d/supertag/=. It is not moved
+  automatically: startup refuses the retired default path or an ambiguous pair
+  of old/new paths before creating or loading a database.
+- See =doc/MIGRATING-TO-SUPERTAG.md= for the explicit upgrade checklist.
+
 ** Data safety
 - New references now write one forward Org link in the source node only.
   Backlinks in Node/Table views are derived from the relation index; relation

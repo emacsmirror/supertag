@@ -1,4 +1,4 @@
-## `org-supertag` 新旧版本架构对比
+## `supertag` 新旧版本架构对比
 
 ### 代码量对比
 
@@ -35,13 +35,13 @@
 
 **新增功能：**
 - `supertag-capture`：增强的信息捕获功能
-- `supertag-automation`：升级的行为自动化系统（原 `org-supertag-behavior`）
+- `supertag-automation`：升级的行为自动化系统（原 `supertag-behavior`）
 
 **迁移中的功能：**
 - `supertag-completion`：自动补全标签
 
 **移除功能：**
-- 探索视图（`org-supertag-view-discovery`）
+- 探索视图（`supertag-view-discovery`）
 - Python 后端（`simtag`）及其 AI 和 RAG 支持
 
 **改进功能：**

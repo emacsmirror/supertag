@@ -5,11 +5,11 @@
 ;; 
 ;; Usage:
 ;;   1. First load the main module:
-;;      (add-to-list 'load-path "/Users/chenyibin/Documents/emacs/package/org-supertag")
+;;      (add-to-list 'load-path "/Users/chenyibin/Documents/emacs/package/supertag")
 ;;      (require 'supertag-virtual-column)
 ;;
 ;;   2. Then load this file and run:
-;;      (load-file "/Users/chenyibin/Documents/emacs/package/org-supertag/test/demo-virtual-column.el")
+;;      (load-file "/Users/chenyibin/Documents/emacs/package/supertag/test/demo-virtual-column.el")
 ;;      M-x supertag-demo-virtual-column
 
 ;;; Code:

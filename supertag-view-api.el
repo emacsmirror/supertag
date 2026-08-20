@@ -1,7 +1,7 @@
-;;; supertag-view-api.el --- UI-agnostic data API for Org-Supertag views -*- lexical-binding: t; -*-
+;;; supertag-view-api.el --- UI-agnostic data API for Supertag views -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module defines the internal public "View Data API" for org-supertag.
+;; This module defines the internal public "View Data API" for supertag.
 ;;
 ;; Goal:
 ;; - Provide a stable, UI-agnostic read interface to the underlying DB/Store.
