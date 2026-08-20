@@ -41,6 +41,9 @@ Verification：`./test/run-tests.sh persist query git` 117/117；隔离
   使用 `supertag`。
 - Modify `test/force-reload-test.el`：从脚本位置推导仓库根，删除开发者机器的
   checkout 绝对路径。
+- Rename ignored draft `pr_faq_agent_org_supertag_20260819.md` →
+  `pr_faq_agent_supertag_20260819.md`，将当前 Agent/Cowork 产品定义纳入跟踪，
+  并删除“改名留待以后”的过时范围说明。
 
 Verification：非历史/迁移白名单范围的 `git grep` 只剩 README 中指向旧名称的
 升级提示；`git diff --check` 通过。

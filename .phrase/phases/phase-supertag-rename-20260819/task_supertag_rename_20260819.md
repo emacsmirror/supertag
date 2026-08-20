@@ -28,7 +28,8 @@
   - 影响范围：README、doc、test、`.github`、当前开发材料。
   - 完成：2026-08-19；README、当前指南、测试与源码品牌统一为 Supertag；
     5 个旧品牌文档文件改名；新增 `doc/MIGRATING-TO-SUPERTAG.md`，明确数据
-    目录、加载入口、配置变量和 Babel block 的人工迁移步骤。
+    目录、加载入口、配置变量和 Babel block 的人工迁移步骤；先前的 Agent /
+    Cowork PR/FAQ 同步改为 `pr_faq_agent_supertag_20260819.md` 并纳入版本控制。
 
 ## M4 — 质量门
 
