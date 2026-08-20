@@ -1,3 +1,4 @@
+- 2026-08-19: phase-supertag-rename-20260819/change_supertag_rename_20260819.md  # task004 full ERT/byte-compile/legacy-name whitelist audit
 - 2026-08-19: phase-supertag-rename-20260819/change_supertag_rename_20260819.md  # task003 current docs/tests/repository brand migration
 - 2026-08-19: phase-supertag-rename-20260819/change_supertag_rename_20260819.md  # task002 runtime/package/data/query-block breaking rename
 - 2026-08-19: phase-supertag-rename-20260819/change_supertag_rename_20260819.md  # task001 breaking rename spec and baseline

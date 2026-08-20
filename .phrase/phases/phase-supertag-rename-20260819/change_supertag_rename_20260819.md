@@ -47,3 +47,17 @@ Verification：`./test/run-tests.sh persist query git` 117/117；隔离
 
 Verification：非历史/迁移白名单范围的 `git grep` 只剩 README 中指向旧名称的
 升级提示；`git diff --check` 通过。
+
+## 2026-08-19 — task004 全量质量门与白名单审计
+
+- Run `./test/run-tests.sh`：519 tests，517 expected pass，0 unexpected，2 个
+  既有 dashboard demo skip。
+- Byte-compile 本次改动的现存顶层 Elisp：使用隔离的
+  `user-emacs-directory`、数据目录与临时 `.elc` 输出，无 compile error；只保留
+  仓库既有 Emacs 31 obsolete/docstring/free-variable warnings。
+- Isolated smoke：`(require 'supertag)` 成功，`(featurep 'supertag)` 为真，
+  `(locate-library "org-supertag")` 为 nil。
+- Audit：全仓库 352 条旧名匹配；其中 `.phrase` 历史/改名规格 239 条，外部
+  113 条分别为 Changelog 79、迁移指南 14、legacy DB migration 9、persistence
+  guard/version 5、对应测试 4、README 升级提示 2。排除这些白名单后为 0。
+- `git diff --check` 通过；用户原有 TextUI、路径修复与未跟踪文件仍未提交。

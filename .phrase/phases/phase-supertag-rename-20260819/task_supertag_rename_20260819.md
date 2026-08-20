@@ -33,11 +33,15 @@
 
 ## M4 — 质量门
 
-- task004 [ ] 全量回归与旧名称白名单审计
+- task004 [x] 全量回归与旧名称白名单审计
   - 产出：测试、byte-compile、diff check、旧名白名单和 change 索引结果。
   - 验证方式：`./test/run-tests.sh`、修改文件 byte-compile、`git diff --check`、
     `rg` 剩余命中逐条审查。
   - 影响范围：全仓库。
+  - 完成：2026-08-19；全量 ERT 519 项为 517 通过、0 失败、2 个既有 demo
+    skip；修改的顶层 Elisp 在隔离数据目录内 byte-compile 无 error；干净进程
+    `(require 'supertag)` 成功且旧 library 不可发现；352 条旧名命中全部归入历史
+    `.phrase`、Changelog、迁移指南、旧数据库/版本兼容代码与对应测试白名单。
 
 ## M5 — 外部命名
 
