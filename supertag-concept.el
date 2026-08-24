@@ -340,9 +340,9 @@ Each entry is (TERM . NODE-ID).")
 Creates or reuses a concept node, creates one reference from the containing node
 to that concept, and leaves the selected text unchanged."
   (interactive
-   (unless (use-region-p)
-     (user-error "Select text to promote as a concept"))
-   (list (region-beginning) (region-end)))
+   (if (use-region-p)
+       (list (region-beginning) (region-end))
+     (user-error "Select text to promote as a concept")))
   (unless (and beg end (< beg end))
     (user-error "Select text to promote as a concept"))
   (unless (derived-mode-p 'org-mode)
