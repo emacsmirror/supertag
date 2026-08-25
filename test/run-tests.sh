@@ -35,6 +35,7 @@ echo ""
 TEST_FILES=(
     "test/extractor-test.el"
     "test/node-ops-test.el"
+    "test/node-identity-test.el"
     "test/view-framework-test.el"
     "test/view-runtime-test.el"
     "test/test-view-stream.el"
@@ -65,6 +66,7 @@ TEST_FILES=(
     "test/tag-membership-org-first-test.el"
     "test/tag-path-test.el"
     "test/test-smart-key.el"
+    "test/test-concept-mention.el"
     "test/embed-cache-test.el"
     "test/ownership-separation-test.el"
     "test/automation-condition-test.el"
@@ -77,6 +79,7 @@ if [ $# -gt 0 ]; then
         case "$arg" in
             extractor) FILTER="$FILTER test/extractor-test.el" ;;
             node)      FILTER="$FILTER test/node-ops-test.el" ;;
+            identity)  FILTER="$FILTER test/node-identity-test.el" ;;
             view)      FILTER="$FILTER test/view-framework-test.el" ;;
             view-runtime) FILTER="$FILTER test/view-runtime-test.el" ;;
             view-stream) FILTER="$FILTER test/test-view-stream.el" ;;
@@ -100,6 +103,7 @@ if [ $# -gt 0 ]; then
             conflicts) FILTER="$FILTER test/conflicts-test.el" ;;
             cl-block|sync-worker) FILTER="$FILTER test/sync-worker-regression-test.el" ;;
             smart-key) FILTER="$FILTER test/test-smart-key.el" ;;
+            concept)   FILTER="$FILTER test/test-concept-mention.el" ;;
             tag-merge) FILTER="$FILTER test/tag-merge-test.el" ;;
             reference-migration) FILTER="$FILTER test/reciprocal-migration-test.el" ;;
             tag-membership) FILTER="$FILTER test/tag-membership-org-first-test.el" ;;
@@ -108,7 +112,7 @@ if [ $# -gt 0 ]; then
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             automation-condition) FILTER="$FILTER test/automation-condition-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key tag-merge reference-migration tag-membership tag-path embed ownership automation-condition all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node identity view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key concept tag-merge reference-migration tag-membership tag-path embed ownership automation-condition all"; exit 1 ;;
         esac
     done
     TEST_FILES=($(printf '%s\n' $FILTER | awk '!seen[$0]++'))

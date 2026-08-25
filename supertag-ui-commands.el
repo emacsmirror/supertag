@@ -20,6 +20,7 @@
 (require 'supertag-services-sync) ; For sync services
 (require 'supertag-services-capture) ; For capture services
 (require 'supertag-service-org)
+(require 'supertag-service-node-identity)
 (require 'supertag-core-store)
 
 ;; Forward declarations for view-node
@@ -110,7 +111,7 @@ Only includes headings whose starting position is within [BEG, END)."
                   (org-at-heading-p)
                   (< (point) end))  ; Heading must start before END
         (let ((heading-start (point))
-              (node-id (org-id-get-create)))
+              (node-id (supertag-node-identity-ensure-at-point)))
           ;; Only include if heading starts within region
           (when (>= heading-start beg)
             (push node-id node-ids)))
@@ -133,7 +134,7 @@ Only includes headings whose starting position is within [BEG, END)."
 Creates an ID if one does not exist. Errors out if not on a heading."
   (unless (org-at-heading-p)
     (user-error "Point must be at an Org heading."))
-  (org-id-get-create))
+  (supertag-node-identity-ensure-at-point))
 
 (defun supertag-ui--get-containing-node-at-point ()
   "Get the node ID of the containing node, whether at heading or in content.
@@ -142,11 +143,11 @@ file-level before any heading."
   (save-excursion
     (cond
      ((org-at-heading-p)
-      (org-id-get-create))
+      (supertag-node-identity-ensure-at-point))
      ((org-before-first-heading-p)
       (supertag-ui--get-file-node-at-point))
      ((org-back-to-heading t)
-      (org-id-get-create))
+      (supertag-node-identity-ensure-at-point))
      (t
       (supertag-ui--get-file-node-at-point)))))
 
@@ -206,7 +207,7 @@ Otherwise, it will prompt for a title and create a new heading."
         (progn
           (setq props (supertag--get-node-props-at-point))
           (unless (plist-get props :id)
-            (org-id-get-create) ; Ensure ID exists for the heading
+            (supertag-node-identity-ensure-at-point)
             (setq props (supertag--get-node-props-at-point)))
           (setq node-id (plist-get props :id))
           (supertag-node-create props)
@@ -218,7 +219,7 @@ Otherwise, it will prompt for a title and create a new heading."
           (beginning-of-line)
           (insert (make-string level ?*) " " title "\n")
           (forward-line -1) ; Move back to the new heading
-          (org-id-get-create) ; Create ID for the new heading
+          (supertag-node-identity-ensure-at-point)
           (setq props (supertag--get-node-props-at-point))
           (setq node-id (plist-get props :id))
           (supertag-node-create props)
@@ -272,7 +273,7 @@ Jumps to the selected node in another window."
   (unless (org-at-heading-p)
     (user-error "Point must be at a heading to update a node."))
   ;; Ensure ID exists before syncing.
-  (org-id-get-create)
+  (supertag-node-identity-ensure-at-point)
   (if (supertag-node-sync-at-point)
       (message "Node at point re-synced successfully.")
     (user-error "Failed to re-sync node at point.")))
@@ -520,48 +521,78 @@ Works for both heading nodes and file nodes (level 0)."
         (supertag-ui--reproject-containing-node from-id)
         (message "Reference added.")))))
 
+(defun supertag-ui--create-heading-node (title target-file insert-info)
+  "Create TITLE in TARGET-FILE at INSERT-INFO and return its node ID."
+  (let* ((insert-pos (plist-get insert-info :position))
+         (insert-level (plist-get insert-info :level))
+         (node-id (supertag-node-identity-new)))
+    (with-current-buffer (find-file-noselect target-file)
+      (goto-char insert-pos)
+      (unless (or (bobp) (looking-back "\n" 1))
+        (insert "\n"))
+      (let ((heading-start (point)))
+        (insert (format "%s %s\n" (make-string insert-level ?*) title))
+        (goto-char heading-start)
+        (supertag-node-identity-ensure-at-point node-id))
+      (save-buffer))
+    (supertag-node-create
+     `(:id ,node-id
+       :title ,title
+       :file ,target-file
+       :position ,insert-pos
+       :level ,insert-level))
+    node-id))
+
+(defun supertag-ui--replace-region-with-reference
+    (beg-marker end-marker from-id to-id title)
+  "Replace marked text with FROM-ID's Document Link to TO-ID titled TITLE."
+  (goto-char beg-marker)
+  (delete-region beg-marker end-marker)
+  (insert (supertag-node-format-link to-id title))
+  (save-buffer)
+  (supertag-ui--reproject-containing-node from-id)
+  (unless (cl-find-if
+           #'supertag-relation-document-link-p
+           (supertag-relation-find-between from-id to-id :reference))
+    (user-error
+     "The Org link was saved, but its Document Link projection failed")))
+
 (defun supertag-add-reference-and-create (beg end)
   "Create a new node from the selected region and replace it with a link.
 Interactively asks for a target location to save the new node."
   (interactive "r")
-  (let* ((title (buffer-substring-no-properties beg end))
-         ;; Get from-id BEFORE creating the new node
-         (from-id (supertag-ui--get-containing-node-at-point)))
-    (if (or (null title) (string-empty-p title))
-        (user-error "Region is empty. Cannot create a node.")
-      ;; 1. Get target location from user
-      (let* ((target-file (read-file-name "Create node in file: " nil nil t))
-             (insert-info (when (and target-file (file-exists-p target-file))
-                            (supertag-ui-select-insert-position target-file)))
-             (insert-pos (plist-get insert-info :position))
-             (insert-level (plist-get insert-info :level)))
-        (unless insert-info
-          (user-error "No valid insert position selected. Aborting."))
-        (let ((new-node-id (org-id-new)))
-          ;; 2. Create the node in the target file (physical insertion)
-          (with-current-buffer (find-file-noselect target-file)
-            (goto-char insert-pos)
-            ;; Ensure we are on a new line before inserting
-            (unless (or (bobp) (looking-back "\n" 1)) (insert "\n"))
-            (insert (format "%s %s\n:PROPERTIES:\n:ID:       %s\n:END:\n"
-                            (make-string insert-level ?*)
-                            title
-                            new-node-id))
-            (save-buffer))
-          ;; 3. Create the node in the database (logical creation)
-          (supertag-node-create
-           `(:id ,new-node-id
-             :title ,title
-             :file ,target-file
-             :position ,insert-pos
-             :level ,insert-level))
-          ;; 4. Replace original text with the single forward Document Link.
-          (delete-region beg end)
-          (insert (format "[[id:%s][%s]]" new-node-id title))
-          (save-buffer)
-          (when from-id
-            (supertag-ui--reproject-containing-node from-id))
-          (message "Node '%s' created and linked." title))))))
+  (let ((title (buffer-substring-no-properties beg end)))
+    (when (or (null title) (string-empty-p title))
+      (user-error "Region is empty. Cannot create a node."))
+    ;; Creating the source ID may insert a property drawer before the region.
+    ;; Markers keep the selected text stable across that buffer mutation.
+    (let ((beg-marker (copy-marker beg))
+          (end-marker (copy-marker end t)))
+      (unwind-protect
+          (let* ((from-id (supertag-ui--get-containing-node-at-point))
+                 target-file
+                 insert-info
+                 new-node-id)
+            (unless from-id
+              (user-error "The source cannot own a reference."))
+            (supertag-ui--ensure-node-synced from-id)
+            (unless (supertag-node-get from-id)
+              (user-error "The source node could not be synchronized."))
+            (setq target-file
+                  (read-file-name "Create node in file: " nil nil t)
+                  insert-info
+                  (when (file-exists-p target-file)
+                    (supertag-ui-select-insert-position target-file)))
+            (unless insert-info
+              (user-error "No valid insert position selected. Aborting."))
+            (setq new-node-id
+                  (supertag-ui--create-heading-node
+                   title target-file insert-info))
+            (supertag-ui--replace-region-with-reference
+             beg-marker end-marker from-id new-node-id title)
+            (message "Node '%s' created and linked." title))
+        (set-marker beg-marker nil)
+        (set-marker end-marker nil)))))
 
 (defun supertag-remove-reference ()
   "Remove a source-owned Document Link from the current node."
@@ -799,7 +830,7 @@ HEADLINE is optional headline text."
       (user-error "No valid insert position selected"))
 
     ;; Phase 2: Create the node in the file
-    (let ((new-node-id (org-id-new)))
+    (let ((new-node-id (supertag-node-identity-new)))
       (supertag-capture--insert-node-into-buffer
        (find-file-noselect target-file)
        insert-pos insert-level full-title selected-tags body new-node-id
@@ -1201,7 +1232,7 @@ target node, and optional context note."
 
 (defun supertag-ui--find-node-marker (node-id)
   "Return a marker at NODE-ID's position in its file.
-For heading nodes, use `org-id-find' with a direct-file fallback.
+For heading nodes, use the Store-first node location boundary.
 For file nodes, positions after file-level metadata (keywords + :PROPERTIES:)."
   (if (supertag-ui--file-node-p node-id)
       (when-let* ((node (supertag-node-get node-id))
@@ -1222,11 +1253,7 @@ For file nodes, positions after file-level metadata (keywords + :PROPERTIES:)."
              (while (and (not (eobp)) (looking-at "\\s-*$"))
                (forward-line 1))
              (point-marker)))))
-    (or (org-id-find node-id 'marker)
-        (when-let* ((node (supertag-node-get node-id))
-                    (file (plist-get node :file))
-                    ((file-exists-p file)))
-          (org-id-find-id-in-file node-id file t)))))
+    (supertag-node-location-find node-id)))
 
 (defun supertag-ui--heading-title-at-point ()
   "Return the plain title of the heading at point, or nil."

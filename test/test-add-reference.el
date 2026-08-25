@@ -152,5 +152,119 @@
                               "file-id" "target-id" :reference))))
           (should (supertag-relation-document-link-p relation)))))))
 
+(ert-deftest add-reference-and-create-preserves-region-when-source-needs-id ()
+  "Creating the source ID must not invalidate the selected text region."
+  (add-reference-test--with-clean-env
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp))
+          (generated-ids '("source-id" "target-id")))
+      (with-temp-file source-file
+        (insert "* Source\n\nCreate me.\n"))
+      (with-temp-file target-file)
+      (with-current-buffer (find-file-noselect source-file)
+        (org-mode)
+        (goto-char (point-min))
+        (re-search-forward "Create me")
+        (let ((beg (match-beginning 0))
+              (end (match-end 0)))
+          (cl-letf (((symbol-function 'read-file-name)
+                     (lambda (&rest _) target-file))
+                    ((symbol-function 'supertag-ui-select-insert-position)
+                     (lambda (_) '(:position 1 :level 1)))
+                    ((symbol-function 'org-id-new)
+                     (lambda (&rest _) (pop generated-ids))))
+            (supertag-add-reference-and-create beg end))))
+      (with-temp-buffer
+        (insert-file-contents source-file)
+        (should (re-search-forward "^:ID:[ \t]+source-id$" nil t))
+        (should (re-search-forward
+                 "^\\[\\[id:target-id\\]\\[Create me\\]\\]\\.$" nil t))
+        (should-not (re-search-forward "Create me\\[\\[" nil t)))
+      (with-temp-buffer
+        (insert-file-contents target-file)
+        (should (re-search-forward "^\\* Create me$" nil t))
+        (should (re-search-forward "^:ID:[ \t]+target-id$" nil t)))
+      (let ((relation (car (supertag-relation-find-between
+                            "source-id" "target-id" :reference))))
+        (should (supertag-relation-document-link-p relation))
+        (should (eq :org (plist-get relation :origin)))))))
+
+(ert-deftest add-reference-and-create-projects-existing-id-source ()
+  "An existing source ID derives the same Document Link relation."
+  (add-reference-test--with-clean-env
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp)))
+      (with-temp-file source-file
+        (insert "* Source\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nCreate me.\n"))
+      (with-temp-file target-file)
+      (add-reference-test--sync-heading source-file "source-id")
+      (with-current-buffer (find-file-noselect source-file)
+        (goto-char (point-min))
+        (re-search-forward "Create me")
+        (cl-letf (((symbol-function 'read-file-name)
+                   (lambda (&rest _) target-file))
+                  ((symbol-function 'supertag-ui-select-insert-position)
+                   (lambda (_) '(:position 1 :level 1)))
+                  ((symbol-function 'org-id-new)
+                   (lambda (&rest _) "target-id")))
+          (supertag-add-reference-and-create
+           (match-beginning 0) (match-end 0))))
+      (let ((relation (car (supertag-relation-find-between
+                            "source-id" "target-id" :reference))))
+        (should (supertag-relation-document-link-p relation))
+        (should (eq :org (plist-get relation :origin)))))))
+
+(ert-deftest add-reference-and-create-rejects-unowned-source-before-target ()
+  "Do not create a target when the source cannot own a relation."
+  (add-reference-test--with-clean-env
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp))
+          (supertag-file-id-source 'disabled)
+          (prompted nil))
+      (with-temp-file source-file
+        (insert "Create me.\n"))
+      (with-temp-file target-file)
+      (with-current-buffer (find-file-noselect source-file)
+        (org-mode)
+        (goto-char (point-min))
+        (re-search-forward "Create me")
+        (cl-letf (((symbol-function 'read-file-name)
+                   (lambda (&rest _)
+                     (setq prompted t)
+                     target-file)))
+          (should-error
+           (supertag-add-reference-and-create
+            (match-beginning 0) (match-end 0))
+           :type 'user-error)))
+      (should-not prompted)
+      (should (= 0 (file-attribute-size (file-attributes target-file)))))))
+
+(ert-deftest add-reference-and-create-does-not-report-unprojected-success ()
+  "A saved link without its Document Link projection is an error."
+  (add-reference-test--with-clean-env
+    (let ((source-file (expand-file-name "source.org" tmp))
+          (target-file (expand-file-name "target.org" tmp)))
+      (with-temp-file source-file
+        (insert "* Source\n:PROPERTIES:\n:ID:       source-id\n:END:\n\nCreate me.\n"))
+      (with-temp-file target-file)
+      (add-reference-test--sync-heading source-file "source-id")
+      (with-current-buffer (find-file-noselect source-file)
+        (goto-char (point-min))
+        (re-search-forward "Create me")
+        (cl-letf (((symbol-function 'read-file-name)
+                   (lambda (&rest _) target-file))
+                  ((symbol-function 'supertag-ui-select-insert-position)
+                   (lambda (_) '(:position 1 :level 1)))
+                  ((symbol-function 'org-id-new)
+                   (lambda (&rest _) "target-id"))
+                  ((symbol-function 'supertag-ui--reproject-containing-node)
+                   #'ignore))
+          (should-error
+           (supertag-add-reference-and-create
+            (match-beginning 0) (match-end 0))
+           :type 'user-error)))
+      (should-not (supertag-relation-find-between
+                   "source-id" "target-id" :reference)))))
+
 (provide 'test-add-reference)
 ;;; test-add-reference.el ends here

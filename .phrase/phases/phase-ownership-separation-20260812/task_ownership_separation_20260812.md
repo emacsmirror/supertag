@@ -182,3 +182,11 @@
 ## Deferred Gate
 
 - SQLite 不属于本 phase task。只有 task028 完成、出现经过测量的需求并证明第二个 implementation 真实存在后，才单独创建 ADR/phase。
+
+## Maintenance
+
+- task029 [x] 统一 heading identity 与 Store-first location contract
+  - 关联：GitHub #186–#190
+  - 产出：修复无 ID source 的 create-and-reference；新增 `supertag-service-node-identity.el`；迁移所有 runtime creation/navigation callers；删除业务模块的直接 Org ID cache lookup/registration
+  - 验证方式：source 有/无 ID、relation projection failure、unownable source；空 cache 下 ordinary create/capture/completion/concept/id-link/direct/Graph/Board/Automation；静态 boundary guard；完整 ERT、临时 byte compile、`check-parens`、`git diff --check`
+  - 完成：2026-08-24；详细结果见 `change_ownership_separation_20260812.md`

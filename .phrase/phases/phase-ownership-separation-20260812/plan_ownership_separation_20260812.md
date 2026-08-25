@@ -88,3 +88,10 @@ task001 → task002 → task003 → task005
 ## SQLite Gate
 
 完成 task028 后才允许独立 ADR 评估 SQLite。只有出现经过测量的性能或约束需求，并且现有 query interface 已证明可承载第二个实现时，才创建 backend adapter。
+
+## Maintenance extension — task029
+
+- 修复 create-and-reference 在源 heading 首次生成 ID 时选区漂移、relation 未投影却报告成功的问题。
+- 建立单一 heading identity / Store-first location boundary；Org ID cache 只保留为未投影节点的显式兼容 fallback。
+- 将 creation、capture、completion、concept、navigation、Graph、Board 与 Automation 迁入边界，并用静态 guard 禁止 runtime business module 绕过。
+- 验证方式：空 `org-id-locations` 的跨工作流 ERT、缺失文件/ID fail-closed、完整 ERT、临时 byte compile 与 `git diff --check`。

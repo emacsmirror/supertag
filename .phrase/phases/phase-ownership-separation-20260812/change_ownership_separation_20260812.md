@@ -1,5 +1,18 @@
 # change_ownership_separation_20260812
 
+## 2026-08-24 — task029 Node identity / location boundary
+
+- Fix `supertag-add-reference-and-create`：source ID 插入前把 region 转为 markers；source 不可拥有 relation 时在 target mutation 前失败；Org link 保存并 point projection 后必须确认 `:document-link/:org` relation 才报告成功。
+- Add `supertag-service-node-identity.el`：统一生成/持久化 heading ID；从 Store-recorded file 直接搜索 in-file ID；只有 Store 完全未知的 legacy node 可进入 `org-id-find` compatibility fallback，已投影但文件/ID 损坏时 fail closed。
+- Modify ordinary create、reference create、Capture、Completion、Concept、migration、direct navigation、Org id-link、Graph、Board 与 Automation：全部调用统一边界，不再直接查询或注册 Org ID location cache；删除误导的 `supertag-id-utils.el` 注释与 Org service middle-man wrapper。
+- Add runtime boundary guard 与空 cache workflow regressions：覆盖 source 有/无 ID、projection false-success、ordinary create、capture、completion、concept、id-link、direct/Graph/Board navigation、Automation source resolution、missing Board node diagnostic 与 stale-cache refusal。
+
+Behavior：Org 仍拥有 heading `:ID:` Document Fact，Store 只拥有可重建的 file projection。标准 `id:` link 保持兼容，但 runtime correctness 不再依赖 `org-id-locations`；已知 node 的 Store location 损坏会给出诊断，而不是跳到 cache 中的陈旧位置。
+
+Risk：Store 尚未投影的 legacy heading 仍可通过 boundary 内的显式 `org-id-find` fallback 定位；该兼容路径受静态 guard 限制，不允许扩散回 feature modules。create-and-reference 在 link 已保存但 relation projection 失败时保留可见 Org edit/target node并报错，避免伪装跨文件事务或误报成功；后续 reproject 可收敛。
+
+Verification：最终定向 identity/add-reference/tag-membership/concept/tag-path 90/90，identity 边界 16/16；完整 ERT 549 项中 547 通过、2 项既有 interactive dashboard 测试 skipped、0 unexpected；修改生产 Elisp 临时 byte compile 与隔离 package load 成功（仅仓库既有 warning）；`check-parens`、runtime Org ID boundary `rg` 审计与 `git diff --check` 通过；Standards/Spec 双路复审均无剩余 finding。
+
 ## 2026-08-12 — task018 统一 derived index cold rebuild contract
 
 - Add `supertag-index-clear-all` / `supertag-index-rebuild-all`：以一个 generation 清空并重建 relation from/to、Semantic Tag token/display path/descendants、nodes-by-tag、global field lookup/order、resolved schema 与 Automation rule index；任一 builder 失败会再次清空全部派生状态并原样抛错，不暴露混合 generation。
