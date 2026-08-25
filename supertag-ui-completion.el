@@ -42,6 +42,7 @@
 (require 'supertag-ops-node)
 (require 'supertag-services-query)
 (require 'supertag-service-org)
+(require 'supertag-service-node-identity)
 
 (declare-function supertag-ui-read-tag "supertag-services-ui"
                   (prompt &optional tag-ids allow-new allow-empty allow-namespace))
@@ -268,7 +269,8 @@ Display aliases are replaced with their canonical Org token before writing."
       (user-error "Tag '%s' already exists under a different parent" new-name))
     (condition-case err
         (when-let* ((node-id (and (supertag-tag-path-valid-p selected-name)
-                                  (or original-node-id (org-id-get-create)))))
+                                  (or original-node-id
+                                      (supertag-node-identity-ensure-at-point)))))
           ;; Semantic Tag creation may precede the write, but membership never does.
           (let* ((tag-id
                  (or selected-id
@@ -460,7 +462,7 @@ CAPF `[New]' candidate."
                   (_ (supertag-tag-path-valid-p prefix))
                   (tag-id (supertag-tag-resolve-occurrence prefix)))
         (condition-case err
-            (let ((node-id (org-id-get-create)))
+            (let ((node-id (supertag-node-identity-ensure-at-point)))
               (when node-id
                 (let ((node-tags (supertag-completion--get-node-tags node-id)))
                   (unless (member tag-id node-tags)
@@ -519,7 +521,7 @@ RET creates and records the tag immediately."
   (interactive)
   (require 'supertag-services-ui)
   (let* ((all (supertag-completion--get-all-tags))
-         (node-id (org-id-get-create))
+         (node-id (supertag-node-identity-ensure-at-point))
          (current (when node-id (supertag-completion--get-node-tags node-id)))
          (available (if current
                         (seq-remove (lambda (tag) (member tag current)) all)

@@ -2,13 +2,13 @@
 
 (require 'cl-lib)
 (require 'org)
-(require 'org-id)
 (require 'seq)
 (require 'subr-x)
 (require 'supertag-services-query)
 (require 'supertag-core-store)
 (require 'supertag-core-tag-path)
 (require 'supertag-ops-node)
+(require 'supertag-service-node-identity)
 (require 'supertag-ops-field)  ; For type-specific field input assistance
 (require 'supertag-ops-tag)
 (require 'supertag-ops-relation)
@@ -323,18 +323,17 @@ Prompts for a title, destination file, and insert position."
         (user-error "No valid insert position selected"))
       (let* ((insert-pos (plist-get insert-info :position))
              (insert-level (max 1 (or (plist-get insert-info :level) 1)))
-             (node-id (org-id-new)))
+             (node-id (supertag-node-identity-new)))
         (with-current-buffer (find-file-noselect target-file)
           (org-with-wide-buffer
            (goto-char insert-pos)
            (unless (bolp)
              (insert "\n"))
            (let ((heading-start (point)))
-             (insert (format "%s %s\n:PROPERTIES:\n:ID:       %s\n:END:\n\n"
-                             (make-string insert-level ?*)
-                             title
-                             node-id))
+             (insert (format "%s %s\n\n"
+                             (make-string insert-level ?*) title))
              (goto-char heading-start)
+             (supertag-node-identity-ensure-at-point node-id)
              (supertag-node-sync-at-point))
            (save-buffer)))
         (supertag-ui--clear-node-cache)

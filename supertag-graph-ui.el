@@ -23,6 +23,7 @@
 (require 'supertag-view-api)
 (require 'supertag-services-query)
 (require 'supertag-core-schema)
+(require 'supertag-service-node-identity)
 
 ;;; --- Configuration ---
 
@@ -176,35 +177,14 @@ Starts HTTP and WebSocket servers to serve the graph UI."
         (error (message "supertag-graph-ui: Cannot open node %s: %s" id err))))))
 
 (defun supertag-graph-ui--jump-to-node (id)
-  "Navigate to node with ID in Emacs.
-Tries the supertag store first (file + position), then falls back
-to `org-id-find' so the function works even without an up-to-date
-org-id-locations cache."
-  (let* ((node-data (supertag-query-node id))
-         (file (and node-data (plist-get node-data :file)))
-         (pos  (and node-data
-                    (or (plist-get node-data :position)
-                        (plist-get node-data :pos)))))
-    (cond
-     ;; Primary: supertag store knows the exact file and position.
-     ((and file (stringp file) (file-exists-p file))
-      (let ((buf (find-file-noselect file)))
-        (pop-to-buffer buf)
-        (when (and pos (integerp pos))
-          (goto-char pos))
+  "Navigate to node with ID using the Store-first location boundary."
+  (if-let* ((marker (supertag-node-location-find id)))
+      (progn
+        (pop-to-buffer (marker-buffer marker))
+        (goto-char marker)
         (org-show-context)
-        (select-frame-set-input-focus (selected-frame))))
-     ;; Fallback: rely on org-id-locations cache.
-     (t
-      (require 'org-id)
-      (let ((marker (org-id-find id 'marker)))
-        (if marker
-            (progn
-              (pop-to-buffer (marker-buffer marker))
-              (goto-char marker)
-              (org-show-context)
-              (select-frame-set-input-focus (selected-frame)))
-          (message "supertag-graph-ui: node %s not found" id)))))))
+        (select-frame-set-input-focus (selected-frame)))
+    (message "supertag-graph-ui: node %s not found" id)))
 
 ;;; --- Data Serialization ---
 
@@ -336,8 +316,7 @@ PATH is /node/<encoded-id>."
               (replace-regexp-in-string "^/node/" "" path))))
          (text (condition-case nil
                    (when (and id (not (string-empty-p id)))
-                     (require 'org-id nil t)
-                     (let ((marker (org-id-find id 'marker)))
+                     (let ((marker (supertag-node-location-find id)))
                        (when marker
                          (with-current-buffer (marker-buffer marker)
                            (save-excursion

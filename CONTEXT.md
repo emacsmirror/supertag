@@ -43,3 +43,11 @@ _Avoid_: Full database rebuild, semantic restore
 **Semantic Restore**:
 Restore non-rebuildable Semantic Facts from a backup or synchronized copy.
 _Avoid_: Reindex, rescan
+
+## Runtime boundary
+
+`supertag-service-node-identity.el` owns runtime node identity creation and
+location lookup. It persists heading IDs as Document Facts, resolves locations
+from the Store plus an in-file ID search, and confines the legacy
+`org-id-locations` fallback to unprojected compatibility cases. Runtime feature
+modules must not call Org's global ID-location APIs directly.

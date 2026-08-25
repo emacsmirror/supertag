@@ -37,9 +37,9 @@
 (require 'supertag-ops-node)       ; For node operations
 (require 'supertag-ops-field)      ; For field operations
 (require 'supertag-service-org)
+(require 'supertag-service-node-identity)
 (require 'supertag-services-query)
 (require 'supertag-services-formula)
-(require 'org-id)                  ; For ID generation
 (require 'ht)
 
 ;;; Customization
@@ -830,16 +830,20 @@ Uses the same Org-first path as UI commands."
       (message "ERROR(:move-node): supertag-service-org-move-node-to-file not available"))
      (t
       ;; Check if node is already in target file to avoid error
-      (let* ((marker (when (fboundp 'org-id-find) (org-id-find node-id 'marker)))
-             (source-file (when marker (buffer-file-name (marker-buffer marker)))))
-        (if (and source-file (string= source-file target-file))
-            ;; Node already in target file, skip silently
-            (supertag-automation--log "SKIP(:move-node): node %s already in %s" node-id target-file)
-          ;; Actually move the node
+      (let ((source-file (supertag-node-location-file node-id)))
+        (cond
+         ((not source-file)
+          (message "ERROR(:move-node): cannot resolve source for node %s" node-id))
+         ((string= source-file target-file)
+          (supertag-automation--log
+           "SKIP(:move-node): node %s already in %s" node-id target-file))
+         (t
           (condition-case err
-              (supertag-service-org-move-node-to-file node-id target-file leave-link target-level)
+              (supertag-service-org-move-node-to-file
+               node-id target-file leave-link target-level)
             (error
-             (message "ERROR(:move-node): %s" (error-message-string err))))))))))
+             (message "ERROR(:move-node): %s"
+                      (error-message-string err)))))))))))
 
 (defun supertag-automation-action-create-node (params)
   "Create a new node. PARAMS supports: :title, :tags (list of strings)."

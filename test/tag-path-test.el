@@ -26,7 +26,9 @@
   "Run BODY with a clean in-memory store."
   (declare (indent 0))
   `(let ((supertag--store nil)
-         (supertag--store-origin nil))
+         (supertag--store-origin nil)
+         (org-id-locations nil)
+         (org-id-files nil))
      (supertag--ensure-store)
      ,@body))
 
@@ -436,7 +438,8 @@
                        (get-text-property 0 'supertag-tag-id child)))
         (delete-region (1+ (point-min)) (point-max))
         (insert child)
-        (cl-letf (((symbol-function 'org-id-get-create) (lambda () "node"))
+        (cl-letf (((symbol-function 'supertag-node-identity-ensure-at-point)
+                   (lambda (&optional _) "node"))
                   ((symbol-function 'supertag-node-get) (lambda (_) '(:id "node")))
                   ((symbol-function
                     'supertag-service-org-save-and-project-current-node)
@@ -934,7 +937,8 @@
           (supertag-completion--auto-record-on-boundary))
         (should-not committed)
         (delete-char -1)
-        (cl-letf (((symbol-function 'org-id-get-create) (lambda () "node"))
+        (cl-letf (((symbol-function 'supertag-node-identity-ensure-at-point)
+                   (lambda (&optional _) "node"))
                   ((symbol-function 'supertag-node-get)
                    (lambda (_) '(:id "node")))
                   ((symbol-function

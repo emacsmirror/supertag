@@ -13,7 +13,6 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'org-id)
 (require 'supertag-core-store)
 (require 'supertag-core-schema)
 (require 'supertag-core-transform)
@@ -23,6 +22,7 @@
 (declare-function supertag-field-remove "supertag-ops-field" (node-id tag-id field-name))
 (require 'supertag-ops-global-field)
 (require 'supertag-core-persistence)
+(require 'supertag-service-node-identity)
 ;;; --- Internal Helper ---
 
 (defun supertag--validate-node-data (data)
@@ -45,8 +45,6 @@ Implements immediate error reporting as preferred by the user."
     (unless (stringp file)
       (error "Node :file must be a string, got: %S" file))))
 
-;; ID generation is now handled by supertag-id-utils.el
-
 ;;; --- Node Operations ---
 
 ;; 2.1 Basic Operations
@@ -55,7 +53,7 @@ Implements immediate error reporting as preferred by the user."
   "Create a new node using the unified commit system.
 PROPS is a plist of node properties.
 Returns the created node data."
-  (let* ((id (or (plist-get props :id) (org-id-new)))
+  (let* ((id (or (plist-get props :id) (supertag-node-identity-new)))
          ;; Build final props with required fields
          (final-props (plist-put props :id id))
          (final-props (plist-put final-props :type :node))
@@ -106,19 +104,13 @@ Assumes the file for NODE-ID has already been made current.  For a
 file-level node (:level 0) point stays at the top of the file; for
 heading nodes point is moved to the containing heading.
 Returns t on success, nil if the ID could not be found."
-  (when-let* ((node (supertag-node-get node-id))
-              (level (plist-get node :level)))
-    (goto-char (point-min))
-    (if (re-search-forward (format ":ID:[ \t]+%s" (regexp-quote node-id)) nil t)
-        (progn
-          (unless (eq level 0)
-            (when (fboundp 'org-back-to-heading)
-              (org-back-to-heading t))
-            (when (fboundp 'org-show-context)
-              (org-show-context)))
-          t)
-      (message "Error: Could not find ID %s in current buffer" node-id)
-      nil)))
+  (if (supertag-node-location-goto-current-buffer node-id)
+      (progn
+        (when (fboundp 'org-show-context)
+          (org-show-context))
+        t)
+    (message "Error: Could not find ID %s in current buffer" node-id)
+    nil))
 
 (defun supertag-node-update (id updater)
   "Update node data using the unified commit system.

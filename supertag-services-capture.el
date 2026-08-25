@@ -17,6 +17,7 @@
 (require 'supertag-services-query)
 (require 'supertag-services-sync)
 (require 'supertag-service-org)
+(require 'supertag-service-node-identity)
 
 ;;; --- Sync Helper Function ---
 
@@ -252,7 +253,8 @@ Supported placeholders:
     ;; Content and utility
     (setq template (replace-regexp-in-string "%clipboard" (or (current-kill 0) "") template t t))
     (setq template (replace-regexp-in-string "%random" (format "%04d" (random 10000)) template t t))
-    (setq template (replace-regexp-in-string "%uuid" (org-id-new) template t t))
+    (setq template (replace-regexp-in-string
+                    "%uuid" (supertag-node-identity-new) template t t))
 
     ;; Interactively fill placeholders like %^{Prompt}
     (while (string-match "%^{\\([^}]*\\)}" template)
@@ -470,7 +472,7 @@ Handles various org-capture-style targets using information from PLIST."
      ((eq type 'here)
       (setq file (or file (buffer-file-name))))
      ((eq type 'id)
-      (setq file (org-id-find-id-file (car args)))
+      (setq file (supertag-node-location-file (car args)))
       (unless file
         (user-error "Cannot resolve ID %s to a file" (car args)))))
 
@@ -509,7 +511,7 @@ Handles various org-capture-style targets using information from PLIST."
 
           ('id
            (let* ((id (car args))
-                  (marker (org-id-find id 'marker)))
+                  (marker (supertag-node-location-find id)))
              (unless marker
                (user-error "Cannot find entry with ID: %s" id))
              (org-with-point-at marker
@@ -539,9 +541,11 @@ TAG-POSITION determines where tags are placed in the headline."
                  nil normalized-tag-pos))
         ;; Create a marker that points to the start of the new headline
         (setq marker (copy-marker headline-start t))
-        ;; 2. Insert properties drawer (must come immediately after headline)
-        (insert ":PROPERTIES:\n:ID: " new-node-id "\n:END:\n")
-        ;; 3. Insert body content after the properties drawer
+        ;; 2. Persist identity through the Document Fact boundary.
+        (goto-char headline-start)
+        (supertag-node-identity-ensure-at-point new-node-id)
+        (org-end-of-meta-data t)
+        ;; 3. Insert body content after the properties drawer.
         (unless (string-empty-p body)
           (insert "\n" body))
         (save-buffer)
@@ -562,21 +566,13 @@ and applies FIELD-SPECS using the Tag/Field/Value data model.
 FIELD-SPECS is a list of plists like:
   (:tag TAG-ID :field FIELD-NAME :value VALUE)
 
-When EXPLICIT-NODE-ID is non-nil, it is enforced as the node ID and
-registered via `org-id-add-location'.  Otherwise, `org-id-get-create'
-is used to obtain or create an ID."
+When EXPLICIT-NODE-ID is non-nil, it is enforced as the node ID."
   (interactive)
   (unless (org-before-first-heading-p)
     (save-excursion
       (org-back-to-heading t)
-      (let* ((current-id (org-entry-get nil "ID"))
-             (node-id (or explicit-node-id current-id (org-id-get-create))))
-        (when explicit-node-id
-          (unless (string= explicit-node-id current-id)
-            (org-entry-put nil "ID" explicit-node-id))
-          (setq node-id explicit-node-id))
-        (when (and node-id (buffer-file-name))
-          (org-id-add-location node-id (buffer-file-name)))
+      (let ((node-id
+             (supertag-node-identity-ensure-at-point explicit-node-id)))
         (supertag-node-sync-at-point)
         (when field-specs
           (supertag-field-set-many node-id field-specs))
@@ -767,7 +763,7 @@ capture DSL."
              (buffer (nth 0 location-info))
              (position (nth 1 location-info))
              (level (nth 2 location-info))
-             (new-node-id (org-id-new))
+             (new-node-id (supertag-node-identity-new))
              (insert-result (supertag-capture--insert-node-into-buffer
                              buffer position level title tags body new-node-id tag-position))
              (node-marker (plist-get insert-result :marker))

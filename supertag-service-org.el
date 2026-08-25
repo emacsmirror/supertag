@@ -11,6 +11,7 @@
 (require 'subr-x)
 (require 'supertag-core-store)
 (require 'supertag-ops-node)
+(require 'supertag-service-node-identity)
 (require 'supertag-services-sync)
 (require 'supertag-ops-tag)
 (require 'supertag-ops-relation)
@@ -32,53 +33,28 @@ unknown to Supertag or the recorded file is missing."
   :type 'boolean
   :group 'supertag-org-link)
 
-(defun supertag-service-org--goto-id-in-current-buffer (node-id)
-  "Move point to NODE-ID's heading in the current buffer.
-
-Returns non-nil when NODE-ID was found, with point left on its heading.
-Returns nil with point unmoved otherwise, so a failed lookup cannot strand
-callers somewhere arbitrary.
-
-The whole buffer is searched regardless of the current restriction, but
-narrowing is left as it was: a caller that needs to reach a node outside
-the restriction has to widen, and only it knows whether that is allowed.
-
-This intentionally does not consult `org-id-locations'."
-  (when (and (stringp node-id) (not (string-empty-p node-id)))
-    (let ((heading
-           (save-excursion
-             (save-restriction
-               (widen)
-               (goto-char (point-min))
-               (when (re-search-forward
-                      (concat "^[ \t]*:ID:[ \t]*" (regexp-quote node-id) "[ \t]*$")
-                      nil t)
-                 (org-back-to-heading t)
-                 (point))))))
-      (when (and heading (<= (point-min) heading) (<= heading (point-max)))
-        (goto-char heading)
-        t))))
-
 (defun supertag-service-org-follow-id (node-id)
   "Open NODE-ID using Supertag's node location and a robust `:ID:` search.
 
 Returns non-nil when NODE-ID was handled, nil otherwise."
-  (let* ((node (and (stringp node-id) (supertag-node-get node-id)))
-         (file (and (listp node) (plist-get node :file))))
+  (let* ((marker (and (stringp node-id)
+                      (supertag-node-location-find node-id)))
+         (file (and marker
+                    (buffer-file-name (marker-buffer marker)))))
     (when (and (stringp file)
                (file-exists-p file)
                ;; Only apply to files in sync scope.
                (or (not (fboundp 'supertag-sync--in-sync-scope-p))
                    (supertag-sync--in-sync-scope-p file)))
-      (let ((buffer (find-file-noselect file)))
+      (let ((buffer (marker-buffer marker)))
         (pop-to-buffer buffer)
         ;; Navigating to a node the user asked for outranks whatever the
         ;; buffer happened to be narrowed to, the same way `org-id-goto' does.
         (widen)
-        (when (supertag-service-org--goto-id-in-current-buffer node-id)
-          (org-show-context)
-          (recenter)
-          t)))))
+        (goto-char marker)
+        (org-show-context)
+        (recenter)
+        t))))
 
 (defun supertag-service-org--org-id-open-link-advice (orig-fn &rest args)
   "Advice for `org-id-open-link` that prefers Supertag lookup when available."
@@ -141,7 +117,7 @@ preventing data loss from incorrect position calculations."
   (unless (and (stringp target-file) (not (string-empty-p target-file)))
     (error "target-file must be a non-empty string"))
 
-  (let* ((marker (org-id-find node-id 'marker))
+  (let* ((marker (supertag-node-location-find node-id))
          (source-file (when marker (buffer-file-name (marker-buffer marker)))))
 
     (unless marker
@@ -319,7 +295,7 @@ preventing data loss from incorrect position calculations."
             (widen)
             (if (zerop (or (plist-get node-info :level) 1))
                 (goto-char (point-min))
-              (unless (supertag-service-org--goto-id-in-current-buffer node-id)
+              (unless (supertag-node-location-goto-current-buffer node-id)
                 (user-error "Node '%s' was not found in %s" node-id file-path)))
             (funcall func)))))))
 
@@ -334,7 +310,8 @@ If NODE-ID is already a top-level heading, return nil."
         (let ((buffer (find-file-noselect file-path)))
           (with-current-buffer buffer
             (save-excursion
-              (org-id-goto node-id)
+              (unless (supertag-node-location-goto-current-buffer node-id)
+                (user-error "Node '%s' was not found in %s" node-id file-path))
               (when (org-at-heading-p)
                 (when (org-up-heading-safe)
                   (setq result (org-get-heading t t t t)))))))))

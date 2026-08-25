@@ -342,7 +342,7 @@ what makes the two copies distinguishable."
 (ert-deftest supertag-tag-membership-goto-id-leaves-point-on-the-heading ()
   "Locating a node by ID moves point there, wherever point started.
 
-`supertag-service-org--goto-id-in-current-buffer' used to run its search
+The old Org service lookup used to run its search
 inside `org-with-wide-buffer', which restores point, so it reported
 success without ever moving.  Everything `supertag-service-org--with-node-buffer'
 runs then operated on whatever heading point happened to sit on."
@@ -352,14 +352,14 @@ runs then operated on whatever heading point happened to sit on."
     ;; From inside another node's body.
     (goto-char (point-min))
     (should (search-forward "beta body" nil t))
-    (should (supertag-service-org--goto-id-in-current-buffer "ID-A"))
+    (should (supertag-node-location-goto-current-buffer "ID-A"))
     (should (org-at-heading-p))
     (should (equal "ID-A" (org-entry-get nil "ID")))
     ;; From another node's heading.
     (goto-char (point-min))
     (should (search-forward "* Beta" nil t))
     (org-back-to-heading t)
-    (should (supertag-service-org--goto-id-in-current-buffer "ID-A"))
+    (should (supertag-node-location-goto-current-buffer "ID-A"))
     (should (equal "ID-A" (org-entry-get nil "ID")))))
 
 (ert-deftest supertag-tag-membership-goto-id-keeps-point-when-not-found ()
@@ -369,7 +369,7 @@ runs then operated on whatever heading point happened to sit on."
     (goto-char (point-min))
     (should (search-forward "alpha body" nil t))
     (let ((before (point)))
-      (should-not (supertag-service-org--goto-id-in-current-buffer "ID-MISSING"))
+      (should-not (supertag-node-location-goto-current-buffer "ID-MISSING"))
       (should (= before (point))))))
 
 (ert-deftest supertag-tag-membership-with-node-buffer-runs-at-the-right-node ()

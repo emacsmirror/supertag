@@ -160,6 +160,25 @@
         (should (re-search-forward "^:SUPERTAG_CONCEPT: t$" nil t)))
       (should (supertag-concept-node-p (supertag-node-get "existing-id"))))))
 
+(ert-deftest concept-create-node-works-with-empty-location-cache ()
+  "Concept creation persists and projects identity without Org's cache."
+  (concept-test--with-env
+    (let ((file (expand-file-name "concepts.org" supertag-data-directory)))
+      (with-temp-file file)
+      (cl-letf (((symbol-function 'read-file-name)
+                 (lambda (&rest _) file))
+                ((symbol-function 'supertag-ui-select-insert-position)
+                 (lambda (_) '(:position 1 :level 1)))
+                ((symbol-function 'supertag-node-identity-new)
+                 (lambda () "concept-id"))
+                ((symbol-function 'org-id-find)
+                 (lambda (&rest _)
+                   (ert-fail "Concept creation consulted org-id-find"))))
+        (should (equal "concept-id"
+                       (supertag-concept--create-node "Concept"))))
+      (should (supertag-concept-node-p (supertag-node-get "concept-id")))
+      (should (supertag-node-location-find "concept-id")))))
+
 (ert-deftest concept-file-node-is-not-reused-as-heading-concept ()
   "A same-title file node is not silently marked as a heading concept."
   (concept-test--with-env
@@ -220,9 +239,6 @@
           (should (equal (buffer-string) before))
           (goto-char (point-min))
           (should-not (org-entry-get nil "ID")))))))
-
-(when noninteractive
-  (ert-run-tests-batch-and-exit))
 
 (provide 'test-concept-mention)
 ;;; test-concept-mention.el ends here

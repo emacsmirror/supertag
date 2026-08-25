@@ -24,6 +24,7 @@
 (require 'supertag-view-api)
 (require 'supertag-board-ops)
 (require 'supertag-services-query)
+(require 'supertag-service-node-identity)
 
 ;;; --- Configuration ---
 
@@ -196,8 +197,7 @@ Set up filter and coding for the new client process."
   (let* ((id (url-unhex-string (substring path (length "/api/node/"))))
          (text (condition-case nil
                    (when (and id (not (string-empty-p id)))
-                     (require 'org-id nil t)
-                     (let ((marker (org-id-find id 'marker)))
+                     (let ((marker (supertag-node-location-find id)))
                        (when marker
                          (with-current-buffer (marker-buffer marker)
                            (save-excursion
@@ -674,14 +674,13 @@ Result shape is an alist: (TAG-ID . [((name . ..) (value . ..)) ...])."
   (let ((id (alist-get 'id data)))
     (when id
       (condition-case nil
-          (progn
-            (require 'org-id)
-            (let ((marker (org-id-find id 'marker)))
-              (when marker
+          (if-let* ((marker (supertag-node-location-find id)))
+              (progn
                 (pop-to-buffer (marker-buffer marker))
                 (goto-char marker)
                 (org-show-context)
-                (select-frame-set-input-focus (selected-frame)))))
+                (select-frame-set-input-focus (selected-frame)))
+            (user-error "Node %s has no valid Org location" id))
         (error (message "supertag-board: Cannot find node %s" id))))))
 
 (defun supertag-board--on-update-title (data)
@@ -690,15 +689,13 @@ Result shape is an alist: (TAG-ID . [((name . ..) (value . ..)) ...])."
         (title (alist-get 'title data)))
     (when (and node-id title)
       (condition-case nil
-          (progn
-            (require 'org-id)
-            (let ((marker (org-id-find node-id 'marker)))
-              (when marker
-                (with-current-buffer (marker-buffer marker)
-                  (save-excursion
-                    (goto-char marker)
-                    (org-edit-headline title)
-                    (save-buffer))))))
+          (if-let* ((marker (supertag-node-location-find node-id)))
+              (with-current-buffer (marker-buffer marker)
+                (save-excursion
+                  (goto-char marker)
+                  (org-edit-headline title)
+                  (save-buffer)))
+            (user-error "Node %s has no valid Org location" node-id))
         (error (message "supertag-board: Cannot update title for %s" node-id))))))
 
 ;;; --- Viewport ---

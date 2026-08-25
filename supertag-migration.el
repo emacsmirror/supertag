@@ -9,7 +9,6 @@
 
 (require 'ht)
 (require 'cl-lib)
-(require 'org-id)    ; For org-id-new
 (require 'sha1)      ; For secure-hash
 (require 'org)
 (require 'org-element)
@@ -18,12 +17,12 @@
 (require 'supertag-core-schema)
 (require 'supertag-core-persistence)
 (require 'supertag-ops-node)
+(require 'supertag-service-node-identity)
 (require 'supertag-ops-relation)
 (require 'supertag-ops-schema)
 (require 'supertag-ops-tag)
 (require 'supertag-view-helper)
 (require 'supertag-services-sync)
-(require 'org-id)
 (require 'org)
 (require 'org-element)
 
@@ -3105,7 +3104,7 @@ Returns a plist with (:ids-added N)."
             (let ((existing-id (org-entry-get nil "ID")))
               (unless existing-id
                 ;; No ID exists, add one
-                (org-id-get-create)
+                (supertag-node-identity-ensure-at-point)
                 (cl-incf ids-added))))))
 
       ;; Save the buffer if we modified it
