@@ -297,7 +297,7 @@ current file and inserted into the target file at a chosen position."
       (user-error "No nodes found to move."))
 
     ;; 1. Prompt for target file and position
-    (let* ((target-file (read-file-name "Move node(s) to file: "))
+    (let* ((target-file (expand-file-name (read-file-name "Move node(s) to file: ")))
            (insert-info (supertag-ui-select-insert-position target-file))
            (target-pos (plist-get insert-info :position))
            (target-level (plist-get insert-info :level)))
@@ -405,7 +405,7 @@ current file and inserted into the target file at a chosen position."
         (user-error "Current heading does not have an ID, it is not a node."))
 
       ;; 1. Get target file and position (reusing our UI service)
-      (let* ((target-file (read-file-name "Move node to file: "))
+      (let* ((target-file (expand-file-name (read-file-name "Move node to file: ")))
              (insert-info (supertag-ui-select-insert-position target-file))
              (target-pos (plist-get insert-info :position))
              (target-level (plist-get insert-info :level)))
@@ -559,7 +559,8 @@ Interactively asks for a target location to save the new node."
             (unless (supertag-node-get from-id)
               (user-error "The source node could not be synchronized."))
             (setq target-file
-                  (read-file-name "Create node in file: " nil nil t)
+                  (expand-file-name
+                   (read-file-name "Create node in file: " nil nil t))
                   insert-info
                   (when (file-exists-p target-file)
                     (supertag-ui-select-insert-position target-file)))
@@ -799,7 +800,7 @@ HEADLINE is optional headline text."
   (let* ((capture-info (supertag-capture-interactive-headline))
          (full-title (plist-get capture-info :headline))
          (selected-tags (plist-get capture-info :tags))
-         (target-file (or target-file (read-file-name "Capture to file: ")))
+         (target-file (expand-file-name (or target-file (read-file-name "Capture to file: "))))
          ;; Optional body content below the headline
          (body (read-string "Body (optional, RET to skip): "))
          (insert-info (supertag-ui-select-insert-position target-file))
