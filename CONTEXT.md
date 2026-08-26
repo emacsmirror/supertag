@@ -12,6 +12,10 @@ _Avoid_: Node data, file-backed semantic data
 A typed fact that Org text does not encode, such as a Tag schema, field value, or Semantic Edge.
 _Avoid_: Metadata, database copy
 
+**Operational Fact**:
+Non-rebuildable conflict or recovery state that must remain durable until it is explicitly resolved. It is neither ordinary runtime state nor a general-purpose third fact category.
+_Avoid_: Runtime state, cache, projection
+
 **Projection**:
 A disposable representation derived from Document Facts, Semantic Facts, or both. It has no independent ownership and can be rebuilt.
 _Avoid_: Cache when referring to authoritative data, source of truth
@@ -43,6 +47,10 @@ _Avoid_: Full database rebuild, semantic restore
 **Semantic Restore**:
 Restore non-rebuildable Semantic Facts from a backup or synchronized copy.
 _Avoid_: Reindex, rescan
+
+**Canonical Change**:
+A bounded domain description of one committed mutation, stating fact authority and change scope separately without exposing a raw Store diff.
+_Avoid_: Store event, path diff, notification payload
 
 ## Runtime boundary
 

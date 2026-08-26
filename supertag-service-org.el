@@ -24,6 +24,9 @@
   "Org link integration for Supertag."
   :group 'supertag)
 
+(define-error 'supertag-projection-error
+  "Document saved, but its Supertag projection could not be reconciled")
+
 (defcustom supertag-org-id-open-link-auto-enable t
   "When non-nil, let `org-id-open-link` resolve IDs via Supertag first.
 
@@ -329,27 +332,141 @@ If NODE-ID is already a top-level heading, return nil."
          ;; Mark internal modification BEFORE save so after-save hook can skip.
          (supertag-service-org-save-and-project-current-node node-id))))))
 
+(defun supertag-service-org-create-node-at-point ()
+  "Persist the heading at point, project it as a node, and return its ID.
+
+The Org heading and its ID are authoritative.  No node Projection is written
+until `save-buffer' succeeds."
+  (unless (org-at-heading-p)
+    (user-error "Point must be at an Org heading to create a node"))
+  (unless (buffer-file-name)
+    (user-error "Node must belong to a file-backed Org buffer"))
+  (let ((node-id (supertag-node-identity-ensure-at-point)))
+    (supertag-service-org-save-and-project-current-node node-id)
+    node-id))
+
+(defun supertag-service-org--save-current-buffer ()
+  "Save the current Org buffer while suppressing its external sync hook."
+  (unless (buffer-file-name)
+    (user-error "Document command requires a file-backed Org buffer"))
+  (let ((file (buffer-file-name)))
+    (supertag--mark-internal-modification file)
+    (unwind-protect
+        (let ((inhibit-message t))
+          (save-buffer))
+      (supertag--clear-internal-modification file))))
+
+(defun supertag-service-org--signal-projection-error
+    (node-id file retry retry-args cause)
+  "Signal a retryable Projection error for NODE-ID in FILE.
+RETRY and RETRY-ARGS describe the service-level recovery call; CAUSE is the
+original error."
+  (signal 'supertag-projection-error
+          (list :node-id node-id
+                :file file
+                :retry retry
+                :retry-args retry-args
+                :cause cause)))
+
+(defun supertag-service-org--project-current-node (node-id)
+  "Rebuild NODE-ID from the current buffer and maintain tag field lifecycle."
+  (supertag-with-transaction
+    (let* ((before-tags (copy-sequence
+                         (plist-get (supertag-node-get node-id) :tags)))
+           (result (supertag-node-sync-current-buffer node-id))
+           (after-tags (plist-get (supertag-node-get node-id) :tags)))
+      (dolist (tag-id (cl-set-difference after-tags before-tags :test #'equal))
+        (supertag-node-initialize-tag-fields node-id tag-id))
+      (dolist (tag-id (cl-set-difference before-tags after-tags :test #'equal))
+        (supertag-node-clear-tag-fields node-id tag-id))
+      result)))
+
+(defun supertag-service-org-retry-node-projection (node-id file)
+  "Rebuild NODE-ID's Projection from its already-saved Org FILE."
+  (unless (and (stringp file) (file-readable-p file))
+    (user-error "Node '%s' has no readable Org source" node-id))
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (save-restriction
+        (widen)
+        (let ((node (supertag-node-get node-id)))
+          (if (zerop (or (plist-get node :level) 1))
+              (goto-char (point-min))
+            (goto-char (point-min))
+            (unless (re-search-forward
+                     (concat "^[ \t]*:ID:[ \t]*"
+                             (regexp-quote node-id) "[ \t]*$") nil t)
+              (user-error "Node '%s' was not found in %s" node-id file))
+            (org-back-to-heading t)))
+        (supertag-service-org--project-current-node node-id)))))
+
+(defun supertag-service-org-retry-delete-node-projection (node-id)
+  "Idempotently remove NODE-ID's Projection after its Org Fact was deleted."
+  (supertag-node-delete node-id))
+
+(defun supertag-service-org--delete-node-projection (node-id file)
+  "Remove NODE-ID's Projection or signal a structured error for FILE."
+  (condition-case cause
+      (supertag-service-org-retry-delete-node-projection node-id)
+    (error
+     (supertag-service-org--signal-projection-error
+      node-id file 'supertag-service-org-retry-delete-node-projection
+      (list node-id) cause))))
+
+(defun supertag-service-org--edit-save-delete-projection (node-id edit)
+  "Run Document EDIT, save, then remove NODE-ID's Projection.
+
+The change group restores the in-memory Org edit when saving fails.  Once the
+save succeeds, Projection failure is reported without undoing durable text."
+  (unless (buffer-file-name)
+    (user-error "Document command requires a file-backed Org buffer"))
+  (let ((file (buffer-file-name)))
+    (atomic-change-group
+      (funcall edit)
+      (supertag-service-org--save-current-buffer))
+    (supertag-service-org--delete-node-projection node-id file)
+    node-id))
+
+(defun supertag-service-org-delete-node-at-point (node-id)
+  "Delete NODE-ID's Org subtree, save it, then remove its Projection."
+  (unless (and (org-at-heading-p)
+               (equal node-id (org-id-get)))
+    (user-error "Point does not identify node '%s'" node-id))
+  (supertag-service-org--edit-save-delete-projection
+   node-id
+   (lambda ()
+     (org-back-to-heading t)
+     (let* ((element (org-element-at-point))
+            (begin (org-element-property :begin element))
+            (end (org-element-property :end element)))
+       (unless (and begin end (< begin end))
+         (error "Cannot determine subtree bounds for node '%s'" node-id))
+       (delete-region begin end)
+       (when (looking-at "\n")
+         (delete-char 1))))))
+
+(defun supertag-service-org-demote-node-at-point (node-id)
+  "Remove NODE-ID's Org identity, save, then remove its Projection."
+  (unless (and (org-at-heading-p)
+               (equal node-id (org-id-get)))
+    (user-error "Point does not identify node '%s'" node-id))
+  (supertag-service-org--edit-save-delete-projection
+   node-id
+   (lambda ()
+     (org-entry-delete (point) "ID"))))
+
 (defun supertag-service-org-save-and-project-current-node (node-id)
   "Save the current Org buffer, then rebuild NODE-ID's projection once."
   (unless (buffer-file-name)
     (user-error "NODE-ID must belong to a file-backed Org buffer"))
-  (let* ((file (buffer-file-name))
-         (before-tags (copy-sequence
-                       (plist-get (supertag-node-get node-id) :tags)))
-         result)
-    (supertag--mark-internal-modification file)
-    (unwind-protect
-        (progn
-          (let ((inhibit-message t))
-            (save-buffer))
-          (setq result (supertag-node-sync-current-buffer node-id)))
-      (supertag--clear-internal-modification file))
-    (let ((after-tags (plist-get (supertag-node-get node-id) :tags)))
-      (dolist (tag-id (cl-set-difference after-tags before-tags :test #'equal))
-        (supertag-node-initialize-tag-fields node-id tag-id))
-      (dolist (tag-id (cl-set-difference before-tags after-tags :test #'equal))
-        (supertag-node-clear-tag-fields node-id tag-id)))
-    result))
+  (let ((file (buffer-file-name)))
+    (supertag-service-org--save-current-buffer)
+    (condition-case cause
+        (supertag-service-org--project-current-node node-id)
+      (error
+       (supertag-service-org--signal-projection-error
+        node-id file 'supertag-service-org-retry-node-projection
+        (list node-id file) cause)))))
 
 (defun supertag-service-org--filetags ()
   "Return the current buffer's file-level tag tokens."

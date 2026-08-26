@@ -14,6 +14,7 @@
 
 (require 'cl-lib)
 (require 'supertag-core-store)
+(require 'supertag-core-change)
 
 ;;; --- Board CRUD ---
 
@@ -29,8 +30,17 @@
                   :viewport (:x 0 :y 0 :zoom 1.0)
                   :created-at ,now
                   :modified-at ,now)))
-    (supertag-store-put-entity :boards id board t)
-    board))
+    (supertag-change-commit
+     (list :authority :semantic
+           :scope :fact
+           :operation :board-created
+           :subject (list :kind :board :id id)
+           :cardinality :single
+           :affected '((:collection :boards :count 1))
+           :metadata nil)
+     (lambda ()
+       (supertag-store-put-entity :boards id board t)
+       board))))
 
 (defun supertag-board-delete (board-id)
   "Delete board BOARD-ID."

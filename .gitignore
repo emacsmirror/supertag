@@ -58,10 +58,10 @@ test/test-results.txt
 dev-note/
 .phrase/
 .phase/
+/.scratch/
 /.qoder/
 .ruff_cache/
 IMPROVEMENT_PLAN.md
-AGENTS.md
 
 # ext/board-ui build artifacts and dependencies
 ext/board-ui/node_modules/
@@ -82,7 +82,11 @@ ext/graph-ui/out/
 CLAUDE.md
 /.claude/
 /commands/
-/docs/
+/docs/*
+!/docs/spec-agents/
+!/docs/spec-agents/**
+!/docs/protocols/
+!/docs/protocols/**
 /hooks/
 /logs/
 /qoder/

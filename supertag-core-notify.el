@@ -11,6 +11,9 @@
 (require 'ht)
 (require 'supertag-core-state) ; For supertag--subscribers, supertag--suppress-notifications, supertag--pending-changes
 
+(declare-function supertag-change--assert-legacy-topic-available
+                  "supertag-core-change" (callback))
+
 ;;; --- Change Notification System ---
 
 (defvar supertag--subscribers (ht-create)
@@ -23,6 +26,9 @@ Value: list of callback functions")
 EVENT-TYPE can be a data path (list of keys) or a generic keyword (e.g., :store-changed).
 CALLBACK will be called with arguments relevant to the event.
 Returns a function to unsubscribe."
+  (when (and (eq event-type :store-changed)
+             (fboundp 'supertag-change--assert-legacy-topic-available))
+    (supertag-change--assert-legacy-topic-available callback))
   (let ((callbacks (gethash event-type supertag--subscribers)))
     (puthash event-type (cons callback callbacks) supertag--subscribers)
     ;; Return an unsubscribe function
@@ -33,11 +39,14 @@ Returns a function to unsubscribe."
   "Emit a generic event.
 EVENT-TYPE is a keyword (e.g., :store-changed).
 ARGS are the arguments to pass to the event handlers."
-  (let ((callbacks (gethash event-type supertag--subscribers)))
-    (when callbacks
-      (dolist (callback callbacks)
-        ;; 直接调用回调函数，不捕获错误
-        (apply callback args)))))
+  (unless (and (eq event-type :store-changed)
+               (bound-and-true-p
+                supertag-change--suppress-legacy-store-changed))
+    (let ((callbacks (gethash event-type supertag--subscribers)))
+      (when callbacks
+        (dolist (callback callbacks)
+          ;; 直接调用回调函数，不捕获错误
+          (apply callback args))))))
 
 (defun supertag-notify (event-type &rest args)
   "Notify subscribers about an event.

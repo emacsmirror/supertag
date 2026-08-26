@@ -70,6 +70,9 @@ TEST_FILES=(
     "test/embed-cache-test.el"
     "test/ownership-separation-test.el"
     "test/automation-condition-test.el"
+    "test/architecture-boundary-test.el"
+    "test/document-command-ownership-test.el"
+    "test/canonical-change-test.el"
 )
 
 # Allow filtering by keyword
@@ -111,8 +114,11 @@ if [ $# -gt 0 ]; then
             embed)     FILTER="$FILTER test/embed-cache-test.el" ;;
             ownership) FILTER="$FILTER test/ownership-separation-test.el" ;;
             automation-condition) FILTER="$FILTER test/automation-condition-test.el" ;;
+            architecture) FILTER="$FILTER test/architecture-boundary-test.el" ;;
+            document-command) FILTER="$FILTER test/document-command-ownership-test.el" ;;
+            change) FILTER="$FILTER test/canonical-change-test.el" ;;
             all)       FILTER="${TEST_FILES[*]}" ; break ;;
-            *)         echo "Unknown filter: $arg"; echo "Available: extractor node identity view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key concept tag-merge reference-migration tag-membership tag-path embed ownership automation-condition all"; exit 1 ;;
+            *)         echo "Unknown filter: $arg"; echo "Available: extractor node identity view view-runtime view-stream view-table view-kanban view-node formula aggregate reference vc field-ref add-reference persist restore canon query query-model tx merge git conflicts cl-block sync-worker smart-key concept tag-merge reference-migration tag-membership tag-path embed ownership automation-condition architecture document-command change all"; exit 1 ;;
         esac
     done
     TEST_FILES=($(printf '%s\n' $FILTER | awk '!seen[$0]++'))

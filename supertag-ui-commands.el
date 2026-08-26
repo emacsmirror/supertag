@@ -205,12 +205,8 @@ Otherwise, it will prompt for a title and create a new heading."
     (if (org-at-heading-p)
         ;; Create node from existing heading
         (progn
+          (setq node-id (supertag-service-org-create-node-at-point))
           (setq props (supertag--get-node-props-at-point))
-          (unless (plist-get props :id)
-            (supertag-node-identity-ensure-at-point)
-            (setq props (supertag--get-node-props-at-point)))
-          (setq node-id (plist-get props :id))
-          (supertag-node-create props)
           (message "Node created from current heading: %s" (plist-get props :title)))
       ;; Create new heading and node
       (let* ((title (read-string "Node title: "))
@@ -219,10 +215,8 @@ Otherwise, it will prompt for a title and create a new heading."
           (beginning-of-line)
           (insert (make-string level ?*) " " title "\n")
           (forward-line -1) ; Move back to the new heading
-          (supertag-node-identity-ensure-at-point)
+          (setq node-id (supertag-service-org-create-node-at-point))
           (setq props (supertag--get-node-props-at-point))
-          (setq node-id (plist-get props :id))
-          (supertag-node-create props)
           (message "New node '%s' created." title))))
     node-id))
 
@@ -251,20 +245,7 @@ Jumps to the selected node in another window."
     (unless node-id
       (user-error "Current heading does not have an ID, it is not a node."))
     (when (yes-or-no-p (format "Really delete node %s and its headline? " node-id))
-      ;; 1. Call the core operation to delete from the database
-      (supertag-node-delete node-id)
-      ;; 2. Delete the headline from the Org buffer
-      (org-back-to-heading t)
-      (when (fboundp 'org-element-at-point)
-        (let* ((element (org-element-at-point))
-               (begin (org-element-property :begin element))
-               (end (org-element-property :end element)))
-          (delete-region begin end)
-          ;; Also delete the newline after the heading if it exists
-          (when (looking-at "\n")
-            (delete-char 1))))
-      ;; 3. Save the buffer to persist the deletion from the file
-      (save-buffer)
+      (supertag-service-org-delete-node-at-point node-id)
       (message "Node %s deleted." node-id))))
 
 (defun supertag-update-node-at-point ()
@@ -288,8 +269,7 @@ effectively converting it back to a regular heading."
     (unless node-id
       (user-error "Current heading does not have an ID, it is not a node."))
     (when (yes-or-no-p "Really remove this node from the database? (The heading will be preserved)")
-      (supertag-node-delete node-id)
-      (org-entry-delete (point) "ID")
+      (supertag-service-org-demote-node-at-point node-id)
       (message "Node %s removed from database. It is now a regular Org heading." node-id))))
 
 (defun supertag-move-node (&optional beg end)
