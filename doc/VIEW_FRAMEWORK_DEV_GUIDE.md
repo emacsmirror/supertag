@@ -145,10 +145,10 @@ Exercise the public lifecycle rather than calling the renderer directly:
 
 At minimum, verify the buffer name, mode, visible content, manual refresh, cleanup, and any selection identity promised by the adapter.
 
-For a complete in-memory showcase, add `doc/examples/` to `load-path`, require
-`supertag-view-demo-dashboard`, then run `M-x supertag-view-demo-dashboard-open`.
-The Dashboard renders every registered Widget type; its button, link, and editable
-field update demo-only memory and never read or write user data.
+For a lightweight in-memory showcase, run `M-x supertag-view-dsl-example`, then
+open `DSL Example` through `M-x supertag-view-select-and-render` with the `demo`
+tag. The example is built into the View Framework and does not read or write
+user data.
 
 ## Interactive Commands
 

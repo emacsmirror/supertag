@@ -9,9 +9,9 @@
 - 插件必须通过 **UI 无关的 View Data API**（`supertag-view-api.el`）读取数据；
 - 写入必须通过 **ops** API，并通常使用 `supertag-with-transaction`。
 
-可运行参考插件：
+内置 DSL 示例：
 
-- `doc/examples/supertag-view-demo-dashboard.el`
+- `M-x supertag-view-dsl-example`
 
 ## 0）数据模型与约定
 
@@ -179,34 +179,26 @@ API：
 - 会设置 `supertag--transaction-active` 并记录 transaction log；
 - 目前重点在“合并通知/降低 UI 抖动”，不要在没有代码明确实现前假设完整 rollback 语义。
 
-## 4）参考插件：非 table UI 的 dashboard
+## 4）内置 DSL 示例
 
 文件：
 
-- `doc/examples/supertag-view-demo-dashboard.el`
+- `supertag-view-framework.el`
 
 它演示：
 
-- `(supertag-view-api-nodes-by-tag TAG)` 读取节点 ID；
-- `(supertag-view-api-get-entities :nodes IDS)` 批量读取实体；
-- 订阅 `:node-updated` 并用 idle timer 节流刷新；
-- 自定义 buffer 渲染与可点击跳转。
+- 使用声明式 Widget 配置定义 View；
+- 使用嵌套 Widget 和函数形式的绑定；
+- 通过公共 View Framework 注册 View。
 
 ## 5）手动验证 checklist
 
-1. 加载示例：
-
-```elisp
-(add-to-list 'load-path "/path/to/supertag/doc/examples/")
-(require 'supertag-view-demo-dashboard)
-```
-
-2. 打开：
-
-`M-x supertag-view-demo-dashboard-open`
+1. 执行 `M-x supertag-view-dsl-example`。
+2. 执行 `M-x supertag-view-select-and-render`，输入 `demo` 标签并选择
+   `DSL Example`。
 
 3. 验证：
 
-- dashboard 显示节点数量与可点击列表
-- `RET` 跳转到节点
-- 修改节点后 dashboard 自动刷新（或按 `g` 手动刷新）
+- 正常显示 Overview 区域；
+- stats row 能反映 View context；
+- progress bar 和 list 通过正常 Runtime 路径渲染。

@@ -9,9 +9,9 @@ Core principles:
 - Plugins MUST read data through the **UI-agnostic View Data API** (`supertag-view-api.el`).
 - Writes go through **ops** APIs and (usually) `supertag-with-transaction`.
 
-Working example plugin:
+Built-in DSL example:
 
-- `doc/examples/supertag-view-demo-dashboard.el`
+- `M-x supertag-view-dsl-example`
 
 Chinese version:
 
@@ -191,34 +191,26 @@ Semantics:
 - It currently focuses on notification batching; do not assume full rollback
   semantics unless explicitly implemented in code.
 
-## 4) Reference plugin: non-table UI dashboard
+## 4) Built-in DSL example
 
 File:
 
-- `doc/examples/supertag-view-demo-dashboard.el`
+- `supertag-view-framework.el`
 
 It demonstrates:
 
-- reading node IDs via `(supertag-view-api-nodes-by-tag TAG)`
-- batch fetching nodes via `(supertag-view-api-get-entities :nodes IDS)`
-- subscribing to `:node-updated` and refreshing with throttling
-- rendering a custom buffer with clickable entries
+- defining a View from declarative Widget configuration
+- nested Widgets and function-valued bindings
+- registering the View through the public View Framework
 
 ## 5) Validation checklist (manual)
 
-1. Load the demo:
-
-```elisp
-(add-to-list 'load-path "/path/to/supertag/doc/examples/")
-(require 'supertag-view-demo-dashboard)
-```
-
-2. Open:
-
-`M-x supertag-view-demo-dashboard-open`
+1. Run `M-x supertag-view-dsl-example`.
+2. Run `M-x supertag-view-select-and-render`, enter the `demo` tag, and select
+   `DSL Example`.
 
 3. Verify:
 
-- dashboard shows node count and a clickable list
-- `RET` jumps to the node
-- after changing a node, the dashboard auto-refreshes (or press `g`)
+- the Overview section renders
+- the stats row reflects the supplied View context
+- the progress bar and list render through the normal Runtime path

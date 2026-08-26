@@ -11,20 +11,6 @@
 (require 'supertag-view-framework)
 (require 'supertag-ui-search)
 
-(defun supertag-view-runtime-test--require-demo-dashboard (example-dir)
-  "Load the demo dashboard from EXAMPLE-DIR, or skip the calling test.
-
-The dashboard under doc/examples is documentation, not part of the
-package, so it may depend on libraries that are not installed here.  A
-missing dependency says nothing about the View Runtime these tests cover,
-and failing on it would report a defect that does not exist."
-  (let ((load-path (cons example-dir load-path)))
-    (condition-case err
-        (require 'supertag-view-demo-dashboard)
-      (file-missing
-       (ert-skip (format "doc/examples dashboard cannot load here: %s"
-                         (error-message-string err)))))))
-
 (ert-deftest test-view-runtime-picker-always-uses-public-open ()
   "The custom-view picker must not route definitions around the Runtime."
   (supertag-view-framework-init)
@@ -642,111 +628,6 @@ and failing on it would report a defect that does not exist."
                 (should (= activated 2))))))
       (when-let* ((buffer (get-buffer buffer-name)))
         (kill-buffer buffer)))))
-
-(ert-deftest test-view-demo-dashboard-showcases-all-widgets-interactively ()
-  "The in-memory DSL demo must cover every widget and preserve interactions."
-  (let* ((example-dir (expand-file-name "doc/examples" default-directory))
-         (load-path (cons example-dir load-path))
-         (buffer-name "*View: Demo Dashboard - demo*"))
-    (supertag-view-runtime-test--require-demo-dashboard example-dir)
-    (unwind-protect
-        (progn
-          (supertag-view-framework-init)
-          (cl-letf (((symbol-function 'display-buffer) #'ignore))
-            (let ((buffer (supertag-view-demo-dashboard-open "demo")))
-              (with-current-buffer buffer
-                (cl-labels
-                    ((types
-                      (widgets)
-                      (mapcan
-                       (lambda (widget)
-                         (append
-                          (list (supertag-widget--normalize-type
-                                 (plist-get widget :type)))
-                          (types (plist-get widget :children))
-                          (let ((columns (plist-get widget :columns)))
-                            (when (functionp columns)
-                              (setq columns (funcall columns nil)))
-                            (mapcan (lambda (column)
-                                      (types (plist-get column :children)))
-                                    columns))))
-                       widgets)))
-                  (let ((showcased
-                         (types (plist-get
-                                 supertag-view-demo-dashboard--config
-                                 :widgets))))
-                    (maphash (lambda (type _renderer)
-                               (should (memq type showcased)))
-                             supertag--widget-registry)))
-                (should (string-match-p "60%" (buffer-string)))
-                (should-not (string-match-p "…" (buffer-string)))
-                (should-not (string-match-p "[—→]" (buffer-string)))
-                (goto-char (point-min))
-                (search-forward "Increment")
-                (button-activate (button-at (1- (point))))
-                (should (string-match-p "Button clicks: 1" (buffer-string)))
-                (goto-char (point-min))
-                (search-forward "Sample link")
-                (button-activate (button-at (1- (point))))
-                (should (string-match-p "Link activations: 1" (buffer-string)))
-                (goto-char (point-min))
-                (search-forward "editable-field")
-                (search-forward "Project Alpha")
-                (let ((field (widget-at (1- (point)))))
-                  (widget-value-set field "Renamed")
-                  (widget-apply field :notify field nil))
-                (supertag-view-refresh)
-                (should (equal
-                         (plist-get
-                          supertag-view-demo-dashboard--interaction-state
-                          :edited-value)
-                         "Renamed"))
-                (should (string-match-p "Edited value: Renamed"
-                                        (buffer-string)))))))
-      (when-let* ((buffer (get-buffer buffer-name)))
-        (kill-buffer buffer)))))
-
-(ert-deftest test-view-demo-dashboard-collapses-below-minimum-width ()
-  "The demo must switch between two columns and one at its breakpoint."
-  (let* ((example-dir (expand-file-name "doc/examples" default-directory))
-         (load-path (cons example-dir load-path))
-         (buffer-name "*View: Demo Dashboard - demo*")
-         (frame (selected-frame))
-         (original-width (window-total-width)))
-    (supertag-view-runtime-test--require-demo-dashboard example-dir)
-    (unwind-protect
-        (save-window-excursion
-          (delete-other-windows)
-          (set-frame-width frame 120)
-          (supertag-view-framework-init)
-          (cl-letf (((symbol-function 'display-buffer) #'ignore))
-            (let* ((buffer (supertag-view-demo-dashboard-open "demo"))
-                   (wide-window (selected-window)))
-              (set-window-buffer wide-window buffer)
-              (with-current-buffer buffer
-                (supertag-view-demo-dashboard--window-size-changed wide-window)
-                (goto-char (point-min))
-                (let ((nodes (search-forward "Nodes")))
-                  (goto-char (point-min))
-                  (should (< nodes (search-forward "Summary")))))
-              (let ((narrow-window (split-window-right)))
-                (set-window-buffer wide-window buffer)
-                (with-current-buffer buffer
-                  (supertag-view-demo-dashboard--window-size-changed wide-window)
-                  (goto-char (point-min))
-                  (let ((summary (search-forward "Summary")))
-                    (goto-char (point-min))
-                    (should (< summary (search-forward "Nodes")))))
-                (delete-window narrow-window))
-              (with-current-buffer buffer
-                (supertag-view-demo-dashboard--window-size-changed wide-window)
-                (goto-char (point-min))
-                (let ((nodes (search-forward "Nodes")))
-                  (goto-char (point-min))
-                  (should (< nodes (search-forward "Summary"))))))))
-      (when-let* ((buffer (get-buffer buffer-name)))
-        (kill-buffer buffer))
-      (set-frame-width frame original-width))))
 
 (ert-deftest test-view-runtime-dsl-selection-uses-runtime-open ()
   "Selecting a declarative view must create its Runtime buffer."
