@@ -15,6 +15,44 @@
 (require 'supertag-service-org)
 (require 'supertag-services-sync)
 
+(ert-deftest supertag-reference-capf-skips-unnecessary-work ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "Ordinary prose without a reference")
+    (let ((parses 0) (scans 0))
+      (cl-letf (((symbol-function 'org-element-context)
+                 (lambda () (cl-incf parses) t))
+                ((symbol-function 'supertag-reference--candidate-strings)
+                 (lambda (&rest _) (cl-incf scans) nil)))
+        (dotimes (_ 20) (supertag-reference-completion-at-point))
+        (should (= parses 0))
+        (let ((table (supertag-reference--completion-table "" nil)))
+          (dotimes (_ 20)
+            (funcall table "" nil 'metadata)
+            (funcall table "" nil '(boundaries . ""))))
+        (should (= scans 0))
+        (should (= parses 0))))))
+
+(ert-deftest supertag-reference-capf-prefix-is-text-only ()
+  (with-temp-buffer
+    (org-mode)
+    (cl-letf (((symbol-function 'org-element-context)
+               (lambda (&rest _) (ert-fail "Completion parsed Org"))))
+      (dolist (text '("[[Example" "#+begin_src sh\n[[Example"
+                      ":PROPERTIES:\n:NOTE: [[Example" "【【Example"))
+        (erase-buffer)
+        (insert text)
+        (let ((before (buffer-string))
+              (bounds (supertag-reference--get-prefix-bounds)))
+          (should bounds)
+          (should (equal "Example" (buffer-substring (car bounds) (cdr bounds))))
+          (should (equal before (buffer-string)))))
+      (dolist (text '("ordinary text" "[[id:123" "[[https://example.com"
+                      "[[Example]]" "[[Example\nnext line"))
+        (erase-buffer)
+        (insert text)
+        (should-not (supertag-reference--get-prefix-bounds))))))
+
 (defconst supertag-reference-capf-test--root
   (expand-file-name ".." (file-name-directory (or load-file-name buffer-file-name))))
 

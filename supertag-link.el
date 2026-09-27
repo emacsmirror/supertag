@@ -1454,37 +1454,14 @@ Return nil when no configured opener ends exactly at START."
 (defconst supertag-reference--create-suffix "  [Create new node]"
   "Suffix of the explicit create row offered by reference completion.")
 
-(defun supertag-reference--shorthand-link-p (context)
-  "Return non-nil when link CONTEXT is still an unfinished shorthand title.
-
-`org-element' parses `[[Title]]' as a `link' from the moment the opener is
-typed, and an auto-pairing input method adds the closer before the title is
-chosen.  Such a link carries no description and no known link scheme."
-  (and (not (org-element-property :contents-begin context))
-       (not (string-match-p
-             supertag-reference--link-scheme-regexp
-             (or (org-element-property :raw-link context) "")))))
-
-(defun supertag-reference--completion-context-p ()
-  "Return non-nil when point is prose that may own a reference shorthand."
-  (let* ((context (org-element-context))
-         (type (org-element-type context)))
-    (and (or (and (eq type 'link)
-                  (supertag-reference--shorthand-link-p context))
-             (not (memq type '(link code verbatim comment comment-block keyword
-                               node-property property-drawer drawer src-block
-                               example-block table table-row table-cell
-                               fixed-width))))
-         (not (org-in-commented-heading-p)))))
-
 (defun supertag-reference--get-prefix-bounds ()
   "Return bounds after an unmatched shorthand opener before point, or nil.
 
 Openers come from `supertag-reference-shorthand-openers' (`[[' and `【【'
 by default).  The bounds cover only the user-entered title.  Existing Org
-links using a known link scheme are deliberately ignored."
-  (when (and (derived-mode-p 'org-mode)
-             (supertag-reference--completion-context-p))
+links using a known link scheme are deliberately ignored.  Only the current
+line is inspected; code blocks and other Org contexts also offer completion."
+  (when (derived-mode-p 'org-mode)
     (save-excursion
       (let ((end (point)))
         (when (re-search-backward (supertag-reference--opener-regexp)
@@ -1493,6 +1470,7 @@ links using a known link scheme are deliberately ignored."
                  (prefix (buffer-substring-no-properties start end)))
             (when (and (not (string-match-p
                              (supertag-reference--closer-regexp) prefix))
+                       (not (string-match-p "\\]\\[" prefix))
                        (not (string-match-p
                              supertag-reference--link-scheme-regexp
                              prefix)))
@@ -1583,7 +1561,9 @@ row (Corfu checks `test-completion' that way)."
 (defun supertag-reference--completion-table (captured-prefix exclude-id)
   "Return a dynamic completion table for CAPTURED-PREFIX and EXCLUDE-ID."
   (lambda (string predicate action)
-    (let* ((live-bounds (and (not (minibufferp))
+    (let* ((query-p (not (or (eq action 'metadata)
+                             (eq (car-safe action) 'boundaries))))
+           (live-bounds (and query-p (not (minibufferp))
                              (supertag-reference--get-prefix-bounds)))
            (live-prefix
             (if live-bounds
@@ -1591,9 +1571,10 @@ row (Corfu checks `test-completion' that way)."
                  (car live-bounds) (cdr live-bounds))
               captured-prefix))
            (candidates
-            (supertag-reference--completion-candidates
-             (supertag-reference--completion-title string live-prefix)
-             exclude-id))
+            (and query-p
+                 (supertag-reference--completion-candidates
+                  (supertag-reference--completion-title string live-prefix)
+                  exclude-id)))
            (existing (cl-remove-if #'supertag-reference--create-row-p candidates)))
       (cond
        ((eq (car-safe action) 'boundaries) nil)
@@ -1925,7 +1906,7 @@ Entries are separated by one blank line."
     (insert-text-button title 'face 'supertag-view-entry 'follow-link t
                         'action (lambda (&optional _button)
                                   (interactive)
-                                  (supertag-goto-node node-id))
+                                  (supertag-goto-node node-id t))
                         'supertag-node-id node-id
                         'help-echo (if (string-empty-p details)
                                        (format "Jump to %s" title)

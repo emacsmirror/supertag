@@ -641,11 +641,12 @@ as the passage.  Tokens never span paragraph or whitespace boundaries."
           (when (> overlap score) (setq best passage score overlap)))))
     (cons best score)))
 
-(defun supertag-semantic--visit-passage (node-id passage)
+(defun supertag-semantic--visit-passage (node-id passage &optional other-window)
   "Visit NODE-ID, then locate displayed PASSAGE within its own live body.
 Nil or missing passages leave point at the target heading.  Drawer text and
-child or sibling nodes are never searched."
-  (supertag-goto-node node-id)
+child or sibling nodes are never searched.  When OTHER-WINDOW is non-nil,
+keep the current view visible and visit the node in another window."
+  (supertag-goto-node node-id other-window)
   (when (and passage (derived-mode-p 'org-mode) (org-at-heading-p)
              (equal node-id (org-entry-get nil "ID")))
     (let* ((heading (point))
@@ -691,7 +692,7 @@ child or sibling nodes are never searched."
     (insert "  ")
     (insert-text-button title 'face 'supertag-view-entry 'follow-link t
                         'action (lambda (_button)
-                                  (supertag-semantic--visit-passage id (and hit passage)))
+                                  (supertag-semantic--visit-passage id (and hit passage) t))
                         'supertag-node-id id
                         'help-echo "Visit the original Org node")
     (insert (propertize " " 'display `(space :align-to (- right ,(1+ (string-width score))))))

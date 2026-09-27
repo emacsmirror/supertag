@@ -458,9 +458,11 @@
           (goto-char (point-min)) (search-forward "标题 ]")
           (let ((button (button-at (1- (point)))))
             (should button)
-            (cl-letf (((symbol-function 'supertag-goto-node) (lambda (id &rest _) (setq visited id))))
+            (cl-letf (((symbol-function 'supertag-goto-node)
+                       (lambda (id &optional other-window)
+                         (setq visited (list id other-window)))))
               (button-activate button))))
-        (should (equal "other" visited))))))
+        (should (equal '("other" t) visited))))))
 
 (ert-deftest supertag-semantic-pause-survives-auto-refresh-until-retry-button ()
   (supertag-semantic-test-with-index
