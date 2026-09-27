@@ -2157,14 +2157,16 @@ always requires an Org-owned persistent ID and skips ID-less headings."
       (supertag-sync--resolve-node-tag-occurrences
        (append (list :id id :file file) extracted)))))
 
-(defun supertag--map-headlines (parsed-ast file &optional migration-mode)
+(defun supertag--map-headlines (parsed-ast file &optional migration-mode node-id)
   "Map over headlines in PARSED-AST and parse them into nodes.
-MIGRATION-MODE is retained for caller compatibility; all modes require IDs."
+MIGRATION-MODE is retained for caller compatibility; all modes require IDs.
+When NODE-ID is non-nil, run extractors only for that identity."
   (let (nodes)
     (org-element-map parsed-ast 'headline
       (lambda (headline)
-        (let ((node (supertag--convert-element-to-node-plist headline file migration-mode)))
-          (when node (push node nodes)))))
+        (when (or (null node-id) (equal node-id (org-element-property :ID headline)))
+          (let ((node (supertag--convert-element-to-node-plist headline file migration-mode)))
+            (when node (push node nodes))))))
     (nreverse nodes)))
 
 (defun supertag-sync--strip-embed-block-contents (file)
@@ -2197,9 +2199,10 @@ or the end of the buffer.  Return the number of unclosed blocks found."
                (abbreviate-file-name file)))
     unclosed-count))
 
-(defun supertag--parse-org-nodes-from-current-buffer (file &optional migration-mode)
+(defun supertag--parse-org-nodes-from-current-buffer (file &optional migration-mode node-id)
   "Parse org nodes from current buffer content.
-FILE is used for setting the :file property on nodes."
+FILE is used for setting the :file property on nodes.
+When NODE-ID is non-nil, extract only that node from the complete Org tree."
   (supertag-text-link-refresh)
   (let ((inhibit-modification-hooks t)
         (org-mode-hook nil)
@@ -2216,7 +2219,7 @@ FILE is used for setting the :file property on nodes."
     ;; Parse without triggering org-mode initialization.
     (let* ((file-id (plist-get (supertag-sync--parse-file-header) :id))
            (parsed-ast (org-element-parse-buffer))
-           (nodes (supertag--map-headlines parsed-ast file migration-mode)))
+           (nodes (supertag--map-headlines parsed-ast file migration-mode node-id)))
       (if (null file-id)
           nodes
         (mapcar (lambda (node)
@@ -2465,8 +2468,9 @@ external modifications (by user/other tools) to avoid unnecessary re-parsing."
   "Add hooks for real-time node synchronization."
   (add-hook 'after-save-hook #'supertag-sync--run-on-save nil t))
 
-(defun supertag--project-nodes-from-org-text (current-file source-text)
-  "Return every heading node projection in SOURCE-TEXT for CURRENT-FILE.
+(defun supertag--project-nodes-from-org-text (current-file source-text &optional node-id)
+  "Return heading node projections in SOURCE-TEXT for CURRENT-FILE.
+When NODE-ID is non-nil, extract only that node, preserving full tree context.
 
 SOURCE-TEXT is projected in a scratch buffer, so the destructive embed-block
 stripping `supertag--parse-org-nodes-from-current-buffer' performs never
@@ -2495,7 +2499,9 @@ Only heading nodes are returned; the file node belongs to
         (setq-local org-complex-heading-regexp source-complex-heading-regexp)
         (setq-local org-todo-line-regexp source-todo-line-regexp)
         (setq-local tab-width 8)
-        (supertag--parse-org-nodes-from-current-buffer current-file)))))
+        (if node-id
+            (supertag--parse-org-nodes-from-current-buffer current-file nil node-id)
+          (supertag--parse-org-nodes-from-current-buffer current-file))))))
 
 (defun supertag--project-node-from-org-text (node-id current-file source-text)
   "Return NODE-ID's projection from SOURCE-TEXT, Org source for CURRENT-FILE.
@@ -2508,9 +2514,9 @@ over so the projection reads the text the same way its own buffer does.
 
 Callers that reproject several nodes of one file want
 `supertag--project-nodes-from-org-text' instead: this function parses the
-whole file for one node."
+whole file but runs extractors only for NODE-ID."
   (cl-find node-id
-           (supertag--project-nodes-from-org-text current-file source-text)
+           (supertag--project-nodes-from-org-text current-file source-text node-id)
            :key (lambda (node) (plist-get node :id))
            :test #'equal))
 
@@ -2519,9 +2525,9 @@ whole file for one node."
 The current unsaved buffer is parsed through the same projector as file sync,
 preserving outline path, file parent, and absolute positions.
 
-Every node in the file is projected to produce one node's plist, so this
-costs time proportional to file size.  Callers that only need node-local
-data should use `supertag-node-tag-occurrences-at-point' or another
+The full Org tree is parsed for context, but only this node is extracted.
+Parsing still costs time proportional to file size.  Callers that only need
+node-local data should use `supertag-node-tag-occurrences-at-point' or another
 region-scoped reader instead."
   (when (org-at-heading-p)
     (save-excursion

@@ -337,7 +337,7 @@ the old mtime until destructive cleanup is allowed."
         (should (supertag-node-changed-p old new))))))
 
 (ert-deftest supertag-projector-point-and-file-sync-have-node-parity ()
-  "Point and file entry points apply the same node reconciliation."
+  "Point sync matches file sync but extracts only the requested node."
   (let* ((tmp (make-temp-file "supertag-projector-parity-" t))
          (file (expand-file-name "note.org" (file-truename tmp)))
          (supertag-data-directory tmp)
@@ -348,7 +348,8 @@ the old mtime until destructive cleanup is allowed."
          (supertag-sync--deferred-files (make-hash-table :test 'equal))
          (seed (list :id "child" :type :node :title "Old" :raw-value "Old"
                      :file nil :level 2 :semantic-note "legacy-node-extension"))
-         full-node point-node source-buffer)
+         (extract (symbol-function 'supertag-extractor--run))
+         extracted-ids full-node point-node source-buffer)
     (unwind-protect
         (progn
           (with-temp-file file
@@ -380,7 +381,12 @@ the old mtime until destructive cleanup is allowed."
             (goto-char (point-min))
             (re-search-forward "^:ID: child$" nil t)
             (org-back-to-heading t)
-            (supertag-node-sync-at-point))
+            (cl-letf (((symbol-function 'supertag-extractor--run)
+                       (lambda (headline file ctx)
+                         (push (org-element-property :ID headline) extracted-ids)
+                         (funcall extract headline file ctx))))
+              (supertag-node-sync-at-point)))
+          (should (equal '("child") extracted-ids))
           (setq point-node
                 (supertag-sync-worker-test--without-volatile-node-data
                  (supertag-node-get "child")))
