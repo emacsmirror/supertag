@@ -2199,10 +2199,29 @@ or the end of the buffer.  Return the number of unclosed blocks found."
                (abbreviate-file-name file)))
     unclosed-count))
 
+(defun supertag--parse-node-tree (node-id)
+  "Parse NODE-ID's subtree with its ancestors from a headline-only Org tree.
+Unrelated headings retain structural context without parsing their bodies."
+  (let* ((outline (org-element-parse-buffer 'headline nil t))
+         (headline (org-element-map outline 'headline
+                     (lambda (element)
+                       (when (equal node-id (org-element-property :ID element))
+                         element))
+                     nil t)))
+    (when headline
+      (save-restriction
+        (narrow-to-region (org-element-property :begin headline)
+                          (org-element-property :end headline))
+        (let* ((tree (org-element-parse-buffer))
+               (root (car (org-element-contents tree))))
+          (org-element-put-property root :parent
+                                    (org-element-property :parent headline))
+          tree)))))
+
 (defun supertag--parse-org-nodes-from-current-buffer (file &optional migration-mode node-id)
   "Parse org nodes from current buffer content.
 FILE is used for setting the :file property on nodes.
-When NODE-ID is non-nil, extract only that node from the complete Org tree."
+When NODE-ID is non-nil, parse its subtree and headline-only ancestor context."
   (supertag-text-link-refresh)
   (let ((inhibit-modification-hooks t)
         (org-mode-hook nil)
@@ -2218,7 +2237,9 @@ When NODE-ID is non-nil, extract only that node from the complete Org tree."
     (goto-char (point-min))
     ;; Parse without triggering org-mode initialization.
     (let* ((file-id (plist-get (supertag-sync--parse-file-header) :id))
-           (parsed-ast (org-element-parse-buffer))
+           (parsed-ast (if node-id
+                           (supertag--parse-node-tree node-id)
+                         (org-element-parse-buffer)))
            (nodes (supertag--map-headlines parsed-ast file migration-mode node-id)))
       (if (null file-id)
           nodes
@@ -2470,7 +2491,7 @@ external modifications (by user/other tools) to avoid unnecessary re-parsing."
 
 (defun supertag--project-nodes-from-org-text (current-file source-text &optional node-id)
   "Return heading node projections in SOURCE-TEXT for CURRENT-FILE.
-When NODE-ID is non-nil, extract only that node, preserving full tree context.
+When NODE-ID is non-nil, extract only that node, preserving ancestor context.
 
 SOURCE-TEXT is projected in a scratch buffer, so the destructive embed-block
 stripping `supertag--parse-org-nodes-from-current-buffer' performs never
@@ -2491,7 +2512,7 @@ Only heading nodes are returned; the file node belongs to
             (org-agenda-inhibit-startup t)
             (inhibit-modification-hooks t))
         (insert source-text)
-        (org-mode)
+        (delay-mode-hooks (org-mode))
         (setq-local org-element-use-cache nil)
         (setq-local org-todo-keywords-1 source-todo-keywords-1)
         (setq-local org-todo-regexp source-todo-regexp)
@@ -2514,7 +2535,7 @@ over so the projection reads the text the same way its own buffer does.
 
 Callers that reproject several nodes of one file want
 `supertag--project-nodes-from-org-text' instead: this function parses the
-whole file but runs extractors only for NODE-ID."
+outline and NODE-ID's subtree, running extractors only for NODE-ID."
   (cl-find node-id
            (supertag--project-nodes-from-org-text current-file source-text node-id)
            :key (lambda (node) (plist-get node :id))
@@ -2525,8 +2546,8 @@ whole file but runs extractors only for NODE-ID."
 The current unsaved buffer is parsed through the same projector as file sync,
 preserving outline path, file parent, and absolute positions.
 
-The full Org tree is parsed for context, but only this node is extracted.
-Parsing still costs time proportional to file size.  Callers that only need
+The outline is parsed for context, but only this subtree's body is parsed
+and only this node is extracted.  Callers that only need
 node-local data should use `supertag-node-tag-occurrences-at-point' or another
 region-scoped reader instead."
   (when (org-at-heading-p)

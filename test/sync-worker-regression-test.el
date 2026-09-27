@@ -349,7 +349,8 @@ the old mtime until destructive cleanup is allowed."
          (seed (list :id "child" :type :node :title "Old" :raw-value "Old"
                      :file nil :level 2 :semantic-note "legacy-node-extension"))
          (extract (symbol-function 'supertag-extractor--run))
-         extracted-ids full-node point-node source-buffer)
+         (parse (symbol-function 'org-element-parse-buffer))
+         full-parse-sizes extracted-ids full-node point-node source-buffer)
     (unwind-protect
         (progn
           (with-temp-file file
@@ -384,8 +385,16 @@ the old mtime until destructive cleanup is allowed."
             (cl-letf (((symbol-function 'supertag-extractor--run)
                        (lambda (headline file ctx)
                          (push (org-element-property :ID headline) extracted-ids)
-                         (funcall extract headline file ctx))))
-              (supertag-node-sync-at-point)))
+                         (funcall extract headline file ctx)))
+                      ((symbol-function 'org-element-parse-buffer)
+                       (lambda (&optional granularity visible-only keep-deferred)
+                         (unless granularity
+                           (push (- (point-max) (point-min)) full-parse-sizes))
+                         (funcall parse granularity visible-only keep-deferred))))
+              (supertag-node-sync-at-point))
+            ;; Body parsing must not visit unrelated headings in the file.
+            (should full-parse-sizes)
+            (should (cl-every (lambda (size) (< size (buffer-size))) full-parse-sizes)))
           (should (equal '("child") extracted-ids))
           (setq point-node
                 (supertag-sync-worker-test--without-volatile-node-data
@@ -400,6 +409,39 @@ the old mtime until destructive cleanup is allowed."
       (when (buffer-live-p source-buffer)
         (kill-buffer source-buffer))
       (ignore-errors (delete-directory tmp t)))))
+
+(ert-deftest supertag-projector-subtree-matches-full-file ()
+  "Subtree projection preserves ancestry, children, properties and link facts."
+  (let* ((file "/tmp/projector-subtree.org")
+         (text (concat ":PROPERTIES:\n:ID: file-id\n:END:\n"
+                       "#+TODO: WAIT | DONE\n"
+                       "* WAIT Parent #topic :native:\n:PROPERTIES:\n:ID: parent\n:AUTHOR: A\n:END:\n"
+                       "Parent body [[id:other][reference]].\n"
+                       "** Child\nSCHEDULED: <2026-09-27 Sun>\n"
+                       ":PROPERTIES:\n:ID: child\n:CUSTOM: value\n:END:\n"
+                       "Own body #inline\n"
+                       "*** Grandchild\n:PROPERTIES:\n:ID: grandchild\n:END:\nChild body\n"
+                       "* Other\n:PROPERTIES:\n:ID: other\n:END:\n"
+                       "#+begin_src text\n:ID: fake\n#+end_src\n")))
+    (with-temp-buffer
+      (insert text)
+      (delay-mode-hooks (org-mode))
+      (dolist (node (supertag--project-nodes-from-org-text file text))
+        (should (equal node (supertag--project-node-from-org-text
+                             (plist-get node :id) file text))))
+      (dolist (missing '("missing" "fake" "file-id"))
+        (should-not (supertag--project-node-from-org-text missing file text))))))
+
+(ert-deftest supertag-projector-scratch-buffer-skips-user-mode-hooks ()
+  "Read-only projection must not run user UI hooks in its scratch buffer."
+  (let ((after-change-major-mode-hook
+         (list (lambda () (ert-fail "Projection ran a user mode hook")))))
+    (should (equal "node"
+                   (plist-get
+                    (supertag--project-node-from-org-text
+                     "node" "/tmp/note.org"
+                     "* Node\n:PROPERTIES:\n:ID: node\n:END:\nBody\n")
+                    :id)))))
 
 (ert-deftest supertag-sync-deferred-file-is-dropped-by-complete-full-rescan ()
   "A failed worker retains its filename; a complete full rescan drops it."
