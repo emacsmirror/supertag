@@ -159,6 +159,28 @@ the old mtime until destructive cleanup is allowed."
     (should (equal "keep"
                    (supertag-test-read-legacy-value "node" "semantic-note")))))
 
+(ert-deftest supertag-sync-restores-orphaned-node-with-unchanged-hash ()
+  "Reappearing headings regain their location even with a cached pre-orphan hash."
+  (let* ((file (make-temp-file "supertag-restored-" nil ".org"
+                               "* Scott Jenson\n:PROPERTIES:\n:ID: restored\n:END:\n"))
+         (supertag--store nil)
+         (supertag-sync--is-full-rescan-p nil))
+    (unwind-protect
+        (progn
+          (supertag--ensure-store)
+          (let ((parsed (car (supertag--parse-org-nodes file))))
+            (supertag-db-add-with-hash "restored" parsed)
+            (should-not (supertag-node-changed-p
+                         (supertag-node-get "restored") parsed))
+            (supertag-node-mark-deleted-from-file "restored")
+            (should-not (supertag-node-location-find "restored"))
+            (supertag-sync--reconcile-node parsed)
+            (should (supertag-node-location-find "restored"))
+            (should-not (plist-get (supertag-node-get "restored") :orphaned-at))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (delete-file file))))
+
 (ert-deftest supertag-reindex-org-aborts-incomplete-snapshot-without-deletion ()
   "An incomplete snapshot returns a report without touching projections."
   (let* ((file (make-temp-file "supertag-reindex-partial-" nil ".org" "* Note\n"))

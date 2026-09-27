@@ -1083,7 +1083,11 @@ If OLD-NODE doesn't have a hash value, calculate it on the fly."
          (old-hash (or (plist-get old-node :hash)
                        (supertag-node-hash old-node)))
          (new-hash (supertag-node-hash projected-new)))
-    (not (string= old-hash new-hash))))
+    ;; Orphaning clears :file but retains the last projection's hash.
+    ;; A reappearing node must regain its location even if that hash matches.
+    (or (not (equal (plist-get old-node :file)
+                    (plist-get new-node :file)))
+        (not (string= old-hash new-hash)))))
 
 (defun supertag-sync--reconcile-node (new-props &optional counters)
   "Reconcile NEW-PROPS with its current node Projection.
