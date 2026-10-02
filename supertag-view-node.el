@@ -63,14 +63,14 @@
 
 (defcustom supertag-view-node-side 'right
   "Side where the Node View side window appears.
-One of 'right, 'left, 'bottom, or 'top."
+One of `right', `left', `bottom', or `top'."
   :type '(choice (const right) (const left) (const bottom) (const top))
   :group 'supertag)
 
 (defcustom supertag-view-node-side-size 0.33
   "Default size of the Node View side window.
-For 'left/'right, interpreted as a fraction of frame width (0.0–1.0).
-For 'top/'bottom, interpreted as a number of lines (integer) or a fraction
+For `left'/`right', interpreted as a fraction of frame width (0.0–1.0).
+For `top'/`bottom', interpreted as a number of lines (integer) or a fraction
 if your Emacs accepts fractional heights for side windows."
   :type '(choice number integer)
   :group 'supertag)
@@ -250,7 +250,7 @@ Returned keys (current contract):
   "Hide the side window and disable follow."
   (interactive)
   (setq supertag-view-node--enabled nil)
-  (when-let ((buf (supertag-view-node--buffer)))
+  (when-let* ((buf (supertag-view-node--buffer)))
     (with-current-buffer buf
       (supertag-view--cleanup-instance))
     (dolist (win (get-buffer-window-list buf nil t))
@@ -416,7 +416,7 @@ RET and mouse-1 visit entry targets."
 
 (defun supertag-view-node--stored-date (node)
   "Return NODE's stored creation or modification date, or nil."
-  (when-let ((timestamp (or (plist-get node :created-at)
+  (when-let* ((timestamp (or (plist-get node :created-at)
                             (plist-get node :modified-at))))
     (condition-case nil
         (format-time-string "%Y-%m-%d" timestamp)

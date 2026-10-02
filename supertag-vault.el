@@ -289,12 +289,19 @@ file belongs to (based on its path)."
 (defvar supertag-vault--current nil
   "Currently active vault plist (normalized).")
 
-(defvar-local supertag-vault--buffer-indicator nil
+(defvar supertag-vault--buffer-indicator nil
   "Cached mode line indicator for the current buffer.")
+(defvar supertag-vault-indicator-mode nil
+  "Non-nil when the Supertag vault indicator is enabled in this buffer.")
+
+;; This group is intentionally initialized only when main calls the preparer.
+;; Apply locality to the runtime variable list, not at module load time.
+(dolist (variable '(supertag-vault--buffer-indicator supertag-vault-indicator-mode))
+  (make-variable-buffer-local variable))
 
 (define-minor-mode supertag-vault-indicator-mode
   "Show Supertag vault indicator in the mode line."
-  :init-value nil
+  :variable supertag-vault-indicator-mode
   :lighter (:eval (or supertag-vault--buffer-indicator "")))
 )
 

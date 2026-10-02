@@ -222,7 +222,7 @@ The structure is a hash table where:
       (`(:on-tag-removed ,tag-name) (push tag-name sources)))
 
     (dolist (source (cl-remove-duplicates sources))
-      (when-let ((rules (gethash source supertag--rule-index)))
+      (when-let* ((rules (gethash source supertag--rule-index)))
         (puthash source (remove rule-id rules) supertag--rule-index)))))
 
 (defun supertag-rebuild-rule-index ()
@@ -647,7 +647,7 @@ BRANCH can specify :equals (single value or list), :in (list),
 (defun supertag-automation-action-update-todo-state (node-id params)
   "Update the TODO state of a node.
 PARAMS should contain :state with the new TODO keyword (e.g., \"DONE\")."
-  (when-let ((state (plist-get params :state)))
+  (when-let* ((state (plist-get params :state)))
     (supertag-service-org-set-todo-state node-id state)))
 
 (defun supertag-automation--semantic-tag-id (tag)
@@ -660,7 +660,7 @@ PARAMS should contain :state with the new TODO keyword (e.g., \"DONE\")."
   "Add a tag to the node.
 Append inline #tag at the end of the headline when it is not present."
   (when (and node-id)
-    (when-let ((tag-name (plist-get params :tag)))
+    (when-let* ((tag-name (plist-get params :tag)))
       (let ((tag-id (supertag-automation--semantic-tag-id tag-name)))
         (unless (supertag-tag-get tag-id)
           (setq tag-id (supertag-tag-ensure tag-name)))
@@ -672,7 +672,7 @@ Append inline #tag at the end of the headline when it is not present."
   "Remove a tag from the node.
 Uses the same Org-first path as UI commands."
   (when (and node-id)
-    (when-let ((tag-name (plist-get params :tag)))
+    (when-let* ((tag-name (plist-get params :tag)))
       (if-let* ((tag-id
                  (or (and (supertag-tag-get tag-name) tag-name)
                      (supertag-tag-resolve-occurrence tag-name))))
@@ -763,13 +763,13 @@ DEPRECATED: Use synchronous processing via supertag-automation-sync instead."
 (defun supertag-automation--process-event-queue ()
   "Process all queued automation events (legacy support)."
   (setq supertag-automation--processing-timer nil)
-  (when supertag-automation--event-queue)
+  (when supertag-automation--event-queue
     (let ((events (nreverse supertag-automation--event-queue)))
       (setq supertag-automation--event-queue nil)
       (dolist (event events)
         (let ((handler (car event))
               (args (cdr event)))
-          (apply handler args)))))
+          (apply handler args))))))
 
 (defun supertag-automation--handle-entity-change (path old-value new-value)
   "Handle entity changes and trigger automation.
@@ -829,7 +829,7 @@ This is the actual handler that was previously called directly."
   "Handle node changes and trigger relevant automation."
   (let ((rule-ids (supertag--get-rules-from-index path)))
             (dolist (rule-id rule-ids)
-              (when-let ((rule (supertag-rule-get rule-id)))
+              (when-let* ((rule (supertag-rule-get rule-id)))
                 (let ((trig (plist-get rule :trigger)))
           ;; Runtime trigger gate: skip tag-only triggers here
           (if (and (consp trig) (memq (car trig) '(:on-tag-added :on-tag-removed)))
@@ -868,7 +868,7 @@ This is the actual handler that was previously called directly."
   (let ((candidate (gethash tag-name supertag--rule-index)))
     (when candidate
       (dolist (rule-id candidate)
-        (when-let ((rule (supertag-rule-get rule-id)))
+        (when-let* ((rule (supertag-rule-get rule-id)))
           (pcase (plist-get rule :trigger)
                     (`(:on-tag-added ,tn)
                      (when (and (eq op :added) (equal tn tag-name)
@@ -937,9 +937,7 @@ unchanged; and/or/not are shared by both grammars."
 (defun supertag-automation--eval-single-condition (cond-form node-data)
   "Evaluate a single condition COND-FORM against NODE-DATA.
 Returns t if condition passes, nil otherwise."
-  (let* ((tags (plist-get node-data :tags))
-         (props (plist-get node-data :properties))
-         (node-id (plist-get node-data :id))
+  (let* ((node-id (plist-get node-data :id))
          (op (car cond-form))
          (args (cdr cond-form)))
 
@@ -1143,7 +1141,7 @@ METADATA is additional operation context."
             (_ nil)))))))
 
 
-(defun supertag-automation-sync--handle-tag-event (operation id payload previous metadata)
+(defun supertag-automation-sync--handle-tag-event (operation id _payload previous _metadata)
   "Handle tag-related events synchronously."
   (when id
     (let ((node-ids (supertag-automation-sync--get-affected-node-ids id operation previous)))
@@ -1174,7 +1172,7 @@ METADATA is additional operation context."
 (defun supertag-automation-sync--condition-contains-op-p (condition ops)
   "Return non-nil when CONDITION contains any operator in OPS.
 
-OPS is a list of symbols, e.g. '(property-changed)."
+OPS is a list of symbols, e.g. `(property-changed)'."
   (when condition
     (let ((targets (if (listp ops) ops (list ops)))
           (found nil))
@@ -1204,9 +1202,9 @@ OPS is a list of symbols, e.g. '(property-changed)."
 OP must be :added or :removed."
   (supertag-automation--ensure-rule-index)
   (when (and (boundp 'supertag--rule-index) tag-name)
-    (when-let ((candidate (gethash tag-name supertag--rule-index)))
+    (when-let* ((candidate (gethash tag-name supertag--rule-index)))
       (dolist (rule-id (cl-remove-duplicates candidate :test #'equal))
-        (when-let ((rule (supertag-automation-get rule-id)))
+        (when-let* ((rule (supertag-automation-get rule-id)))
           (pcase (plist-get rule :trigger)
             (`(:on-tag-added ,tn)
              (when (and (eq op :added) (equal tn tag-name))
@@ -1250,7 +1248,7 @@ OP must be :added or :removed."
                (plist-get old-props representative)
                (plist-get new-props representative))))
         (dolist (rule-id rule-ids)
-          (when-let ((rule (supertag-automation-get rule-id)))
+          (when-let* ((rule (supertag-automation-get rule-id)))
             ;; Skip tag-only triggers here; they are handled above.
             (let ((trigger (plist-get rule :trigger)))
               (unless (and (consp trigger) (memq (car trigger) '(:on-tag-added :on-tag-removed)))
@@ -1277,7 +1275,7 @@ OP must be :added or :removed."
                (not (equal old-node new-node)))
       (let ((node-event (list :path (list :nodes node-id) :old old-node :new new-node)))
         (dolist (rule-id rule-ids)
-          (when-let ((rule (supertag-automation-get rule-id)))
+          (when-let* ((rule (supertag-automation-get rule-id)))
             (let ((trigger (plist-get rule :trigger)))
               (unless (and (consp trigger) (memq (car trigger) '(:on-tag-added :on-tag-removed)))
                 (supertag-automation-sync--execute-rule-for-event rule node-id node-event)))))))))
@@ -1290,7 +1288,7 @@ OP must be :added or :removed."
     (dolist (tag (supertag-automation-sync--normalize-tag-list (plist-get node-data :tags)))
       (supertag-automation-sync--execute-tag-trigger node-id tag :added))
     (dolist (rule-id rule-ids)
-      (when-let ((rule (supertag-automation-get rule-id)))
+      (when-let* ((rule (supertag-automation-get rule-id)))
         ;; Skip tag-only triggers here; they are handled above.
         (let ((trigger (plist-get rule :trigger)))
           (unless (and (consp trigger) (memq (car trigger) '(:on-tag-added :on-tag-removed)))
@@ -1301,7 +1299,7 @@ OP must be :added or :removed."
   "Process a node deletion and trigger relevant automation rules."
   (let ((rule-ids (supertag-automation-sync--get-relevant-rules node-id old-node nil)))
     (dolist (rule-id rule-ids)
-      (when-let ((rule (supertag-automation-get rule-id)))
+      (when-let* ((rule (supertag-automation-get rule-id)))
         ;; Skip tag-only triggers; deletion is not a tag-change event.
         (let ((trigger (plist-get rule :trigger)))
           (unless (and (consp trigger) (memq (car trigger) '(:on-tag-added :on-tag-removed)))
@@ -1331,14 +1329,14 @@ This is an optimized version of the original rule lookup."
       (let ((node-tags (plist-get node-data :tags)))
         (when (and node-tags (boundp 'supertag--rule-index))
           (dolist (tag node-tags)
-            (when-let ((tag-rules (gethash tag supertag--rule-index)))
+            (when-let* ((tag-rules (gethash tag supertag--rule-index)))
               (setq rules (append tag-rules rules))))))
 
       ;; Get rules based on changed properties - safe lookup
       (when (and old-node new-node (boundp 'supertag--rule-index))
         (let ((changed-props (supertag-automation-sync--get-changed-properties old-node new-node)))
           (dolist (prop changed-props)
-            (when-let ((prop-rules (gethash prop supertag--rule-index)))
+            (when-let* ((prop-rules (gethash prop supertag--rule-index)))
               (setq rules (append prop-rules rules)))))))
 
     ;; Remove duplicates and filter by trigger type
@@ -1352,7 +1350,7 @@ This is an optimized version of the original rule lookup."
       (when candidate-rules
         (cl-remove-if-not
          (lambda (rule-id)
-           (when-let ((rule (supertag-automation-get rule-id)))
+           (when-let* ((rule (supertag-automation-get rule-id)))
              (pcase (plist-get rule :trigger)
                (`(:on-tag-added ,tn) (and (memq operation '(:added :add-tag)) (equal tn tag-id)))
                (`(:on-tag-removed ,tn) (and (memq operation '(:removed :remove-tag)) (equal tn tag-id)))
@@ -1451,7 +1449,8 @@ This is an optimized version of the original rule lookup."
 
 (defcustom supertag-scheduler-check-interval 300
   "Interval in seconds for master timer to check for pending tasks.
-300 seconds (5 minutes) provides good balance between accuracy and resource usage."
+300 seconds (5 minutes) provides good balance between accuracy and resource
+usage."
   :type 'integer
   :group 'supertag-services)
 
@@ -1477,7 +1476,7 @@ Value: Task plist with :type, :function, and scheduling parameters")
   "Save task states (last-run times) to persistent storage."
   (let ((state (make-hash-table :test 'equal)))
     (maphash (lambda (id task)
-               (when-let ((last-run (plist-get task :last-run)))
+               (when-let* ((last-run (plist-get task :last-run)))
                  (puthash (symbol-name id) last-run state)))
              supertag-scheduler--tasks)
     (with-temp-buffer

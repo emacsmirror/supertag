@@ -4,9 +4,10 @@
 (defconst supertag-renovation-default
   '("contract" "compat" "identity" "vault" "view-framework" "node-view-extra" "automation-actions" "extractor" "persistence-restore" "multi-instance" "mention-extra" "saved-projection" "property-automation"
     "move" "promote" "stream" "find-node" "add-link" "discovery"
-    "query-links" "query-tag-completion" "legacy-query-compat" "migrate" "storage-format" "property-consumers" "tag-change" "named-link-query" "tag-path" "tag-merge-plan" "tag-manager" "embark" "ai" "semantic" "git"))
+    "query-links" "query-tag-completion" "legacy-query-compat" "migrate" "storage-format" "property-consumers" "tag-change" "named-link-query" "tag-path" "tag-merge-plan" "tag-manager" "embark" "ai" "semantic" "git" "compiler"))
 (defconst supertag-renovation-suites
-  '(("multi-instance" ("test/multi-instance-test.el" . t))
+  '(("compiler" ("test/compiler-regression-test.el" . "^supertag-compiler-"))
+    ("multi-instance" ("test/multi-instance-test.el" . t))
     ("migrate" ("test/migrate-test.el" . t) ("test/migrate-fields-test.el" . t))
     ("storage-format"
      ("test/canonical-serialization-test.el" . (not (member supertag-canon-test-perf-canonical-vs-plain-dump)))

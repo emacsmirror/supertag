@@ -414,7 +414,8 @@ Returns relation data, or nil if it does not exist."
 (defun supertag-relation-update (id updater)
   "Update relation data using the unified commit system.
 ID is the unique identifier of the relation.
-UPDATER is a function that receives the current relation data and returns the updated data.
+UPDATER is a function that receives the current relation data and returns the
+updated data.
 Returns the updated relation data."
   (let ((previous (supertag-relation-get id)))
     (when previous
@@ -1295,9 +1296,9 @@ Org ID or property drawer before point."
              (append (list :stage :target-project) (cdr cause))))))
 
 (defun supertag-reference--resolve-or-create
-    (input selected &optional choose-target template)
+    (input selected &optional _choose-target template)
   "Resolve INPUT or SELECTED candidate, creating when necessary.
-When CHOOSE-TARGET is non-nil, prompt for the creation target."
+_CHOOSE-TARGET is retained for compatibility; creation prompts for a target."
   (let* ((selected-id
           (and selected
                (get-text-property 0 'supertag-reference-node-id selected)))

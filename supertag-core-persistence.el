@@ -1550,7 +1550,8 @@ is simply skipped, same as if FILE had already been canonical."
   "Copy legacy-format FILE to a never-auto-deleted `preformat6' backup.
 Part of P1-8
 (archive/legacy-v2/2026-08-25-phrase/phases/phase-git-sync-20260713/PLAN.md
-\"S2 Canonical Serialization\", revised 2026-07-13): the FIRST time a canonical save is about to
+\"S2 Canonical Serialization\", revised 2026-07-13): the FIRST time a
+canonical save is about to
 overwrite an on-disk database still in the legacy (pre-6.0) format, this
 preserves that legacy file as
 `supertag-db-backup-directory'/supertag-db-preformat6-<TIMESTAMP>.el --

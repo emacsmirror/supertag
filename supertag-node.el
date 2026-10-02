@@ -23,6 +23,9 @@
 ;;; Code:
 
 (require 'cl-lib)
+
+(declare-function ivy-current-match "ivy" ())
+(declare-function vertico-current-candidate "vertico" ())
 (require 'org)
 (require 'org-capture)
 (require 'org-id)
@@ -100,14 +103,14 @@ Implements immediate error reporting as preferred by the user."
               (eq (plist-get data :level) 0))
     (error "Node missing required :title field: %S" data))
   ;; Validate time format compliance (Emacs native format)
-  (when-let ((created-at (plist-get data :created-at)))
+  (when-let* ((created-at (plist-get data :created-at)))
     (unless (and (listp created-at) (= (length created-at) 4))
       (error "Node :created-at must use Emacs time format, got: %S" created-at)))
-  (when-let ((modified-at (plist-get data :modified-at)))
+  (when-let* ((modified-at (plist-get data :modified-at)))
     (unless (and (listp modified-at) (= (length modified-at) 4))
       (error "Node :modified-at must use Emacs time format, got: %S" modified-at)))
   ;; Validate file path if present
-  (when-let ((file (plist-get data :file)))
+  (when-let* ((file (plist-get data :file)))
     (unless (stringp file)
       (error "Node :file must be a string, got: %S" file))))
 
@@ -146,7 +149,8 @@ Returns node data, or nil if it does not exist."
 (defun supertag-node-update (id updater)
   "Update node data using the unified commit system.
 ID is the unique identifier of the node.
-UPDATER is a function that receives the current node data and returns the updated data.
+UPDATER is a function that receives the current node data and returns the
+updated data.
 Returns the updated node data."
   (let ((previous (supertag-node-get id)))
     (when previous
@@ -191,8 +195,8 @@ heading nodes point is moved to the containing heading.
 Returns t on success, nil if the ID could not be found."
   (if (supertag-node-location-goto-current-buffer node-id)
       (progn
-        (when (fboundp 'org-show-context)
-          (org-show-context))
+        (when (fboundp 'org-fold-show-context)
+          (org-fold-show-context))
         t)
     (message "Error: Could not find ID %s in current buffer" node-id)
     nil))
@@ -200,7 +204,7 @@ Returns t on success, nil if the ID could not be found."
 (defun supertag-node-set-location (node-id new-file new-position)
  "Update the file path and position for a node in the store.
 This is used when a node is moved from one file to another."
- (when-let ((node (supertag-node-get node-id)))
+ (when-let* ((node (supertag-node-get node-id)))
    (supertag-node-update node-id
      (lambda (n)
        (let* ((p-node (plist-put n :file new-file))
@@ -229,14 +233,14 @@ file-level before any heading."
   "Ensure NODE-ID exists in the store by syncing the heading if necessary."
   (when node-id
     (unless (supertag-node-get node-id)
-      (when-let ((marker (supertag-ui--find-node-marker node-id)))
+      (when-let* ((marker (supertag-ui--find-node-marker node-id)))
         (org-with-point-at marker
           (when (org-at-heading-p)
             (supertag-node-sync-at-point)))))))
 
 (defun supertag-ui--file-node-p (node-id)
   "Return non-nil if NODE-ID is a file node (level 0)."
-  (when-let ((node (supertag-node-get node-id)))
+  (when-let* ((node (supertag-node-get node-id)))
     (eq (plist-get node :level) 0)))
 
 (defun supertag-ui--get-file-node-at-point ()
@@ -498,7 +502,8 @@ File nodes (level 0) get a \"📄 \" prefix and fall back to filename when untit
 (defun supertag-ui-read-find-node (prompt &optional with-preview)
   "Read an existing node or an explicit creation request using PROMPT.
 Return `(:existing ID)', `(:create TITLE)' or nil.  WITH-PREVIEW previews only
-  existing nodes in another window and restores the caller context before return."
+  existing nodes in another window and restores the caller context before
+return."
   (let* ((candidates (supertag-ui--build-node-candidates))
          (table (supertag-ui--find-completion-table candidates))
          selection)
@@ -898,9 +903,9 @@ Additionally, templates can request a follow-up move using
 `:supertag-move' in the template plist:
 
 - :supertag-move t                ; use `supertag-move-node'
-- :supertag-move 'node            ; same as t
-- :supertag-move 'link            ; use `supertag-move-node-and-link'
-- :supertag-move 'within-target   ; move within the capture target file only
+- :supertag-move \\='node            ; same as t
+- :supertag-move \\='link            ; use `supertag-move-node-and-link'
+- :supertag-move \\='within-target   ; move within the capture target file only
 
 You can also enable an interactive Supertag tag prompt after
 capture by setting `:supertag-tags-prompt' to non-nil in the
@@ -983,12 +988,12 @@ For completion framework integration, e.g., live previews.")
 
 (defun supertag-ui-select-node (&optional prompt use-cache with-preview initial)
   "Interactively prompt user to select a node.
-PROMPT is the prompt string (defaults to 'Select node: ').
+PROMPT is the prompt string (defaults to `Select node: ').
 USE-CACHE when non-nil uses cached data for better performance.
 WITH-PREVIEW when non-nil enables live preview in another window
 if a supported completion framework (Ivy, Vertico) is active.
 INITIAL is an existing node ID offered as the completion default.
-Returns the selected node's ID, or nil."
+Returns the selected node ID, or nil."
   (let* ((prompt-str (or prompt "Select node: "))
          (candidates (if use-cache
                          (supertag-ui--get-cached-nodes)
@@ -1002,14 +1007,14 @@ Returns the selected node's ID, or nil."
       (let ((preview-func (lambda (id) (when id (supertag-goto-node id t)))))
         (cond
          ((and (bound-and-true-p ivy-mode) (fboundp 'ivy-read))
-          (let* ((ivy-update-fn
-                  (lambda (_)
-                    (let* ((sel (ivy-current-match))
-                           (id (cdr (assoc sel candidates))))
-                      (funcall preview-func id))))
-                 (selection (ivy-read prompt-str (mapcar #'car candidates)
+          (let* ((selection (ivy-read prompt-str (mapcar #'car candidates)
                                       :require-match t
                                       :preselect default-display
+                                      :update-fn
+                                      (lambda ()
+                                        (funcall preview-func
+                                                 (cdr (assoc (ivy-current-match)
+                                                             candidates))))
                                       :history 'supertag-ui-select-node-history
                                       :caller 'supertag-ui-select-node)))
             (when selection (cdr (assoc selection candidates)))))
@@ -1227,7 +1232,7 @@ Returns non-nil when NODE-ID was handled, nil otherwise."
         ;; buffer happened to be narrowed to, the same way `org-id-goto' does.
         (widen)
         (goto-char marker)
-        (org-show-context)
+        (org-fold-show-context)
         (recenter)
         t))))
 

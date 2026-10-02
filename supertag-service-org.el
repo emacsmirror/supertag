@@ -835,8 +835,10 @@ post-save Projection failure retains documents with structured retry data."
                       (widen)
                       (goto-char (plist-get root :begin))
                       (unless (plist-get root :id)
-                        (setf (plist-get (cl-find (current-buffer) snapshots
-                                                 :key (lambda (s) (plist-get s :buffer))) :edited) t)
+                        (let ((snapshot
+                               (cl-find (current-buffer) snapshots
+                                        :key (lambda (s) (plist-get s :buffer)))))
+                          (setf (plist-get snapshot :edited) t))
                         (setf (plist-get root :id) (supertag-node-identity-ensure-at-point)))
                       (setf (plist-get root :content)
                             (buffer-substring-no-properties

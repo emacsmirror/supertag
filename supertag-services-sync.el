@@ -203,7 +203,8 @@ If nil, no automatic synchronization will occur."
   "How to interpret `supertag-sync-directories`.
 
 - `unified`: all directories share one database (legacy/default behavior).
-- `vaults`: each directory is treated as an isolated vault with its own DB/state,
+- `vaults`: each directory is treated as an isolated vault with its own
+DB/state,
   and sync only runs for the currently active vault directory.
 
 Vault activation is handled by `supertag.el` (see `supertag-vault-activate`)."
@@ -233,7 +234,8 @@ Takes precedence over `supertag-sync-directories`."
   :group 'supertag-sync)
 
 (defcustom supertag-sync-quiet-when-idle t
-  "If non-nil, suppress routine sync summary/diagnostic messages when no changes were detected."
+  "If non-nil, suppress routine sync summary/diagnostic messages when no changes
+were detected."
   :type 'boolean
   :group 'supertag-sync)
 
@@ -329,7 +331,8 @@ to avoid race conditions at early startup."
   :group 'supertag-sync)
 
 (defcustom supertag-sync-auto-start-retry-interval 5
-  "Seconds between auto-start retry attempts when directories are not yet available."
+  "Seconds between auto-start retry attempts when directories are not yet
+available."
   :type 'integer
   :group 'supertag-sync)
 
@@ -411,7 +414,8 @@ internal modification timestamp, indicating this save is from Supertag code."
 
 (defun supertag-sync--get-state-table ()
   "Get the actual state hash table from supertag-sync--state.
-Handles both old format (direct hash table) and new format (plist with :sync-state key)."
+Handles both old format (direct hash table) and new format (plist with
+:sync-state key)."
   (cond
    ((hash-table-p supertag-sync--state)
     ;; Old format: direct hash table
@@ -672,7 +676,7 @@ Returns files that have been modified since last sync."
   (let ((files nil)
         (state-table (supertag-sync--get-state-table)))
     (maphash
-     (lambda (file state)
+     (lambda (file _state)
        (when (and (file-exists-p file)
                   (supertag-sync--in-sync-scope-p file)
                   (supertag-sync-check-state file))
@@ -684,7 +688,8 @@ Returns files that have been modified since last sync."
 
 (defun supertag-sync-import-file (file)
   "Import data from FILE into the store.
-Reads the file, parses Org nodes, and creates/updates them using hybrid architecture.
+Reads the file, parses Org nodes, and creates/updates them using hybrid
+architecture.
 Returns a list of imported/updated node data."
   (let ((nodes (supertag--parse-org-nodes file))
         (imported-nodes '()))
@@ -858,7 +863,8 @@ Returns the loaded or initialized sync state."
     (setq supertag-sync--auto-start-retries-left (1- supertag-sync--auto-start-retries-left)))))
 
 (defun supertag-sync-schedule-auto-start ()
-  "Schedule deferred auto-start of auto-sync with retries until directories are ready."
+  "Schedule deferred auto-start of auto-sync with retries until directories are
+ready."
   (when supertag-sync-auto-start
     (supertag-sync--cancel-auto-start)
     (setq supertag-sync--auto-start-retries-left supertag-sync-auto-start-max-retries)
@@ -1248,7 +1254,8 @@ Return its persistent ID, or nil when the selected policy finds none."
 
 (defun supertag-sync--process-single-file (file counters)
   "Process a single FILE for synchronization.
-COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-deleted."
+COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and
+:nodes-deleted."
   (let* ((should-parse t)
          (content-hash nil)
          (file-header nil)
@@ -1334,7 +1341,8 @@ COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-dele
 This function checks if nodes associated with FILE still exist in the file.
 If a node exists in the database but not in the file, it's marked as orphaned.
 FILE is the file path to verify.
-COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and :nodes-deleted."
+COUNTERS is a plist for tracking :nodes-created, :nodes-updated, and
+:nodes-deleted."
   (unless (supertag-sync--allow-destructive-p)
     (cl-return-from supertag-sync--verify-file-nodes nil))
   (let* ((file-exists (file-exists-p file))
@@ -1542,7 +1550,6 @@ Returns a list of results from CALLBACK."
     (when (hash-table-p nodes-collection)
       (maphash (lambda (id node-data)
                  (cl-incf total-nodes)
-                 (when node-data)
                  (when (and node-data (plist-get node-data :type))
                    (cl-incf valid-nodes)
                    (push (funcall callback id node-data) results)))
@@ -1551,7 +1558,8 @@ Returns a list of results from CALLBACK."
 
 (defun supertag-find-nodes-by-condition (condition-fn)
   "Find all nodes that satisfy CONDITION-FN.
-CONDITION-FN is a function that receives (id node-data) and returns t if the node should be included.
+CONDITION-FN is a function that receives (id node-data) and returns t if the
+node should be included.
 Returns a list of (id . node-data) pairs."
   (supertag-traverse-nodes
    (lambda (id node-data)
@@ -1559,8 +1567,10 @@ Returns a list of (id . node-data) pairs."
        (cons id node-data)))))
 
 (defun supertag-sync-garbage-collect-orphaned-nodes ()
-  "Scan the store for nodes marked as orphaned (:file nil) and delete them safely.
-Applies a grace period and mass-deletion guardrails to prevent accidental data loss."
+  "Scan the store for nodes marked as orphaned (:file nil) and delete them
+safely.
+Applies a grace period and mass-deletion guardrails to prevent accidental data
+loss."
   (let ((candidate-ids '())
         (deleted-count 0)
         (total-nodes 0)
@@ -1985,8 +1995,7 @@ Returns a string containing only the node's own content."
     (save-excursion
       (goto-char contents-begin)
       (let ((current-level (org-element-property :level headline))
-            (content-end contents-end)
-            (search-pos contents-begin))
+            (content-end contents-end))
         ;; Use a safer approach: find first child headline
         (goto-char contents-begin)
         (when (re-search-forward (format "^\\*\\{%d,\\} " (1+ current-level)) contents-end t)
@@ -2147,7 +2156,8 @@ Returns: :ref-to (list of UUID strings)."
 (defun supertag--convert-element-to-node-plist (headline file &optional _migration-mode)
   "Convert a headline ELEMENT from org-element into a node plist.
 This is the core reusable parser for a single headline.
-NOTE: This function only parses data, it does NOT create tag entities or relations.
+NOTE: This function only parses data, it does NOT create tag entities or
+relations.
 The optional third argument is retained for caller compatibility.  Projection
 always requires an Org-owned persistent ID and skips ID-less headings."
   (when-let* ((id (org-element-property :ID headline)))
@@ -2251,7 +2261,8 @@ When NODE-ID is non-nil, parse its subtree and headline-only ancestor context."
 (defun supertag--parse-org-nodes (file &optional migration-mode)
   "Parse the org file and return a list of nodes. Entry point.
 This function IGNORES content inside #+begin_embed blocks.
-Uses a temporary buffer with minimal side effects to avoid interfering with other packages.
+Uses a temporary buffer with minimal side effects to avoid interfering with
+other packages.
 MIGRATION-MODE is retained for caller compatibility; all modes require IDs."
   (unless (file-exists-p file)
     (error "File does not exist: %s" file))
@@ -2434,10 +2445,13 @@ report plist."
 
 ;;;###autoload
 (defun supertag-sync-cleanup-database ()
-  "Perform database maintenance by validating nodes and garbage collecting orphaned nodes.
+  "Perform database maintenance by validating nodes and garbage collecting
+orphaned nodes.
 This command runs two key maintenance functions in sequence:
-1. `supertag-sync-validate-nodes': Validates all nodes against their source files
-   and marks any zombie nodes (nodes in database but not in files) as orphaned.
+1. `supertag-sync-validate-nodes': Validates all nodes against their source
+files
+   and marks any zombie nodes (nodes in database but not in files) as
+orphaned.
 2. `supertag-sync-garbage-collect-orphaned-nodes': Deletes all nodes marked as
    orphaned, including zombie nodes and nodes with nil file properties.
 
@@ -2626,11 +2640,14 @@ PATH can be a file or a directory path. If it is a directory, all .org files
 will be processed recursively.
 
 COUNTERS is an optional plist for tracking migration statistics.
-ALLOW-NO-ID is retained for caller compatibility; ID-less headings are skipped.
+ALLOW-NO-ID is retained for caller compatibility; ID-less headings are
+skipped.
 Returns a plist containing summary information.
 
-This is a one-time operation for initializing user data when first using supertag.
-It will create entities of type :node and :tag, and establish relations between them."
+This is a one-time operation for initializing user data when first using
+supertag.
+It will create entities of type :node and :tag, and establish relations
+between them."
   (let* ((counters (or counters (list :files-processed 0
                                      :nodes-created 0
                                      :tags-created 0
@@ -2716,10 +2733,10 @@ Returns a list of .org file paths."
   "Diagnose why sync found no files to process.
 QUIET suppresses benign \"all clear\" diagnostics.
 Provides helpful hints to the user about configuration issues."
-  (let ((sync-dirs (supertag-sync--effective-directories))
-        (state-table (supertag-sync--get-state-table))
-        (state-count (if (hash-table-p (supertag-sync--get-state-table))
-                         (hash-table-count (supertag-sync--get-state-table))
+  (let* ((sync-dirs (supertag-sync--effective-directories))
+         (state-table (supertag-sync--get-state-table))
+        (state-count (if (hash-table-p state-table)
+                         (hash-table-count state-table)
                        0)))
 
     (cond

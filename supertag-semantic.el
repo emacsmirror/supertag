@@ -32,7 +32,8 @@
 
 (defgroup supertag-semantic nil "Optional similarity candidates." :group 'supertag)
 (defcustom supertag-semantic-enabled nil
-  "Whether to show and compute semantic candidates.  Requires an embedding endpoint."
+  "Whether to show and compute semantic candidates.  Requires an embedding
+endpoint."
   :type 'boolean :group 'supertag-semantic)
 (defcustom supertag-semantic-endpoint "http://localhost:11434"
   "Base URL of an Ollama-compatible /api/embed endpoint."
@@ -63,7 +64,8 @@
   :type 'natnum :group 'supertag-semantic)
 
 (defcustom supertag-semantic-save-interval 30
-  "Minimum seconds between partial side-car saves; a drained queue saves immediately."
+  "Minimum seconds between partial side-car saves; a drained queue saves
+immediately."
   :type 'number :group 'supertag-semantic)
 (defvar supertag-semantic--last-save 0)
 (defvar supertag-semantic--last-enabled nil

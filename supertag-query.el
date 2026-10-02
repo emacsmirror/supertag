@@ -63,8 +63,10 @@
 Return (:id ID :node NODE :properties ENTRIES :property-count N).
 ENTRIES have :key, :name and unconverted :value, stably ordered by name.
 Empty values remain present; missing properties do not acquire defaults.
-Returned strings, conses, vectors, boolean vectors and hash tables are detached
-from Store. Flat cons spines are copied without recursion proportional to length."
+Returned strings, conses, vectors, boolean vectors and hash tables are
+detached
+from Store. Flat cons spines are copied without recursion proportional to
+length."
   (unless (and (stringp node-id) (> (length node-id) 0))
     (error "Node ID must be a non-empty string: %S" node-id))
   (unless (and (hash-table-p supertag--store)
@@ -340,7 +342,8 @@ produce entries."
 (defun supertag-query (collection &optional filter)
   "Query data from a COLLECTION in the central store.
 COLLECTION is the path to the collection (e.g., :nodes, :tags, :relations).
-FILTER is an optional function that receives (id . data) pairs and returns t if the item should be included.
+FILTER is an optional function that receives (id . data) pairs and returns t
+if the item should be included.
 Returns a list of (id . data) pairs for matching items."
   (let* ((path (if (listp collection) collection (list collection)))
          (key (and (= (length path) 1) (car path))))
@@ -367,7 +370,8 @@ Returns a list of (id . data) pairs for matching items."
 
 (defun supertag-query-nodes (&optional filter)
   "Query all nodes in the store with an optional filter.
-FILTER is an optional function that receives (id node-data) and returns t if the node should be included.
+FILTER is an optional function that receives (id node-data) and returns t if
+the node should be included.
 Returns a list of (id . node-data) pairs."
   (supertag-query '(:nodes) filter))
 
@@ -727,7 +731,7 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
 
 (defun supertag-query--ast-modifiers (ast)
   "Return the result modifiers carried by AST, in order.
-Modifiers live in an 'and' node's :modifiers slot; a bare modifier
+Modifiers live in an `and' node's :modifiers slot; a bare modifier
 query is itself a modifier."
   (if (supertag-query--modifier-ast-p ast)
       (list ast)
@@ -820,10 +824,7 @@ count ignores KEY; sum/avg return nil for non-numeric value sets."
 Pipeline: sort-by (if any) -> group-by (if any) -> aggregate (if any).
 Returns node IDs without aggregates, a scalar with an aggregate, or an
 alist of (group-key . value) with group-by + aggregate."
-  (let* ((sorts (cl-remove-if-not
-                 (lambda (modifier) (eq (plist-get modifier :type) 'sort-by))
-                 modifiers))
-         (groups (cl-remove-if-not
+  (let* ((groups (cl-remove-if-not
                   (lambda (modifier) (eq (plist-get modifier :type) 'group-by))
                   modifiers))
          (aggregates
@@ -868,9 +869,9 @@ alist of (group-key . value) with group-by + aggregate."
 
 (defun supertag-query--resolve-date-string (date-str)
   "Resolve a date string into an absolute time value.
-Handles absolute dates ('YYYY-MM-DD'), 'now', the day symbols
+Handles absolute dates (`YYYY-MM-DD'), `now', the day symbols
 today/yesterday/tomorrow (resolved to local midnight), and relative
-dates ('-7d', '+2w', '-4h', '+30min', etc.).
+dates (`-7d', `+2w', `-4h', `+30min', etc.).
 Compatible with the old query engine date format."
   (let ((now (current-time)))
     (cond
@@ -1054,7 +1055,8 @@ Used for generating table headers in Org Babel output."
 (defun supertag-formula-eval (ast node-id &optional resolver)
   "Evaluate AST for NODE-ID, resolving variables via RESOLVER.
 RESOLVER is a function taking a property name and returning its value.
-Without RESOLVER, variables read projected Org properties; missing keys return nil."
+Without RESOLVER, variables read projected Org properties; missing keys return
+nil."
   (pcase ast
     ((pred numberp) ast)
     (`(*number* ,n) n)

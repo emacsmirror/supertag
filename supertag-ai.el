@@ -188,7 +188,8 @@
   (string-trim (replace-regexp-in-string "[ \t\n\r]+" " " text)))
 
 (defun supertag-ai--parse-candidates (text existing-alist &optional body)
-  "Parse TEXT against EXISTING-ALIST and sent BODY; return candidates and drop count."
+  "Parse TEXT against EXISTING-ALIST and sent BODY; return candidates and drop
+count."
   (let* ((object (supertag-ai--json-object text))
          (seen (make-hash-table :test 'equal))
          (dropped 0) candidates)
@@ -345,7 +346,8 @@ Callers retain TOKEN and BATCH before any cancellation or refresh can reenter."
       (supertag-ai--batch-advance))))
 
 (defun supertag-ai-extract-tag-properties (&optional choose-prompt)
-  "Extract property candidates for every node tagged with a chosen tag, one at a time.
+  "Extract property candidates for every node tagged with a chosen tag, one at a
+time.
 CHOOSE-PROMPT selects a template as in `supertag-ai-extract-properties'."
   (interactive "P")
   (unless (fboundp 'superchat-runtime-submit)
@@ -627,7 +629,8 @@ Example ID text and ambiguous identities provide no persistence proof."
     (supertag-ai-plan--render)))
 
 (defun supertag-ai-plan-apply ()
-  "Apply the plan exactly as shown; anything that changed meanwhile is left unwritten."
+  "Apply the plan exactly as shown; anything that changed meanwhile is left
+unwritten."
   (interactive)
   (let ((written 0) (skipped 0) (changed 0) (unsaved 0))
     (dolist (item supertag-ai-plan--items)

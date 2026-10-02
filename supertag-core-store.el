@@ -29,7 +29,8 @@ and callers can stub; on Emacs 32 `current-time' itself returns (TICKS . HZ)."
 ;;; --- Shared Core State Variables ---
 
 (defvar supertag--suppress-notifications nil
-  "If non-nil, suppress change notifications. Used for batch operations and transactions.")
+  "If non-nil, suppress change notifications. Used for batch operations and
+transactions.")
 
 (defvar supertag--pending-changes nil
   "List of changes to be notified when notifications are unsuppressed.
@@ -99,7 +100,8 @@ Value: list of callback functions")
 
 (defun supertag-subscribe (event-type callback)
   "Subscribe to a specific EVENT-TYPE.
-EVENT-TYPE can be a data path (list of keys) or a generic keyword (e.g., :store-changed).
+EVENT-TYPE can be a data path (list of keys) or a generic keyword (e.g.,
+:store-changed).
 CALLBACK will be called with arguments relevant to the event.
 Returns a function to unsubscribe."
   (when (and (eq event-type :store-changed)
@@ -261,7 +263,8 @@ projection.  Node `:tags' remains the authoritative membership projection.
 
 Bumped 5.0.0 -> 6.0.0 (P1-8, see
 archive/legacy-v2/2026-08-25-phrase/phases/phase-git-sync-20260713/PLAN.md
-\"S2 Canonical Serialization\", revised 2026-07-13): the S2 canonical, line-per-entity
+\"S2 Canonical Serialization\", revised 2026-07-13): the S2 canonical,
+line-per-entity
 serialization is NOT actually readable by pre-6.0 (<= 5.9.x) builds the way
 the original S2 writeup assumed. Those builds'
 `supertag--persistence--try-read-store'
@@ -287,7 +290,8 @@ format if it was never resaved since upgrading this package.")
   "Ensure `supertag--store' exists and has canonical collections.
 A store created here is current-version data, so it is stamped with
 `supertag-data-version'.  A store that came from disk keeps the version its
-file carried, including none at all -- an unstamped file is unknown, not current."
+file carried, including none at all -- an unstamped file is unknown, not
+current."
   (unless (hash-table-p supertag--store)
     (setq supertag--store (ht-create))
     (puthash :version supertag-data-version supertag--store))
@@ -411,7 +415,8 @@ When EMIT-EVENT-P is non-nil, emit :store-changed notification."
 ;;; --- Canonical Path Resolution ---
 
 (defun supertag--resolve-path (container path)
-  "Traverse CONTAINER following PATH and return the located value or `supertag--not-found'.
+  "Traverse CONTAINER following PATH and return the located value or
+`supertag--not-found'.
 CONTAINER may be a hash table, plist, or alist. PATH is a list of keys."
   (if (null path)
       container
@@ -469,7 +474,8 @@ CONTAINER may be a hash table, plist, or alist. PATH is a list of keys."
 
 (defun supertag--notify-change (path old-value new-value)
   "Trigger a change notification for PATH with OLD-VALUE and NEW-VALUE.
-This function dispatches to the notification handler owned by this Store module."
+This function dispatches to the notification handler owned by this Store
+module."
   ;; Keep the existing availability guard for the Store-owned handler.
   (when (fboundp 'supertag-core-notify-handle-change)
     (supertag-core-notify-handle-change path old-value new-value)))
@@ -478,7 +484,7 @@ This function dispatches to the notification handler owned by this Store module.
 
 (defun supertag-get (path &optional default)
   "Get data from the store by PATH.
-PATH is a list of keys (e.g., '(:nodes \"123\" :tags)).
+PATH is a list of keys (e.g., `(:nodes \"123\" :tags)').
 Supports mixed structures: hash-tables and plists."
   ;; Ensure store is initialized
   (supertag--ensure-store)
@@ -614,21 +620,26 @@ recorded in `supertag-ops-deferred-event-errors'."
 (defun supertag-ops-commit (&rest spec)
   "Execute a datastore mutation described by SPEC and broadcast a unified event.
 Required keys in SPEC:
-- :operation — keyword describing the logical action (:create, :update, :delete, ...).
-- :perform   — thunk that performs the mutation (must be non-nil unless :new or :result supplied).
+- :operation — keyword describing the logical action (:create, :update,
+:delete, ...).
+- :perform   — thunk that performs the mutation (must be non-nil unless :new
+or :result supplied).
 
 Optional keys:
 - :collection — top-level store collection (e.g., :nodes).
 - :id         — entity identifier within COLLECTION.
-- :path       — explicit path used for event payloads when COLLECTION/ID is not enough.
+- :path       — explicit path used for event payloads when COLLECTION/ID is
+not enough.
 - :context    — arbitrary metadata passed through to hooks and listeners.
-- :previous   — precomputed previous value (otherwise derived from store when possible).
+- :previous   — precomputed previous value (otherwise derived from store when
+possible).
 - :new        — explicitly provide resulting value (skips post-fetch).
 - :result     — fallback return value when no collection is associated.
 - :force-event — emit events even when :previous and :new compare equal.
 - :suppress-mark-dirty — inhibit automatic dirty flag toggling.
 
-Returns the updated entity when available, otherwise falls back to :result or :previous."
+Returns the updated entity when available, otherwise falls back to :result or
+:previous."
   (let* ((operation (plist-get spec :operation))
          (perform (plist-get spec :perform))
          (collection (plist-get spec :collection))
@@ -1012,7 +1023,8 @@ Call this after loading the store from disk."
 ;;; --- Index-Accelerated Queries ---
 
 (defun supertag-index--collect-relations (entity-id index-table &optional type)
-  "Collect relation plists for ENTITY-ID from INDEX-TABLE, optionally filtered by TYPE."
+  "Collect relation plists for ENTITY-ID from INDEX-TABLE, optionally filtered
+by TYPE."
   (let ((id-set (gethash entity-id index-table))
         (result '()))
     (when id-set

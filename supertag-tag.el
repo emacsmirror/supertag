@@ -384,14 +384,14 @@ Implements immediate error reporting as preferred by the user."
         (error "Tag :extends must be a list of strings or nil, got: %S"
                extends))))
   ;; Validate time format compliance (Emacs native format)
-  (when-let ((created-at (plist-get data :created-at)))
+  (when-let* ((created-at (plist-get data :created-at)))
     (unless (condition-case nil
-                (progn (format-time-string "%s" created-at) t)
+                (stringp (format-time-string "%s" created-at))
               (error nil))
       (error "Tag :created-at must use Emacs time format, got: %S" created-at)))
-  (when-let ((modified-at (plist-get data :modified-at)))
+  (when-let* ((modified-at (plist-get data :modified-at)))
     (unless (condition-case nil
-                (progn (format-time-string "%s" modified-at) t)
+                (stringp (format-time-string "%s" modified-at))
               (error nil))
       (error "Tag :modified-at must use Emacs time format, got: %S" modified-at))))
 
@@ -772,7 +772,8 @@ modifies Tag entities."
 (defun supertag-tag-update (id updater)
   "Update tag data using the unified commit system.
 ID is the unique identifier of the tag.
-UPDATER is a function that receives the current tag data and returns the updated data.
+UPDATER is a function that receives the current tag data and returns the
+updated data.
 Returns the updated tag data."
 
 
@@ -1793,8 +1794,10 @@ are restored from snapshots if any later step fails."
 (defvar supertag-view-helper--valid-tag-chars nil
   "Character class used to detect inline tags.
 This string is spliced directly into [] expressions, so \"^\" negates the set.
-Anything except whitespace-like characters and another # counts as part of the tag,
-allowing slashes (as ordinary name characters) and arbitrary unicode/emoji symbols.")
+Anything except whitespace-like characters and another # counts as part of the
+tag,
+allowing slashes (as ordinary name characters) and arbitrary unicode/emoji
+symbols.")
 
 ;; Always refresh the value so reloading this file picks up updates.
 ;; Full-width hash and CJK punctuation terminate a tag name, matching
@@ -1888,9 +1891,7 @@ tag renders with `supertag-unresolved-tag-face' (dimmed, not underlined)."
 
 (defun supertag-view-helper--refresh-fontification ()
   "Refresh font-lock fontification in the current buffer."
-  (if (fboundp 'font-lock-flush)
-      (font-lock-flush)
-    (font-lock-fontify-buffer)))
+  (font-lock-flush))
 
 (defun supertag-view-helper--auto-enable ()
   "Auto-enable supertag-view-style-mode in org buffers if configured."
@@ -2252,8 +2253,7 @@ Returns the updated node data."
 NODE-ID is the unique identifier of the node.
 TAG-ID is the unique identifier of the tag.
 Returns the updated node data."
-  (let ((removed-p nil)
-        (result nil))
+  (let ((result nil))
     ;; First, update the node's tag list
     (setq result
           (supertag-node-update
@@ -2264,12 +2264,8 @@ Returns the updated node data."
                       (filtered (remove tag-id (or tags '()))))
                  (if (equal filtered tags)
                      node
-                   (setq removed-p t)
                    (let ((copy (copy-sequence node)))
                      (plist-put copy :tags filtered))))))))
-    ;; If a tag was actually removed, clear all its field values on this node
-    (when removed-p
-      )
     result))
 
 (defun supertag-node-has-tag-p (node-id tag-id)
@@ -2566,13 +2562,6 @@ choices."
 CURRENT-VALUE is the existing value (can be string or list).
 Returns a comma-separated string of selected tags."
   (let* ((all-tags (supertag-view-api-list-tag-ids))
-         (current-tags (cond
-                        ((stringp current-value)
-                         (if (string-empty-p current-value)
-                             nil
-                           (split-string current-value "," t "[ \t\n\r]+")))
-                        ((listp current-value) current-value)
-                        (t nil)))
          (selected-tags '())
          (continue t))
     (while continue
@@ -2958,7 +2947,7 @@ Display aliases are replaced with their canonical Org token before writing."
 
 (defun supertag-completion-at-point ()
   "Main `completion-at-point` function using the classic, compatible API."
-  (when-let ((bounds (supertag-completion--get-prefix-bounds)))
+  (when-let* ((bounds (supertag-completion--get-prefix-bounds)))
     (let* ((start (car bounds))
            (end (cdr bounds))
            (prefix (buffer-substring-no-properties start end)))
@@ -3241,16 +3230,17 @@ after filtering — i.e. exactly what the popup should display."
 
 (defcustom supertag-batch-tag-insert-position 'end
   "Where to insert tags when adding tags in batch mode.
-- 'end: Insert tags at the end of the heading (default)
-- 'beginning: Insert tags at the beginning of the heading (after the stars and TODO keyword if any)"
+- `end': Insert tags at the end of the heading (default)
+- `beginning': Insert tags at the beginning of the heading (after the stars
+and TODO keyword if any)"
   :type '(choice (const :tag "End of heading" end)
                  (const :tag "Beginning of heading" beginning))
   :group 'supertag)
 
 (defcustom supertag-capture-tag-position 'end
   "Where to place tags when creating a headline via capture.
-- 'end: Keep tags after the title (default, preserves current behavior).
-- 'beginning: Insert tags immediately after the leading stars/TODO keyword."
+- `end': Keep tags after the title (default, preserves current behavior).
+- `beginning': Insert tags immediately after the leading stars/TODO keyword."
   :type '(choice (const :tag "End of headline" end)
                  (const :tag "Beginning of headline" beginning))
   :group 'supertag)
@@ -4368,7 +4358,8 @@ When INCLUDE-DESCENDANTS is non-nil, include transitive `:extends' descendants."
 (defun supertag--create-tag-entities (tag-names)
   "Create tag entities for TAG-NAMES and return their IDs.
 Ensures tags are created only once and returns existing tag IDs.
-IMPORTANT: This function NEVER modifies existing tags - it only creates new ones."
+IMPORTANT: This function NEVER modifies existing tags - it only creates new
+ones."
   (let ((tag-ids '()))
     (dolist (tag-name tag-names)
       (let* ((sanitized-name (supertag-sanitize-tag-name tag-name))

@@ -22,6 +22,8 @@
 ;;; Code:
 
 (require 'cl-lib)
+
+(declare-function meow-mode "meow" (&optional arg))
 (require 'subr-x)
 (require 'supertag-tag)
 (require 'supertag-view-framework)

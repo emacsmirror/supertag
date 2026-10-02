@@ -9,8 +9,17 @@ bash test/run-tests.sh contract compat
 bash test/run-tests.sh transition      # retained public safeguards
 bash test/run-tests.sh promote         # one named transition
 bash test/run-tests.sh archive         # historical field/Board assertions
+bash test/run-tests.sh compiler        # compilation-sensitive runtime regressions
+bash test/compile-check.sh             # warning-free byte + native compilation
 bash test/run-tests.sh --guidance       # lightweight links/entrypoints
 ```
+
+`compile-check.sh` needs a native-comp capable Emacs and only the declared
+ht/dash dependencies. It checks disposable source copies, keeps full logs,
+and fails on compiler warnings or errors. Experimental Tag Cards and the published `test/` and `scripts/` files stay
+source-only. Directory-local flags also protect recursive native compilation;
+`.elpaignore` keeps development directories out of package byte compilation.
+Tag Cards requires TextUI only when explicitly invoked.
 
 [Static manifest](renovation-suites.el) owns file/ERT selections. The old
 `bash test/run-refactor-batch1.sh` pathname delegates to the same executor;

@@ -1,4 +1,4 @@
-;;; supertag-view-tag-cards.el --- Browse Semantic Tags as responsive cards -*- lexical-binding: t; -*-
+;;; supertag-view-tag-cards.el --- Browse Semantic Tags as responsive cards -*- lexical-binding: t; no-byte-compile: t; no-native-compile: t; -*-
 
 ;;; Commentary:
 ;; Commands: supertag-view-tag-cards.
@@ -9,6 +9,8 @@
 ;; This is an experimental, read-only TextUI magazine view.  It owns no Store
 ;; mutations: every card and facet is computed from the current projections.
 
+;; Experimental, opt-in source module; the main package does not load it.
+;; Keep package-wide compilation independent of the optional TextUI checkout.
 ;;; Code:
 
 (require 'cl-lib)
