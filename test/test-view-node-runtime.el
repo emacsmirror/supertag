@@ -15,8 +15,10 @@
         scheduled cancelled resolved refreshed timer-callback timer-args)
     (unwind-protect
         (progn
+          (supertag-view-node--register-view)
           (with-current-buffer view
-            (setq-local supertag-view--instance '(:input (:node-id "old"))))
+            (setq-local supertag-view--instance
+                        '(:view-id node :input (:node-id "old"))))
           (with-current-buffer origin
             (supertag--ensure-store)
             (org-mode)

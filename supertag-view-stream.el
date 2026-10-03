@@ -359,17 +359,26 @@
 
 (defun supertag-view-stream-next-node ()
   "Move to the next Stream node."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
   (interactive)
+  (supertag-view--require-context 'stream)
   (supertag-view-stream--move 1))
 
 (defun supertag-view-stream-previous-node ()
   "Move to the previous Stream node."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
   (interactive)
+  (supertag-view--require-context 'stream)
   (supertag-view-stream--move -1))
 
 (defun supertag-view-stream-open-node-view ()
   "Open Node View for the current Stream node."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
   (interactive)
+  (supertag-view--require-context 'stream)
   (let ((id (or (supertag-view-stream--current-node-id)
                 (user-error "No Stream node at point"))))
     (supertag-view-node-open id)))
@@ -390,7 +399,10 @@
 
 (defun supertag-view-stream-edit ()
   "Edit the current Stream node in an indirect narrowed Org buffer."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
   (interactive)
+  (supertag-view--require-context 'stream)
   (let* ((main (or (supertag-view-stream--resolve-main-buffer)
                    (user-error "Not in a Stream View")))
          (node-id (or (supertag-view-stream--current-node-id)
@@ -520,16 +532,27 @@
       (if (window-live-p window)
           (select-window window)
         (pop-to-buffer main)))
-    (when (and refresh (buffer-live-p main))
+    (when (and refresh (supertag-view--context-p main 'stream))
       (supertag-view-refresh main))
     main))
+
+(defun supertag-view-stream-edit--context-p (buffer)
+  "Whether BUFFER is a live indirect Stream editing session."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (and supertag-view-stream-edit-mode
+              supertag-view-stream-edit--session
+              supertag-view-stream-edit--node-id
+              (buffer-live-p (buffer-base-buffer))))))
 
 (defun supertag-view-stream-edit-finish ()
   "Save the whole source file, project this node and return to its Stream.
 This also saves existing drafts elsewhere in that file.  Failure retains
 the edit for retry; a projection failure preserves the saved document."
-  (interactive)
-  (unless supertag-view-stream-edit-mode
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view-stream-edit--context-p buffer))))
+  (interactive nil supertag-view-stream-edit-mode)
+  (unless (supertag-view-stream-edit--context-p (current-buffer))
     (user-error "Not editing a Stream node"))
   (let ((node-id supertag-view-stream-edit--node-id)
         (base (buffer-base-buffer)))
@@ -547,8 +570,10 @@ the edit for retry; a projection failure preserves the saved document."
 (defun supertag-view-stream-edit-abort ()
   "Cancel unsaved session edits, retaining the latest successful native save.
 Other changes outside the edit range are preserved.  This command never saves."
-  (interactive)
-  (unless supertag-view-stream-edit-mode
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view-stream-edit--context-p buffer))))
+  (interactive nil supertag-view-stream-edit-mode)
+  (unless (supertag-view-stream-edit--context-p (current-buffer))
     (user-error "Not editing a Stream node"))
   (let* ((session supertag-view-stream-edit--session)
          (text (plist-get session :text))
@@ -568,7 +593,10 @@ Other changes outside the edit range are preserved.  This command never saves."
 
 (defun supertag-view-stream-quit ()
   "Quit the current Stream and restore its original window configuration."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
   (interactive)
+  (supertag-view--require-context 'stream)
   (let* ((main (or (supertag-view-stream--resolve-main-buffer)
                    (user-error "Not in a Stream View")))
          (window-config
@@ -580,6 +608,10 @@ Other changes outside the edit range are preserved.  This command never saves."
       (set-window-configuration window-config))))
 
 (supertag-view-stream--register-view)
+
+;; Mode constructors do not open a Runtime-owned view.
+(put 'supertag-view-stream-mode 'completion-predicate #'ignore)
+(put 'supertag-view-stream-edit-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-view-stream)
 

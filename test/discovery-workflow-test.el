@@ -84,7 +84,7 @@
                                   nodes)))
                 (should (= 10 (length nodes)))
                 (should (= 10 (length (delete-dups ids))))
-                (should (= 10 (how-many "^┌" (point-min) (point-max)))))
+                (should (= 10 (length (supertag-discovery--card-starts)))))
               (should (string-match-p "Complete body" (buffer-string)))))
         (when (buffer-live-p buffer) (kill-buffer buffer))
         (when (buffer-live-p origin) (kill-buffer origin))))))
@@ -158,8 +158,8 @@
               (should (eq :search
                           (plist-get (plist-get supertag-view--instance :input)
                                      :mode)))
-              (should (string-match-p "Supertag Discovery Search results:" (buffer-string)))
-              (should (string-match-p (regexp-quote "[s] Search") (buffer-string)))
+              (should (string-match-p "Search: shared ready" (buffer-string)))
+              (should (string-match-p (regexp-quote "[ SEARCH ]") (buffer-string)))
               (should-not (string-match-p (regexp-quote "[f] Filter") (buffer-string)))
               (should (string-match-p "Found 14 matching nodes"
                                       (buffer-string)))
@@ -199,14 +199,14 @@
         (unwind-protect
             (with-current-buffer buffer
               (goto-char (point-min))
-              (re-search-forward "^┌")
+              (goto-char (car (supertag-discovery--card-starts)))
               (beginning-of-line)
               (call-interactively (lookup-key (current-local-map) (kbd "SPC")))
               (should (string-match-p "Marked: 1 (0 hidden)" (buffer-string)))
-              (should (string-match-p "│ \\[X\\] Note 01" (buffer-string)))
+              (should (string-match-p (regexp-quote "[X] Note 01") (buffer-string)))
               (call-interactively (lookup-key (current-local-map) (kbd "SPC")))
               (should (string-match-p "Marked: 0 (0 hidden)" (buffer-string)))
-              (should (string-match-p "│ \\[ \\] Note 01" (buffer-string))))
+              (should (string-match-p (regexp-quote "[ ] Note 01") (buffer-string))))
           (when (buffer-live-p buffer) (kill-buffer buffer)))))))
 
 (ert-deftest supertag-discovery-origin-marker-tracks-edits-and-quit-restores-context ()
@@ -448,7 +448,7 @@
                 (setq results (with-current-buffer origin (supertag-discovery)))
                 (with-current-buffer results
                   (goto-char (point-min))
-                  (re-search-forward "^┌")
+                  (goto-char (car (supertag-discovery--card-starts)))
                   (beginning-of-line)
                   (should (equal "Jumped to node: Target"
                                  (supertag-discovery-open-node))))
@@ -699,3 +699,125 @@
 
 (provide 'discovery-workflow-test)
 ;;; discovery-workflow-test.el ends here
+
+(ert-deftest supertag-discovery-textui-layout-preserves-state-and-source ()
+  "Resize/repaint is not a query, sample, mark reset, or Store mutation."
+  (supertag-discovery-test--isolated
+    (let ((body "中文正文，完整保留。\nSecond paragraph remains readable."))
+      (supertag-discovery-test--put-node 1 body)
+      (supertag-discovery-test--put-node 2)
+      (cl-letf (((symbol-function 'display-buffer) #'ignore))
+        (let ((buffer (supertag-discovery)))
+          (unwind-protect
+              (with-current-buffer buffer
+                (should (derived-mode-p 'textui-mode))
+                (should buffer-read-only)
+                (let ((state (plist-get supertag-view--instance :state))
+                      (ids (mapcar (lambda (pos) (get-text-property pos 'node-id))
+                                   (supertag-discovery--card-starts))))
+                  (setq supertag-discovery--marked-nodes (list (car ids)))
+                  (cl-letf (((symbol-function 'supertag-discovery--sample-nodes)
+                             (lambda () (ert-fail "Layout resampled notes")))
+                            ((symbol-function 'supertag-discovery-find-nodes)
+                             (lambda (&rest _) (ert-fail "Layout reran search"))))
+                    (dolist (width '(120 80))
+                      (let ((textui--last-width width))
+                        (textui-refresh buffer))
+                      (should (eq state textui-state))
+                      (should (equal (list (car ids)) supertag-discovery--marked-nodes))
+                      (should (equal ids (mapcar (lambda (pos)
+                                                 (get-text-property pos 'node-id))
+                                               (supertag-discovery--card-starts))))
+                      (should (string-match-p "Supertag Discovery" (buffer-string)))
+                      (should (string-match-p "n/p Navigate" (buffer-string)))
+                      (should (= (length ids) (how-many "^┌" (point-min) (point-max))))
+                      (dolist (line (split-string (buffer-string) "\n"))
+                        (should (<= (string-width line) width))))))
+                (should-not (text-properties-at 0 body)))
+            (when (buffer-live-p buffer) (kill-buffer buffer))))))))
+
+(ert-deftest supertag-discovery-textui-native-buttons-and-entity-navigation ()
+  "Buttons and n/p use entity identity, never presentation punctuation."
+  (supertag-discovery-test--isolated
+    (dotimes (index 3) (supertag-discovery-test--put-node index))
+    (cl-letf (((symbol-function 'display-buffer) #'ignore))
+      (let ((buffer (supertag-discovery)))
+        (unwind-protect
+            (with-current-buffer buffer
+              (let* ((starts (supertag-discovery--card-starts))
+                     (first (get-text-property (car starts) 'node-id))
+                     (second (get-text-property (cadr starts) 'node-id)))
+                (goto-char (car starts))
+                (supertag-discovery-next)
+                (should (equal second (get-text-property (point) 'node-id)))
+                (supertag-discovery-previous)
+                (should (equal first (get-text-property (point) 'node-id)))
+                (let ((button (seq-find
+                               (lambda (widget)
+                                 (and (equal (widget-get widget :node-id) first)
+                                      (equal (widget-get widget :value) " MARK ")))
+                               textui--widgets)))
+                  (should button)
+                  (goto-char (widget-get button :from))
+                  (call-interactively (lookup-key (current-local-map) (kbd "RET")))
+                  (should (equal (list first) supertag-discovery--marked-nodes)))
+                (should (equal first (get-text-property (point) 'node-id)))
+                (let (opened)
+                  (cl-letf (((symbol-function 'supertag-ui-navigate-with-recovery)
+                             (lambda (id &rest _) (setq opened id))))
+                    (let ((button (seq-find
+                                   (lambda (widget)
+                                     (and (equal (widget-get widget :node-id) first)
+                                          (equal (widget-get widget :value) " OPEN ")))
+                                   textui--widgets)))
+                      (should button)
+                      (goto-char (widget-get button :from))
+                      (supertag-discovery-open-node)
+                      (should (equal opened first)))))))
+          (when (buffer-live-p buffer) (kill-buffer buffer)))))))
+
+(ert-deftest supertag-discovery-open-uses-verified-position-and-visible-landing ()
+  "The common open path avoids file scans and reveals/highlights the target."
+  (supertag-discovery-test--with-files
+    (let ((file (expand-file-name "landing.org" tmp)))
+      (supertag-discovery-test--write-node file "landing" "Landing" "Visible body")
+      (save-window-excursion
+        (let ((origin (generate-new-buffer " *landing-origin*")) results centered pulsed)
+          (unwind-protect
+              (progn
+                (setq results (with-current-buffer origin (supertag-discovery)))
+                (with-current-buffer (find-file-noselect file)
+                  (org-fold-hide-subtree))
+                (switch-to-buffer results)
+                (goto-char (car (supertag-discovery--card-starts)))
+                (cl-letf (((symbol-function 'supertag-node-location--position)
+                           (lambda (&rest _) (ert-fail "Unexpected full-file ID scan")))
+                          ((symbol-function 'recenter)
+                           (lambda (line &rest _) (setq centered line)))
+                          ((symbol-function 'pulse-momentary-highlight-region)
+                           (lambda (start end &rest _)
+                             (setq pulsed (buffer-substring-no-properties start end)))))
+                  (should (equal "Jumped to node: Landing"
+                                 (supertag-discovery-open-node))))
+                (should (<= 0 centered 3))
+                (should (equal "* Landing\n" pulsed))
+                (should (equal "landing" (org-entry-get nil "ID")))
+                (save-excursion
+                  (search-forward "Visible body")
+                  (should-not (org-invisible-p (1- (point))))))
+            (when (buffer-live-p results) (kill-buffer results))
+            (when (buffer-live-p origin) (kill-buffer origin))))))))
+
+(ert-deftest supertag-discovery-location-stale-position-falls-back-without-writes ()
+  "A stale projection must resolve the live ID, not the old character offset."
+  (supertag-discovery-test--with-files
+    (let ((file (expand-file-name "moved.org" tmp)))
+      (supertag-discovery-test--write-node file "moved" "Moved" "Body")
+      (with-current-buffer (find-file-noselect file)
+        (let ((node (copy-tree (supertag-node-get "moved"))))
+          (goto-char (point-min))
+          (insert "* New heading\nUnprojected draft\n")
+          (should (supertag-node-location-goto-current-buffer "moved"))
+          (should (looking-at "\\* Moved"))
+          (should (equal node (supertag-node-get "moved")))
+          (should (buffer-modified-p)))))))

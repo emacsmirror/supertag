@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dependency load path shared by test/run-tests.sh and test/static-gates.sh.
 #
-# Sourcing this file resolves the ht/dash package directories, exports them as
+# Sourcing this file resolves the ht/dash/TextUI package directories, exports them as
 # SUPERTAG_DEPS_LOADPATH, and leaves the same directories in the
 # SUPERTAG_DEPS_DIRS array for callers that build their own `-L' arguments.
 #
@@ -16,8 +16,8 @@
 #
 # Resolution order, matching test/static-gates.sh:
 #   1. an already-set SUPERTAG_DEPS_LOADPATH is honoured untouched;
-#   2. otherwise the highest-versioned "$HOME"/.emacs.d/elpa/{ht,dash}-*
-#      directories are used;
+#   2. otherwise the highest-versioned "$HOME"/.emacs.d/elpa/{ht,dash,textui}-*
+#      directories are used; TextUI may also come from ../textui;
 #   3. when neither yields a directory, stop the caller with a clear message
 #      instead of running suites whose children cannot possibly pass.
 #
@@ -29,8 +29,11 @@ supertag_test_deps_loadpath_resolve() {
     IFS=: read -r -a SUPERTAG_DEPS_DIRS <<< "$SUPERTAG_DEPS_LOADPATH"
   else
     local name candidate
-    for name in ht dash; do
+    for name in ht dash textui; do
       candidate=$(ls -d "$HOME"/.emacs.d/elpa/${name}-* 2>/dev/null | sort -V | tail -1 || true)
+      if [ "$name" = textui ] && [ -z "$candidate" ] && [ -f ../textui/textui.el ]; then
+        candidate=$(cd ../textui && pwd)
+      fi
       [ -n "$candidate" ] && SUPERTAG_DEPS_DIRS+=("$candidate")
     done
     case "${#SUPERTAG_DEPS_DIRS[@]}" in
@@ -39,7 +42,7 @@ supertag_test_deps_loadpath_resolve() {
     esac
   fi
   if [ "${#SUPERTAG_DEPS_DIRS[@]}" -eq 0 ]; then
-    echo 'No ht/dash dependency directories found; set SUPERTAG_DEPS_LOADPATH' >&2
+    echo 'No ht/dash/TextUI dependency directories found; set SUPERTAG_DEPS_LOADPATH' >&2
     exit 1
   fi
   local directory

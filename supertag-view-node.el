@@ -7,7 +7,7 @@
 
 
 ;; Commands: supertag-view-node, supertag-view-node-refresh, supertag-view-node-mode; local key
-;; command: supertag-view-node--hide-side.
+;; command: supertag-view-node-quit.
 ;; Dependencies: cl-lib, org, subr-x, supertag-core-store, supertag-node, supertag-tag,
 ;; supertag-query, supertag-services-sync, supertag-view-framework, supertag-link,
 ;; supertag-mention, supertag-concept, supertag-ai, supertag-semantic. Node cache listener
@@ -248,7 +248,6 @@ Returned keys (current contract):
 
 (defun supertag-view-node--hide-side ()
   "Hide the side window and disable follow."
-  (interactive)
   (setq supertag-view-node--enabled nil)
   (when-let* ((buf (supertag-view-node--buffer)))
     (with-current-buffer buf
@@ -267,7 +266,7 @@ Returned keys (current contract):
             (setq supertag-view-node--last-entity-id eid)
             (when eid
               (when-let* ((buf (supertag-view-node--buffer)))
-                (if (buffer-local-value 'supertag-view--instance buf)
+                (if (supertag-view--context-p buf 'node)
                     (with-current-buffer buf
                       (setf (plist-get supertag-view--instance :input)
                             (plist-put
@@ -351,7 +350,7 @@ You can customize this list to match your org-mode TODO keywords."
     (define-key map (kbd "TAB") #'supertag-view-node-next-button-or-fold)
     (define-key map (kbd "<backtab>") #'backward-button)
     (define-key map (kbd "g") #'supertag-view-node-refresh)
-    (define-key map (kbd "q") #'supertag-view-node--hide-side)
+    (define-key map (kbd "q") #'supertag-view-node-quit)
     (define-key map (kbd "h") #'describe-mode)
     map)
   "Keymap for `supertag-view-node-mode'.")
@@ -723,14 +722,20 @@ Adapt feature-owned renderers locally without changing their interfaces."
 
 (defun supertag-view-node-next-button-or-fold ()
   "Fold on a section chip; otherwise move to the next button."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'node))))
   (interactive)
+  (supertag-view--require-context 'node)
   (if (get-text-property (line-beginning-position) 'supertag-view-section)
       (supertag-view-node-toggle-section)
     (forward-button 1 t t)))
 
 (defun supertag-view-node-toggle-section ()
   "Fold or unfold the section whose chip is at point."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'node))))
   (interactive)
+  (supertag-view--require-context 'node)
   (save-excursion
     (unless (get-text-property (line-beginning-position) 'supertag-view-section)
       (let ((previous (previous-single-property-change (point) 'supertag-view-section)))
@@ -840,9 +845,20 @@ Adapt feature-owned renderers locally without changing their interfaces."
 
 ;;; --- Commands ---
 
+(defun supertag-view-node-quit ()
+  "Close the current Node View and stop its subscriptions."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'node))))
+  (interactive)
+  (supertag-view--require-context 'node)
+  (supertag-view-node--hide-side))
+
 (defun supertag-view-node-refresh ()
   "Refresh the node view buffer (side-window)."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'node))))
   (interactive)
+  (supertag-view--require-context 'node)
   (if (supertag-view-node--buffer)
       (progn
         (supertag-view-node--refresh-view)
@@ -872,6 +888,9 @@ Adapt feature-owned renderers locally without changing their interfaces."
       (if node-id
           (supertag-view-node-open node-id)
         (user-error "No node detected at point")))))
+
+;; Mode constructors do not open a Runtime-owned view.
+(put 'supertag-view-node-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-view-node)
 
@@ -915,7 +934,7 @@ Adapt feature-owned renderers locally without changing their interfaces."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
       (when (and (derived-mode-p 'supertag-view-node-mode)
-                 supertag-view--instance
+                 (supertag-view--context-p buffer 'node)
                  (supertag-view-node--live-window))
         (supertag-view-refresh buffer)))))
 

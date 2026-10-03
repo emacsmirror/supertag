@@ -353,7 +353,7 @@
               (should-not (supertag-tag-get "beta"))
               (should (supertag-tag-get "gamma"))
               (should-not supertag-view-tags--marked-ids)
-              (supertag-view-tags-quit))))
+              (with-current-buffer buffer (supertag-view-tags-quit)))))
       (supertag-tag-manager-test--kill-buffers))))
 
 (ert-deftest supertag-view-tags-delete-current-row-without-marks ()
@@ -371,7 +371,7 @@
               (should (= 1 confirmations))
               (should-not (supertag-tag-get "alpha"))
               (should (supertag-tag-get "beta"))
-              (supertag-view-tags-quit))))
+              (with-current-buffer buffer (supertag-view-tags-quit)))))
       (supertag-tag-manager-test--kill-buffers))))
 
 (ert-deftest supertag-view-register-modal-state-is-idempotent-for-evil ()

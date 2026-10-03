@@ -356,7 +356,10 @@ on a row's newline, so a token row never inherits the occurrence row above."
 
 (defun supertag-view-orphan-tags-mark ()
   "Toggle the mark on the token or occurrence at point, then move down."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (let ((key (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--occurrence-key))
         (token (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--row-token)))
     (cond
@@ -382,7 +385,10 @@ on a row's newline, so a token row never inherits the occurrence row above."
 
 (defun supertag-view-orphan-tags-unmark ()
   "Unmark the token or occurrence at point, then move down."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (let ((key (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--occurrence-key))
         (token (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--row-token)))
     (cond
@@ -400,21 +406,30 @@ on a row's newline, so a token row never inherits the occurrence row above."
 
 (defun supertag-view-orphan-tags-mark-all ()
   "Mark every orphan token and clear the per-occurrence exceptions."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (setq supertag-view-orphan-tags--marked-tokens (supertag-view-orphan-tags--tokens)
         supertag-view-orphan-tags--unmarked-occurrences nil)
   (supertag-view-orphan-tags--redraw-keeping-line))
 
 (defun supertag-view-orphan-tags-unmark-all ()
   "Clear every orphan mark."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (setq supertag-view-orphan-tags--marked-tokens nil
         supertag-view-orphan-tags--unmarked-occurrences nil)
   (supertag-view-orphan-tags--redraw-keeping-line))
 
 (defun supertag-view-orphan-tags-visit ()
   "Visit the file and line of the orphan occurrence at point."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (let* ((key (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--occurrence-key))
          (token (supertag-view-orphan-tags--at-point 'supertag-view-orphan-tags--row-token))
          (record (cond
@@ -429,7 +444,10 @@ on a row's newline, so a token row never inherits the occurrence row above."
   "Remove every marked orphan occurrence: one preview, one confirmation.
 The removal itself is the shared text path: the same records, the same
 NOT CHANGED section, the same per-file rescan guard and range writes."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (let ((page (current-buffer))
         (records (supertag-view-orphan-tags--marked-records)))
     (if (null records)
@@ -456,7 +474,10 @@ NOT CHANGED section, the same per-file rescan guard and range writes."
 
 (defun supertag-view-orphan-tags-quit ()
   "Quit the page and restore its original window configuration."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'orphan-tags))))
   (interactive)
+  (supertag-view--require-context 'orphan-tags)
   (let ((window-config supertag-view-orphan-tags--origin-window-configuration))
     (kill-buffer (current-buffer))
     (when (window-configuration-p window-config)
@@ -550,6 +571,9 @@ user marked through the shared delete path."
 Kept as the Tag command spelling of the same page."
   (interactive)
   (supertag-view-orphan-tags))
+
+;; Mode constructors do not open a Runtime-owned view.
+(put 'supertag-view-orphan-tags-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-view-orphan-tags)
 

@@ -9,7 +9,7 @@
 ;; - Main entry point: `supertag-discovery'
 
 ;; Commands: supertag-discovery, supertag-discovery-mode, supertag-discovery-next, supertag-discovery-previous, supertag-discovery-toggle-mark, supertag-discovery-open-node, supertag-discovery-quit, supertag-discovery-search, supertag-discovery-refresh, supertag-discovery-insert-references
-;; Dependencies: cl-lib, org, seq, supertag-link, supertag-core-store, supertag-node, supertag-tag, supertag-view-framework
+;; Dependencies: cl-lib, org, seq, wid-edit, textui, supertag-link, supertag-core-store, supertag-node, supertag-tag, supertag-view-framework
 
 ;;; Code:
 
@@ -17,6 +17,8 @@
 (require 'supertag-link)
 (require 'org)
 (require 'seq)
+(require 'wid-edit)
+(require 'textui)
 (require 'supertag-core-store) ; For data access
 (require 'supertag-node)
 (require 'supertag-tag)
@@ -183,6 +185,9 @@ Handles both time stamps (list) and date strings."
     (define-key map (kbd "n") #'supertag-discovery-next)
     (define-key map (kbd "p") #'supertag-discovery-previous)
     (define-key map (kbd "SPC") #'supertag-discovery-toggle-mark)
+    (set-keymap-parent map widget-keymap)
+    (define-key map (kbd "TAB") #'widget-forward)
+    (define-key map (kbd "<backtab>") #'widget-backward)
     (define-key map (kbd "RET") #'supertag-discovery-open-node)
     (define-key map (kbd "s") #'supertag-discovery-search)
     (define-key map (kbd "g") #'supertag-discovery-refresh)
@@ -262,27 +267,6 @@ Handles both time stamps (list) and date strings."
 
 ;;; --- Card Formatting ---
 
-(defun supertag-discovery--strict-pad-line (line target-width)
-  "Strictly pad LINE to exactly TARGET-WIDTH characters."
-  (let* ((current-width (string-width line))
-         (padding-needed (- target-width current-width)))
-    (if (<= padding-needed 0)
-        (truncate-string-to-width line target-width)
-      (concat line (make-string padding-needed ?\ )))))
-
-(defun supertag-discovery--wrap-text (text width)
-  "Wrap TEXT to display WIDTH without dropping any source characters."
-  (let ((remaining text)
-        lines)
-    (while (> (string-width remaining) width)
-      (let ((prefix (truncate-string-to-width remaining width)))
-        (when (string-empty-p prefix)
-          (setq prefix (substring remaining 0 1)))
-        (push prefix lines)
-        (setq remaining (substring remaining (length prefix)))))
-    (push remaining lines)
-    (nreverse lines)))
-
 (defun supertag-discovery--tag-texts (tag-ids)
   "Return searchable display text for TAG-IDS without changing identity."
   (delete-dups
@@ -303,81 +287,12 @@ Handles both time stamps (list) and date strings."
                 (or (plist-get (supertag-tag-get tag-id) :name) tag-id))
               tag-ids))))
 
-(defun supertag-discovery--format-card (node-props _context-snippet width marked-p)
-  "Format a node into a bordered card of fixed WIDTH."
-  (let* ((title (or (plist-get node-props :title) "No Title"))
-         (node-id (plist-get node-props :id))
-         (file-path (plist-get node-props :file))
-         (tags (supertag-discovery--get-node-tags node-id))
-         (content (or (plist-get node-props :content) ""))
-         (inner-width (- width 4))
-         (checkbox (if marked-p "[X]" "[ ]"))
-         (title-with-checkbox (format "%s %s" checkbox title))
-         (card-lines '()))
-    ;; Top border
-    (push (format "┌%s┐" (make-string (- width 2) ?─)) card-lines)
-    ;; Title with checkbox
-    (dolist (line (supertag-discovery--wrap-text title-with-checkbox inner-width))
-      (push (format "│ %s │" (supertag-discovery--strict-pad-line line inner-width)) card-lines))
-    ;; Separator
-    (push (format "├%s┤" (make-string (- width 2) ?─)) card-lines)
-    ;; File Path
-    (when file-path
-      (let ((file-str (format "File: %s" (file-name-nondirectory file-path))))
-        (dolist (line (supertag-discovery--wrap-text file-str inner-width))
-          (push (format "│ %s │" (supertag-discovery--strict-pad-line line inner-width)) card-lines))))
-    ;; Tags
-    (when tags
-      (let ((tag-str (format "Tags: %s" (string-join tags " "))))
-        (dolist (line (supertag-discovery--wrap-text tag-str inner-width))
-          (push (format "│ %s │" (supertag-discovery--strict-pad-line line inner-width)) card-lines))))
-    ;; Complete projected body, rather than a keyword-only snippet.
-    (push (format "├%s┤" (make-string (- width 2) ?─)) card-lines)
-    (push (format "│ %s │"
-                  (supertag-discovery--strict-pad-line "Body:" inner-width))
-          card-lines)
-    (if (string-empty-p (string-trim content))
-        (push (format "│ %s │"
-                      (supertag-discovery--strict-pad-line "Empty body" inner-width))
-              card-lines)
-      (dolist (line (split-string content "\n" nil))
-        (if (string-empty-p line)
-            (push (format "│ %s │"
-                          (supertag-discovery--strict-pad-line "" inner-width))
-                  card-lines)
-          (dolist (wrapped-line (supertag-discovery--wrap-text line inner-width))
-            (push (format "│ %s │"
-                          (supertag-discovery--strict-pad-line
-                           wrapped-line inner-width))
-                  card-lines)))))
-    ;; Bottom border
-    (push (format "└%s┘" (make-string (- width 2) ?─)) card-lines)
-    ;; Propertize and return
-    (mapcar (lambda (line) (propertize line 'node-id node-id))
-            (nreverse card-lines))))
-
 (defun supertag-discovery--mark-counts (nodes)
   "Return (TOTAL HIDDEN) mark counts relative to visible NODES."
   (let ((visible-ids (mapcar (lambda (pair) (plist-get (car pair) :id)) nodes)))
     (list (length supertag-discovery--marked-nodes)
           (cl-count-if-not (lambda (id) (member id visible-ids))
                            supertag-discovery--marked-nodes))))
-
-(defun supertag-discovery--insert-header (mode keyword-list nodes)
-  "Insert a Discovery header for MODE, KEYWORD-LIST and NODES."
-  (pcase-let ((`(,marked ,hidden) (supertag-discovery--mark-counts nodes)))
-    (insert (propertize (if (eq mode :search)
-                           (format "Supertag Discovery Search results: '%s'"
-                                   (string-join keyword-list " "))
-                         "Supertag Discovery")
-                      'face '(:height 1.5 :weight bold)))
-    (insert (if (eq mode :search)
-                (format "\nFound %d matching nodes.\n" (length nodes))
-              (format "\nShowing %d random notes.\n" (length nodes))))
-    (insert (format "Marked: %d (%d hidden)\n\n" marked hidden))
-    (insert (propertize "Operations:\n" 'face '(:weight bold)))
-    (insert " [n/p] Navigate [SPC] Mark [RET] Open [s] Search [g] Refresh\n")
-    (insert " [i] Insert references [q] Quit\n\n")))
 
 (defun supertag-discovery--sample-nodes ()
   "Return a without-replacement random sample of projected nodes."
@@ -404,47 +319,132 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-discovery--view-mode ()
   "Install the Discovery buffer modes."
-  (fundamental-mode)
+  (textui-mode)
+  (setq-local textui--render-function #'supertag-discovery--textui-frame
+              textui--last-width (max 1 (1- (window-body-width))))
+  (add-hook 'change-major-mode-hook #'textui--dispose nil t)
   (supertag-discovery-mode 1)
+  (supertag-view-apply-palette-locally 'neon)
   (setq-local supertag-discovery--marked-nodes nil)
   (add-hook 'kill-buffer-hook #'supertag-discovery--release-origin nil t)
   (add-hook 'change-major-mode-hook
             #'supertag-discovery--release-origin nil t))
 
+(defun supertag-discovery--text (value &optional face)
+  "Return a width-aware attributed TextUI paragraph for VALUE and FACE."
+  (list :type :text :wrap 'greedy :align 'left
+        :value (if face (propertize value 'face face) (copy-sequence value))))
+
+(defun supertag-discovery--action (label command &optional node-id)
+  "Return a native button for LABEL, COMMAND and optional NODE-ID."
+  (list :type 'push-button :format "%[%v%]" :value label :node-id node-id
+        :layout (list :focus-id (list command node-id))
+        :action (lambda (&rest _)
+                  (supertag-view--require-context 'discovery)
+                  (when node-id
+                    (supertag-discovery--restore-selection node-id)
+                    (unless (equal node-id (get-text-property (point) 'node-id))
+                      (user-error "Discovery card is no longer available")))
+                  (call-interactively command))))
+
+(defun supertag-discovery--textui-card (pair width)
+  "Return a bordered TextUI reading card for PAIR at WIDTH."
+  (let* ((node (car pair))
+         (id (plist-get node :id))
+         (title (or (plist-get node :title) "No Title"))
+         (body (or (plist-get node :content) ""))
+         (marked (member id supertag-discovery--marked-nodes))
+         (file (plist-get node :file))
+         (tags (supertag-discovery--get-node-tags id))
+         ;; TextUI owns wrapping and the outer border.  Rules divide the
+         ;; familiar title / metadata / full-body sections inside that border.
+         (rule (make-string (max 1 (- width 4)) ?─))
+         (children
+          (append
+           (list (supertag-discovery--text
+                  (format "%s %s" (if marked "[X]" "[ ]") title)
+                  'supertag-discovery-title)
+                 (supertag-discovery--text rule 'supertag-view-mute))
+           (when file
+             (list (supertag-discovery--text
+                    (concat "File: " (file-name-nondirectory file))
+                    'supertag-view-mute)))
+           (when tags
+             (list (supertag-discovery--text
+                    (concat "Tags: " (string-join tags " "))
+                    'supertag-view-mute)))
+           (list (supertag-discovery--text rule 'supertag-view-mute)
+                 (supertag-discovery--text "Body:" 'supertag-view-mute)
+                 (supertag-discovery--text
+                  (if (string-empty-p (string-trim body)) "Empty body" body))
+                 (list :type :flex :direction :row :gap 2 :children
+                       (list (supertag-discovery--action " OPEN " #'supertag-discovery-open-node id)
+                             (supertag-discovery--action
+                              (if marked " UNMARK " " MARK ")
+                              #'supertag-discovery-toggle-mark id)))))))
+    (dolist (child children)
+      (when (eq (plist-get child :type) :text)
+        (let ((value (plist-get child :value)))
+          (add-text-properties 0 (length value)
+                               (list 'node-id id 'supertag-entity-id id
+                                     'result-pair pair) value))))
+    (list :type :flex :direction :column :border t :padding 1 :gap 0
+          :children children)))
+
+(defun supertag-discovery--textui-frame (width)
+  "Render the compact Discovery reading page from cached state at WIDTH.
+Layout refreshes never resample notes or rerun queries."
+  (let* ((state textui-state)
+         (nodes (plist-get state :nodes))
+         (searchp (eq (plist-get state :mode) :search))
+         (counts (supertag-discovery--mark-counts nodes)))
+    (list
+     (list :type :flex :direction :column :gap 1 :children
+           (list
+            (supertag-discovery--text "Supertag Discovery" 'supertag-discovery-title)
+            (list :type :flex :direction :column :gap 0 :children
+                  (list
+                   (supertag-discovery--text
+                    (if searchp
+                        (format "Found %d matching nodes. Search: %s" (length nodes)
+                                (string-join (plist-get state :keywords) " "))
+                      (format "Showing %d random notes." (length nodes))))
+                   (supertag-discovery--text
+                    (format "Marked: %d (%d hidden)" (car counts) (cadr counts))
+                    'supertag-view-mute)))
+            (list :type :flex :direction (if (< width 70) :column :row) :gap 2
+                  :children
+                  (list (supertag-discovery--action " SEARCH " #'supertag-discovery-search)
+                        (supertag-discovery--action " REFRESH " #'supertag-discovery-refresh)
+                        (supertag-discovery--action " INSERT REFERENCES " #'supertag-discovery-insert-references)
+                        (supertag-discovery--action " QUIT " #'supertag-discovery-quit)))
+            (list :type :flex :direction :column :gap 2
+                  :children (if nodes
+                                (mapcar (lambda (pair)
+                                          (supertag-discovery--textui-card pair width)) nodes)
+                              (list (supertag-discovery--text "No matching nodes found."))))
+            (supertag-discovery--text
+             "n/p Navigate   SPC Mark   RET Open   s Search   g Refresh   i Insert   q Quit"
+             'supertag-view-mute))))))
+
 (defun supertag-discovery--render-view (state)
-  "Render Search view STATE in the current buffer."
-  (let ((keyword-list (plist-get state :keywords))
-        (nodes (plist-get state :nodes))
-        (card-width 80))
-    (erase-buffer)
-    (supertag-discovery--insert-header (plist-get state :mode)
-                                       keyword-list nodes)
-    (if (not nodes)
-        (insert "  No matching nodes found.\n")
-      (dolist (result-pair nodes)
-        (let* ((node (car result-pair))
-               (context (cdr result-pair))
-               (node-id (plist-get node :id))
-               (card-lines (supertag-discovery--format-card
-                            node context card-width
-                            (member node-id supertag-discovery--marked-nodes)))
-               (start (point)))
-          (dolist (line card-lines)
-            (insert line "\n"))
-          (add-text-properties start (point)
-                               `(result-pair ,result-pair
-                                             node-id ,node-id
-                                             supertag-entity-id ,node-id))
-          (insert "\n"))))
-    (when nodes
-      (goto-char (point-min))
-      (re-search-forward "^┌" nil t)
-      (beginning-of-line)
-      (supertag-discovery-highlight-current))))
+  "Render STATE through TextUI without querying or resampling."
+  (setq-local textui-state state)
+  (textui-refresh (current-buffer))
+  (goto-char (or (car (supertag-discovery--card-starts)) (point-min)))
+  (supertag-discovery-highlight-current))
+
+(defun supertag-discovery--current-node-id ()
+  "Return the entity at point, including the card's left border or a button."
+  (or (get-text-property (point) 'node-id)
+      (when-let* ((widget (widget-at))) (widget-get widget :node-id))
+      (let ((next (next-single-property-change (point) 'node-id nil
+                                               (line-end-position))))
+        (and (< next (line-end-position)) (get-text-property next 'node-id)))))
 
 (defun supertag-discovery--capture-selection ()
   "Return the selected Discovery entity ID."
-  (get-text-property (point) 'supertag-entity-id))
+  (supertag-discovery--current-node-id))
 
 (defun supertag-discovery--restore-selection (entity-id)
   "Restore Discovery selection to ENTITY-ID when it still exists."
@@ -479,103 +479,82 @@ Handles both time stamps (list) and date strings."
 ;;; --- Navigation Functions ---
 
 (defun supertag-discovery-highlight-current ()
-  "Highlight the current result card."
+  "Highlight the bordered card containing the selected entity."
   (remove-overlays (point-min) (point-max) 'supertag-discovery t)
-  (save-excursion
-    (beginning-of-line)
-    (when (looking-at "┌")
-      (let ((beg (point))
-            (end (save-excursion
-                   (re-search-forward "^└" nil t)
-                   (line-end-position))))
-        (when end
-          (let ((ov (make-overlay beg end)))
-            (overlay-put ov 'face 'supertag-discovery-current)
-            (overlay-put ov 'supertag-discovery t)))))))
+  (when (get-text-property (point) 'node-id)
+    (save-excursion
+      (when (re-search-backward "^┌" nil t)
+        (let ((start (point)))
+          (when (re-search-forward "^└.*┘" nil t)
+            (let ((overlay (make-overlay start (line-end-position))))
+              (overlay-put overlay 'face 'supertag-discovery-current)
+              (overlay-put overlay 'supertag-discovery t)
+              (overlay-put overlay 'evaporate t))))))))
+
+(defun supertag-discovery--card-starts ()
+  "Return one position per rendered entity, in reading order."
+  (let ((position (point-min)) seen starts)
+    (while (< position (point-max))
+      (let ((id (get-text-property position 'node-id)))
+        (when (and id (not (member id seen)))
+          (push id seen)
+          (push position starts)))
+      (setq position (next-single-property-change position 'node-id nil (point-max))))
+    (nreverse starts)))
+
+(defun supertag-discovery--move (direction)
+  "Move DIRECTION cards, using entity properties rather than borders."
+  (let* ((starts (supertag-discovery--card-starts))
+         (id (supertag-discovery--current-node-id))
+         (current (and id (seq-find (lambda (pos)
+                                     (equal id (get-text-property pos 'node-id))) starts)))
+         (target (if (> direction 0)
+                     (seq-find (lambda (pos) (> pos (or current (point)))) starts)
+                   (car (last (seq-filter (lambda (pos) (< pos (or current (point)))) starts))))))
+    (when target (goto-char target) (supertag-discovery-highlight-current))))
 
 (defun supertag-discovery-next ()
   "Jump to the next result card."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
-  (let ((p (point)))
-    (let ((search-start-point
-           (save-excursion
-             (beginning-of-line)
-             (unless (looking-at "┌")
-               (re-search-backward "^┌" nil t))
-             (when (re-search-forward "^└" nil t)
-               (point)))))
-      (if (and search-start-point
-               (save-excursion (goto-char search-start-point)
-                               (re-search-forward "^┌" nil t)))
-          (progn
-            (goto-char (match-beginning 0))
-            (supertag-discovery-highlight-current))
-        (goto-char p)))))
+  (supertag-view--require-context 'discovery)
+  (supertag-discovery--move 1))
 
 (defun supertag-discovery-previous ()
   "Jump to the previous result card."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
-  (let ((p (point)))
-    (let ((current-card-start
-           (save-excursion
-             (beginning-of-line)
-             (if (looking-at "┌")
-                 (point)
-               (re-search-backward "^┌" nil t)))))
-      (if (and current-card-start (> current-card-start (point-min)))
-          (if (save-excursion
-                (goto-char (1- current-card-start))
-                (re-search-backward "^┌" nil t))
-              (progn
-                (goto-char (match-beginning 0))
-                (supertag-discovery-highlight-current))
-            (goto-char p))
-        (goto-char p)))))
+  (supertag-view--require-context 'discovery)
+  (supertag-discovery--move -1))
 
 (defun supertag-discovery-toggle-mark ()
   "Toggle the marked state of the current card and redraw it."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
-  (when-let* ((node-id (get-text-property (point) 'node-id))
-              (result-pair (get-text-property (point) 'result-pair)))
+  (supertag-view--require-context 'discovery)
+  (when-let* ((node-id (supertag-discovery--current-node-id)))
     (if (member node-id supertag-discovery--marked-nodes)
         (setq supertag-discovery--marked-nodes
               (remove node-id supertag-discovery--marked-nodes))
       (push node-id supertag-discovery--marked-nodes))
-    (let ((inhibit-read-only t) (p (point)) (card-width 80))
-      (save-excursion
-        (let* ((beg (save-excursion (beginning-of-line) (if (looking-at "┌")
-                                                             (point) (re-search-backward "^┌" nil t))))
-               (end (when beg (save-excursion (goto-char beg) (when
-                                                                 (re-search-forward "^└" nil t) (end-of-line) (forward-char 1) (point))))))
-          (when (and beg end)
-            (delete-region beg end)
-            (goto-char beg)
-            (let* ((node (car result-pair)) (context (cdr result-pair))
-                   (card-lines (supertag-discovery--format-card node context
-                                                                card-width (member node-id supertag-discovery--marked-nodes))))
-              (dolist (line card-lines) (insert line "\n"))
-              (add-text-properties
-               beg (- (point) 1)
-               `(result-pair ,result-pair node-id ,node-id
-                             supertag-entity-id ,node-id))))))
-      (goto-char p)
-      (supertag-discovery-highlight-current))
-    (save-excursion
-      (goto-char (point-min))
-      (when (re-search-forward "^Marked:.*$" nil t)
-        (pcase-let ((`(,marked ,hidden)
-                     (supertag-discovery--mark-counts
-                      (plist-get (plist-get supertag-view--instance :state)
-                                 :nodes))))
-          (let ((inhibit-read-only t))
-            (replace-match (format "Marked: %d (%d hidden)" marked hidden)
-                           t t)))))))
+    ;; Repaint the cached result set: marking must never resample the page.
+    (let ((inhibit-read-only t))
+      (supertag-discovery--render-view (plist-get supertag-view--instance :state)))
+    (supertag-discovery--restore-selection node-id)))
 
 (defun supertag-discovery-open-node ()
   "Open the current node through the shared navigation authority."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
-  (when-let* ((id (get-text-property (point) 'node-id)))
-    (supertag-ui-navigate-with-recovery id)))
+  (supertag-view--require-context 'discovery)
+  (if-let* ((button (widget-at)))
+      (widget-apply-action button)
+    (when-let* ((id (supertag-discovery--current-node-id)))
+      (supertag-ui-navigate-with-recovery id))))
 
 (defun supertag-discovery--release-origin ()
   "Release live markers owned by the current Discovery invocation."
@@ -628,7 +607,10 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-discovery-quit ()
   "Quit Discovery and return to this invocation's live origin."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
+  (supertag-view--require-context 'discovery)
   (let ((results-buffer (current-buffer)))
     (supertag-discovery--restore-origin)
     (when (buffer-live-p results-buffer)
@@ -636,7 +618,10 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-discovery-search ()
   "Search all nodes using space-separated keywords; every keyword must match."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
+  (supertag-view--require-context 'discovery)
   (let* ((history (delete-dups
                    (mapcar (lambda (item) (plist-get item :query))
                            supertag-discovery--history)))
@@ -651,7 +636,10 @@ Handles both time stamps (list) and date strings."
 
 (defun supertag-discovery-refresh ()
   "Refresh the current sample or complete search result set."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
+  (supertag-view--require-context 'discovery)
   (supertag-view-refresh))
 
 ;;; --- Export Functions ---
@@ -692,7 +680,10 @@ Handles both time stamps (list) and date strings."
 Each link uses the shared reference materializer.  On a staged failure, retry
 the structured service error first and invoke this command again to continue;
 already projected links are not inserted twice."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'discovery))))
   (interactive)
+  (supertag-view--require-context 'discovery)
   (let* ((results-buffer (current-buffer))
          (selected-nodes (supertag-discovery--selected-nodes)))
     (unless selected-nodes (user-error "No nodes selected"))
@@ -783,6 +774,9 @@ already projected links are not inserted twice."
                   supertag-discovery--origin-window-configuration
                   origin-configuration))
     buffer))
+
+;; Mode constructors do not open a Runtime-owned view.
+(put 'supertag-discovery-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-discovery)
 

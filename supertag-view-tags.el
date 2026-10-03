@@ -205,17 +205,26 @@ repeated Tag so the walk still terminates."
 
 (defun supertag-view-tags-open-stream ()
   "Open Stream View for the Tag Manager row at point."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (supertag-view-stream (supertag-view-tags--current-id)))
 
 (defun supertag-view-tags-set-parent ()
   "Set the `:extends' parent of the Tag Manager row at point."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (supertag-tag-set-parent (supertag-view-tags--current-id)))
 
 (defun supertag-view-tags-rename ()
   "Rename the Tag Manager row at point throughout the managed documents."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (supertag-tag-rename (supertag-view-tags--current-id)))
 
 (defun supertag-view-tags--refresh-and-next-line ()
@@ -225,7 +234,10 @@ repeated Tag so the walk still terminates."
 
 (defun supertag-view-tags-mark ()
   "Toggle a mark on the Tag Manager row at point and move down."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let ((id (supertag-view-tags--current-id)))
     (if (member id supertag-view-tags--marked-ids)
         (setq supertag-view-tags--marked-ids
@@ -235,14 +247,20 @@ repeated Tag so the walk still terminates."
 
 (defun supertag-view-tags-unmark ()
   "Remove the mark from the Tag Manager row at point and move down."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (setq supertag-view-tags--marked-ids
         (delete (supertag-view-tags--current-id) supertag-view-tags--marked-ids))
   (supertag-view-tags--refresh-and-next-line))
 
 (defun supertag-view-tags-unmark-all ()
   "Clear every Tag Manager mark."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (setq supertag-view-tags--marked-ids nil)
   (supertag-view-refresh))
 
@@ -250,7 +268,10 @@ repeated Tag so the walk still terminates."
   "Delete marked Tag Manager rows, or the row at point, everywhere.
 Marked rows get one combined text preview before their single confirmation:
 `skip-confirm' never stands in for showing what Org text will change."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let ((buffer (current-buffer)))
     (if supertag-view-tags--marked-ids
       (let* ((ids (copy-sequence supertag-view-tags--marked-ids))
@@ -298,7 +319,10 @@ Marked rows get one combined text preview before their single confirmation:
 
 (defun supertag-view-tags-edit-aliases ()
   "Edit the alias list of the Tag Manager row at point."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let* ((id (supertag-view-tags--current-id))
          (tag (supertag-tag-get id))
          (current (supertag-view-tags--extra-aliases tag id))
@@ -313,7 +337,10 @@ Marked rows get one combined text preview before their single confirmation:
 
 (defun supertag-view-tags-create ()
   "Create a root Semantic Tag, or the hierarchy a `/' path names."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let ((input (read-string "New tag (or a/b path): ")))
     (unless (and input (not (string-empty-p input)))
       (user-error "Tag name cannot be empty"))
@@ -321,7 +348,10 @@ Marked rows get one combined text preview before their single confirmation:
 
 (defun supertag-view-tags-create-child ()
   "Create a child Tag of the row at point; a `/' path nests a whole chain."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let* ((parent-id (supertag-view-tags--current-id))
          (parent-name (or (plist-get (supertag-tag-get parent-id) :name)
                           parent-id))
@@ -342,7 +372,10 @@ Marked rows get one combined text preview before their single confirmation:
 
 (defun supertag-view-tags-quit ()
   "Quit the Tag Manager and restore its original window configuration."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'tags))))
   (interactive)
+  (supertag-view--require-context 'tags)
   (let ((window-config supertag-view-tags--origin-window-configuration))
     (kill-buffer (current-buffer))
     (when (window-configuration-p window-config)
@@ -391,6 +424,9 @@ this mode.
 (supertag-view-register-modal-state 'supertag-view-tags-mode)
 
 (supertag-view-tags--register-view)
+
+;; Mode constructors do not open a Runtime-owned view.
+(put 'supertag-view-tags-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-view-tags)
 

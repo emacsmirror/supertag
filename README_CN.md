@@ -69,13 +69,16 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 
 ```emacs-lisp
 ;; 用 straight.el 安装（这里假设你已经在用 straight）
+(straight-use-package '(textui :host github :repo "yibie/textui"))
 (straight-use-package '(supertag :host github :repo "yibie/supertag"))
 ;; 在 require 之前设置：Supertag 加载时会给它装上 config guard。
 (setq supertag-sync-directories '("~/Documents/notes/"))   ; 你放 Org 文件的目录
 (require 'supertag)
 ```
 
-要求 Emacs 29.1 与 Org 9.6 或更高（包元数据里写的下限）。
+要求 Emacs 29.1、Org 9.6 和 [TextUI](https://github.com/yibie/textui) 0.8.0 或更高。
+TextUI 是正式依赖，也是 Discovery 的默认渲染后端。使用 `package-vc` 时，
+请先从 TextUI 仓库安装它，再安装或更新 Supertag；声明依赖并不会自动向包源添加 VC 安装配方。
 
 1. 在 init 里设置同步目录（在 `(require 'supertag)` 之前；文件级 ID 来源可选，随时可改），然后 `M-x supertag-sync-full-rescan` 一次；模板见 [doc/setup_cn.md](doc/setup_cn.md)。
 2. `M-x supertag-menu`：按记录、整理、查找、维护分组的菜单，想不起命令名时从这儿找。
@@ -133,6 +136,11 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 ## 命令清单
 
 常用命令按用途分组。表里每一行都是可以直接 `M-x` 调用的命令（`org-capture` 是 Org 自带的）。
+
+打开视图的入口命令仍可全局使用；刷新、导航、标记、编辑、退出等局部操作，
+则必须在已初始化的对应视图中执行。使用 Emacs 标准命令补全过滤时，这些局部命令
+只在适用的上下文中出现。即使关闭过滤或直接调用命令，也会在提示输入或修改数据之前
+拒绝错误上下文中的调用。
 
 | 分组 | 命令 | 作用 |
 |---|---|---|

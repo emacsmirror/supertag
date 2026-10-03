@@ -564,3 +564,16 @@ exactly what the measurement command groups its lines by."
 
 (provide 'tag-cards-test)
 ;;; tag-cards-test.el ends here
+
+(ert-deftest supertag-tag-cards-local-commands-reject-uninitialized-buffers ()
+  (with-temp-buffer
+    (insert "Unrelated draft")
+    (dolist (command '(supertag-view-tag-cards-refresh supertag-view-tag-cards-reset
+                       supertag-view-tag-cards-measure))
+      (should (commandp command))
+      (should-not (command-completion-default-include-p command (current-buffer)))
+      (should-error (call-interactively command) :type 'user-error)
+      (should (equal "Unrelated draft" (buffer-string))))
+    (should (eq (lookup-key supertag-view-tag-cards-mode-map (kbd "r"))
+                'supertag-view-tag-cards-reset))
+    (should-not (commandp 'supertag-view-tag-cards--reset))))

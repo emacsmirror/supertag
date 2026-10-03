@@ -328,6 +328,8 @@
     (goto-char (point-min))
     (search-forward " REFERENCES / 01 ")
     (beginning-of-line)
+    (supertag-view-node--register-view)
+    (setq-local supertag-view--instance (list :view-id 'node))
     (supertag-view-node-toggle-section)
     (let ((fold (seq-find (lambda (overlay)
                             (overlay-get overlay 'supertag-view-node-fold))

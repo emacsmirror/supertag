@@ -40,6 +40,8 @@ while IFS= read -r suite; do
 (progn
   (require (quote package))
   (package-initialize)
+  (dolist (dir (split-string (or (getenv "SUPERTAG_DEPS_LOADPATH") "") path-separator t))
+    (add-to-list (quote load-path) dir))
   (setq user-emacs-directory (file-name-as-directory (getenv "SUPERTAG_TEST_TMP"))
         supertag-data-directory (expand-file-name "data/" user-emacs-directory)
         supertag--base-data-directory supertag-data-directory

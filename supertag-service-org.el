@@ -327,15 +327,17 @@ fails."
 (defun supertag-node-location-goto-current-buffer (node-id)
   "Move point to NODE-ID's heading in the current Org buffer.
 
-Searches the widened buffer directly and does not consult
-`org-id-locations'.  Return non-nil on success, leaving point unchanged on
-failure."
+Validates the projected position first, scanning the widened buffer only
+when it is stale or absent.  Does not consult `org-id-locations'.
+Return non-nil on success, leaving point unchanged on failure."
   (when (and (stringp node-id) (not (string-empty-p node-id)))
     (let* ((node (supertag-store-get-entity :nodes node-id))
            (level (and (listp node) (plist-get node :level)))
            (link-type (and (listp node) (plist-get node :link-type)))
-           (position (supertag-node-location--position
-                      node-id level link-type)))
+           (position (or (supertag-node-location--projected-position
+                          node-id level link-type (plist-get node :position))
+                         (supertag-node-location--position
+                          node-id level link-type))))
       (when (and position
                  (<= (point-min) position)
                  (<= position (point-max)))

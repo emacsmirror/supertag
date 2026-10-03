@@ -111,13 +111,17 @@ When to review is up to you; Supertag does not schedule revision.
 
 ```emacs-lisp
 ;; Install with straight.el (this assumes you already use straight)
+(straight-use-package '(textui :host github :repo "yibie/textui"))
 (straight-use-package '(supertag :host github :repo "yibie/supertag"))
 ;; Set before require: Supertag installs its config guard when it loads.
 (setq supertag-sync-directories '("~/Documents/notes/"))   ; where your Org files live
 (require 'supertag)
 ```
 
-Requires Emacs 29.1 and Org 9.6 or newer (the floor in the package metadata).
+Requires Emacs 29.1, Org 9.6 and [TextUI](https://github.com/yibie/textui) 0.8.0 or newer.
+TextUI is a required dependency and the default Discovery renderer. When using
+`package-vc`, install TextUI from its repository before installing/updating Supertag;
+a dependency declaration alone does not add a VC recipe to your package archives.
 
 1. Set the sync directory in init (before `(require 'supertag)`; the file-level ID source is
    optional and can change any time), then run `M-x supertag-sync-full-rescan` once; template in
@@ -203,6 +207,12 @@ back to the source Org file. The current triggers, conditions, actions and templ
 
 Common commands grouped by purpose. Every row is a command you can invoke with `M-x`
 (`org-capture` is Org's own).
+
+View entry commands remain globally available. Actions such as refresh, navigation,
+marking, editing, and quitting require an initialized instance of their own view.
+With Emacs's standard command-completion filtering, these local commands appear
+only in the appropriate context. Even if filtering is disabled or a command is
+called directly, invalid-context calls are rejected before prompts or changes.
 
 | Group | Command | Effect |
 |---|---|---|

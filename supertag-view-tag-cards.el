@@ -1165,9 +1165,32 @@ loaded standalone without `supertag-view-framework'."
   (when (fboundp 'supertag-view-apply-palette-locally)
     (supertag-view-apply-palette-locally supertag-view-tag-cards-palette)))
 
+(defun supertag-view-tag-cards--context-p (buffer)
+  "Whether BUFFER owns a live experimental Tag Cards renderer."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (and (derived-mode-p 'supertag-view-tag-cards-mode)
+              (eq textui--render-function #'supertag-view-tag-cards--frame)))))
+
+(defun supertag-view-tag-cards--require-context ()
+  "Reject Tag Cards operations outside their initialized page."
+  (unless (supertag-view-tag-cards--context-p (current-buffer))
+    (user-error "No active Tag Cards page; open supertag-view-tag-cards first")))
+
+(defun supertag-view-tag-cards-reset ()
+  "Reset narrowing in the current Tag Cards page."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view-tag-cards--context-p buffer))))
+  (interactive)
+  (supertag-view-tag-cards--require-context)
+  (supertag-view-tag-cards--reset))
+
 (defun supertag-view-tag-cards-refresh ()
   "Synchronously redraw the Tag Cards page from the current Store."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view-tag-cards--context-p buffer))))
   (interactive)
+  (supertag-view-tag-cards--require-context)
   (textui-refresh (current-buffer)))
 
 (defun supertag-view-tag-cards--card-edge-x (window line-start edge graphic)
@@ -1262,7 +1285,6 @@ declared width."
        residuals "; ")
     "none"))
 
-;;;###autoload
 (defun supertag-view-tag-cards-measure ()
   "Report every card edge in the visible Tag Cards buffer.
 
@@ -1273,7 +1295,10 @@ lines belonging to that card PASS only when their spread is at most 1px.
 For a failing line, include its text, live string width, ellipsis font, and
 residual display-space measurement so the renderer and measurement can be
 compared directly."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view-tag-cards--context-p buffer))))
   (interactive)
+  (supertag-view-tag-cards--require-context)
   (let* ((source (current-buffer))
          (window (or (get-buffer-window source 0)
                      (and (eq (window-buffer (selected-window)) source)
@@ -1398,7 +1423,7 @@ compared directly."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map widget-keymap)
     (define-key map (kbd "g") #'supertag-view-tag-cards-refresh)
-    (define-key map (kbd "r") #'supertag-view-tag-cards--reset)
+    (define-key map (kbd "r") #'supertag-view-tag-cards-reset)
     (define-key map (kbd "q") #'quit-window)
     (define-key map (kbd "TAB") #'widget-forward)
     (define-key map (kbd "<backtab>") #'widget-backward)
@@ -1457,6 +1482,8 @@ filters, q quits the window, and TAB/S-TAB move among native text buttons."
       (supertag-view-tag-cards--apply-palette))
     (supertag-view-tag-cards--install-store-refresh buffer)
     buffer))
+
+(put 'supertag-view-tag-cards-mode 'completion-predicate #'ignore)
 
 (provide 'supertag-view-tag-cards)
 ;;; supertag-view-tag-cards.el ends here

@@ -1,5 +1,29 @@
 * Changelog
 * [Unreleased]
+** Faster navigation and visible destinations
+- Validate projected Org positions before scanning for IDs; stale positions
+  still fall back to live lookup without changing the projection.
+- Verify the actual landing point without another full-file scan; preserve
+  native return values and failure-context recovery.
+- After explicit shared navigation, reveal the entry, place the heading near
+  the window top and briefly highlight it. Preview navigation is unchanged.
+** Discovery uses TextUI
+- Make TextUI 0.8.0 a formal dependency and render Discovery as a responsive
+  reading page with bordered cards and native widget buttons.
+- Preserve original title case, title/metadata/body sections and [ ] / [X]
+  marks; keep the header compact and document the Discovery design exception.
+- Replace border-based navigation with entity identity; preserve random samples,
+  complete search results, hidden marks, source return and reference recovery.
+- Repaint cached results on layout changes and marking without resampling or
+  mutating projected node text; retain Runtime command context validation.
+** View command context boundaries
+- Keep view entrypoints global; scope local command completion and validate
+  Runtime ownership before prompts, edits, navigation, refresh or quit.
+- Cover Node, Stream (including indirect edits), Tag Manager, Orphan Tags,
+  Discovery and experimental Tag Cards without changing global M-x settings.
+- Prevent stale subscriptions and reentrant refreshes from reviving closed
+  instances; release subscriptions when changing major mode.
+- Keep internal helpers non-interactive and give local keymaps guarded commands.
 ** Preserve historical automation rules during metadata sync
 - Accept the known retired =:on-field-change= and =:update-field= vocabulary
   when transporting persisted rules, including nested case actions. Preserve

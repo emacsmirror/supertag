@@ -1398,3 +1398,145 @@ name may not contain a separator), and resolution then returns the leaf's id."
         (should (eq 'supertag-unresolved-tag-face
                     (get-text-property (- (point) (length "#nosuchtag"))
                                        'face)))))))
+
+;;; Commands are view-local actions, not global entry points.
+(require 'supertag-view-tags)
+(require 'supertag-view-orphan-tags)
+
+(defconst supertag-view-boundary-test--commands
+  '((node supertag-view-node-refresh supertag-view-node-quit
+          supertag-view-node-next-button-or-fold supertag-view-node-toggle-section)
+    (stream supertag-view-stream-next-node supertag-view-stream-previous-node
+            supertag-view-stream-open-node-view supertag-view-stream-edit supertag-view-stream-quit)
+    (tags supertag-view-tags-open-stream supertag-view-tags-set-parent
+          supertag-view-tags-rename supertag-view-tags-mark supertag-view-tags-unmark
+          supertag-view-tags-unmark-all supertag-view-tags-delete
+          supertag-view-tags-edit-aliases supertag-view-tags-create
+          supertag-view-tags-create-child supertag-view-tags-quit)
+    (orphan-tags supertag-view-orphan-tags-mark supertag-view-orphan-tags-unmark
+                 supertag-view-orphan-tags-mark-all supertag-view-orphan-tags-unmark-all
+                 supertag-view-orphan-tags-visit supertag-view-orphan-tags-remove
+                 supertag-view-orphan-tags-quit)
+    (discovery supertag-discovery-next supertag-discovery-previous
+               supertag-discovery-toggle-mark supertag-discovery-open-node
+               supertag-discovery-quit supertag-discovery-search
+               supertag-discovery-refresh supertag-discovery-insert-references)))
+
+(ert-deftest supertag-view-boundary-commands-reject-plain-and-wrong-view-buffers ()
+  "Direct M-x and Lisp calls cannot prompt, write or kill an unrelated buffer."
+  (let ((supertag--view-registry (make-hash-table :test 'eq)))
+    (puthash 'unrelated '(:id unrelated) supertag--view-registry)
+    (dolist (instance '(nil (:input (:mode :search)) (:view-id unrelated)))
+      (with-temp-buffer
+        (insert "Do not change this draft.")
+        (setq-local supertag-view--instance (copy-tree instance))
+        (cl-letf (((symbol-function 'read-string) (lambda (&rest _) (ert-fail "Prompt before guard")))
+                  ((symbol-function 'yes-or-no-p) (lambda (&rest _) (ert-fail "Confirm before guard")))
+                  ((symbol-function 'supertag--follow-store) (lambda (&rest _) (ert-fail "Store before guard"))))
+          (dolist (command (append (apply #'append (mapcar #'cdr supertag-view-boundary-test--commands))
+                                   '(supertag-view-stream-edit-finish supertag-view-stream-edit-abort)))
+            (should (commandp command))
+            (should-not (command-completion-default-include-p command (current-buffer)))
+            (should-error (call-interactively command) :type 'user-error)
+            (should-error (funcall command) :type 'user-error)
+            (should (equal instance supertag-view--instance))
+            (should (equal "Do not change this draft." (buffer-string)))))
+        ;; Generic refresh can refresh any registered view, but never a partial
+        ;; instance manufactured by calling Discovery search from a plain buffer.
+        (unless (plist-get instance :view-id)
+          (should-error (supertag-view-refresh) :type 'user-error))))))
+
+(ert-deftest supertag-view-boundary-completion-keeps-entries-and-local-actions ()
+  (let ((supertag--view-registry (make-hash-table :test 'eq)))
+    (with-temp-buffer
+      (dolist (entry '(supertag-view-node supertag-view-stream supertag-view-tags
+                       supertag-view-orphan-tags supertag-discovery supertag-view-set-palette))
+        (should (command-completion-default-include-p entry (current-buffer)))))
+    (dolist (group supertag-view-boundary-test--commands)
+      (let ((id (car group)))
+        (puthash id (list :id id) supertag--view-registry)
+        (with-temp-buffer
+          (setq-local supertag-view--instance (list :view-id id))
+          (should (command-completion-default-include-p 'supertag-view-refresh (current-buffer)))
+          (dolist (command (cdr group))
+            (should (command-completion-default-include-p command (current-buffer))))))))
+  (should-not (commandp 'supertag-view-node--hide-side))
+  (should (eq (lookup-key supertag-view-node-mode-map (kbd "q")) 'supertag-view-node-quit))
+  (dolist (mode '(supertag-view-node-mode supertag-view-stream-mode supertag-view-stream-edit-mode
+                  supertag-view-tags-mode supertag-view-orphan-tags-mode supertag-discovery-mode))
+    (should-not (command-completion-default-include-p mode (current-buffer)))))
+
+(ert-deftest supertag-view-boundary-edit-session-not-just-org-mode ()
+  (let ((base (generate-new-buffer " *view-boundary-source*")))
+    (unwind-protect
+        (let ((edit (make-indirect-buffer base " *view-boundary-edit*" t)))
+          (unwind-protect
+              (with-current-buffer edit
+                (org-mode)
+                (supertag-view-stream-edit-mode 1)
+                (should-not (command-completion-default-include-p
+                             'supertag-view-stream-edit-finish edit))
+                (should-error (supertag-view-stream-edit-finish) :type 'user-error)
+                (setq-local supertag-view-stream-edit--node-id "fixture"
+                            supertag-view-stream-edit--session '(:text "draft"))
+                (dolist (cmd '(supertag-view-stream-edit-finish supertag-view-stream-edit-abort))
+                  (should (command-completion-default-include-p cmd edit))))
+            (when (buffer-live-p edit) (kill-buffer edit))))
+      (when (buffer-live-p base) (kill-buffer base)))))
+
+(ert-deftest supertag-view-boundary-stale-subscription-does-not-refresh-reopened-buffer ()
+  (let ((supertag--view-registry (make-hash-table :test 'eq)) callbacks
+        (renders 0) (cleanups 0) buffer)
+    (supertag-view-register
+     :id 'boundary :name "Boundary" :buffer-name " *view-boundary*"
+     :render-fn (lambda (_) (cl-incf renders))
+     :subscribe-fn (lambda (_input _state refresh)
+                     (push refresh callbacks)
+                     (lambda () (cl-incf cleanups))))
+    (unwind-protect
+        (save-window-excursion
+          (setq buffer (supertag-view-open 'boundary nil))
+          (let ((old (car callbacks)))
+            (supertag-view-open 'boundary nil)
+            (should (= 1 cleanups))
+            (funcall old)
+            (should (= 2 renders))
+            (funcall (car callbacks))
+            (should (= 3 renders))
+            (with-current-buffer buffer (fundamental-mode))
+            (should (= 2 cleanups))
+            (funcall (car callbacks))
+            (should (= 3 renders))))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))
+
+(ert-deftest supertag-view-boundary-refresh-cannot-recreate-cleared-instance ()
+  (let ((supertag--view-registry (make-hash-table :test 'eq)) clear buffer)
+    (supertag-view-register
+     :id 'boundary :name "Boundary" :buffer-name " *view-boundary*"
+     :render-fn (lambda (_) (when clear (fundamental-mode))))
+    (unwind-protect
+        (save-window-excursion
+          (setq buffer (supertag-view-open 'boundary nil) clear t)
+          (supertag-view-refresh buffer)
+          (should-not (buffer-local-value 'supertag-view--instance buffer))
+          (let ((err (should-error (supertag-view-refresh buffer) :type 'user-error)))
+            (should-not (string-match-p "Unknown view: nil" (error-message-string err)))))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))
+
+(ert-deftest supertag-view-boundary-follow-store-refresh-does-not-reenter ()
+  (let ((supertag--view-registry (make-hash-table :test 'eq)) buffer (follows 0) (renders 0))
+    (supertag-view-register
+     :id 'boundary :name "Boundary" :buffer-name " *view-boundary*"
+     :render-fn (lambda (_) (cl-incf renders)))
+    (unwind-protect
+        (save-window-excursion
+          (setq buffer (supertag-view-open 'boundary nil))
+          (cl-letf (((symbol-function 'supertag--follow-store)
+                     (lambda ()
+                       (cl-incf follows)
+                       (should (= 1 follows))
+                       (supertag-view-refresh buffer))))
+            (supertag-view-refresh buffer))
+          (should (= 1 follows))
+          (should (= 2 renders)))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))

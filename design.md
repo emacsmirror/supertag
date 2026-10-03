@@ -73,8 +73,16 @@ All decoration is text so it survives any monospace terminal:
 - Bars and ratios: `03:42 ====---- 05:18`.
 - Markers: `+` before a co-occurring facet, `→` before a note entry.
 
-Box-drawing borders around cards are not used. Cards are separated by
-whitespace and by their filled title.
+Box-drawing borders around cards are not used by default. Cards are separated
+by whitespace and by their filled title.
+
+**Discovery exception (user preference):** retain its bordered reading cards,
+with title, file/tags and complete body in distinct sections. Preserve title
+case and use `[ ]` / `[X]` for marks; a selected-card background is allowed.
+TextUI is the layout backend, not a reason to replace this reading interface.
+Discovery uses a compact title, result/mark counts and actions instead of the
+magazine manifesto and decorative colophon. The shared one-size, responsive
+width and native-button requirements still apply.
 
 ## 5. Page skeleton
 

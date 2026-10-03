@@ -53,7 +53,7 @@ if ! emacs --batch -Q "${dep_args[@]}" -L . -L test -L tests --eval "
             (unless (or (file-in-directory-p f repo-root)
                         (file-in-directory-p f (file-truename (expand-file-name \"..\" data-directory)))
                         (cl-some (lambda (d) (and (file-in-directory-p f (file-truename d))
-                                                   (member (file-name-base f) '(\"ht\" \"dash\")))) dep-roots))
+                                                   (member (file-name-base f) '(\"ht\" \"dash\" \"textui\" \"textui-layout\" \"textui-kp-core\")))) dep-roots))
               (princ (format \"unexpected load: %s\\n\" f)) (kill-emacs 1))))))
   (error (princ err) (kill-emacs 1))))" >/tmp/supertag-static-cold-load.$$ 2>&1; then
   cat /tmp/supertag-static-cold-load.$$ >&2

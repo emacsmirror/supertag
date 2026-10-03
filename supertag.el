@@ -27,7 +27,7 @@
 ;; Supertag is a semantic knowledge system for Org mode that extends the
 ;; traditional tagging capabilities with advanced features
 
-;; Package-Requires: ((emacs "29.1") (org "9.6") (ht "2.4"))
+;; Package-Requires: ((emacs "29.1") (org "9.6") (ht "2.4") (textui "0.8.0"))
 
 
 ;; Commands: supertag-init; startup/exit/Org hooks assemble existing owner entrypoints.

@@ -162,7 +162,8 @@ at the same time.  Return NAME."
   (supertag-view-apply-palette name)
   (dolist (buffer (buffer-list))
     (with-current-buffer buffer
-      (when (derived-mode-p 'supertag-view-node-mode)
+      (when (and (derived-mode-p 'supertag-view-node-mode)
+                 (supertag-view--context-p buffer 'node))
         (call-interactively #'supertag-view-node-refresh))))
   (force-mode-line-update t)
   (message "Supertag view palette: %s" name))
@@ -503,6 +504,24 @@ View definition plist structure:
 (defvar-local supertag-view--instance nil
   "Buffer-local View Runtime instance plist.")
 
+(defvar-local supertag-view--refreshing nil
+  "Non-nil during a refresh, including following the persisted Store.")
+
+(defun supertag-view--context-p (buffer &optional id)
+  "Whether BUFFER owns a registered Runtime instance, optionally of view ID."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (let ((actual (plist-get supertag-view--instance :view-id)))
+           (and actual (or (null id) (eq id actual))
+                (supertag-view-get actual))))))
+
+(defun supertag-view--require-context (&optional id)
+  "Require the current buffer to own a live view, optionally of ID.
+Check before prompts or mutations; a major mode alone is not an instance."
+  (unless (supertag-view--context-p (current-buffer) id)
+    (user-error "No active %s view in this buffer; open the view first"
+                (or id 'Supertag))))
+
 ;; ============================================================================
 ;; Core API
 ;; ============================================================================
@@ -610,20 +629,27 @@ DISPLAY-ACTION overrides the view's registered display action."
               (supertag-view--cleanup-instance)
               (funcall mode-fn)
               (add-hook 'kill-buffer-hook #'supertag-view--cleanup-instance nil t)
+              (add-hook 'change-major-mode-hook #'supertag-view--cleanup-instance nil t)
               (let ((inhibit-read-only t))
                 (funcall (plist-get view :render-fn) state))
               (setq-local supertag-view--instance
                           (list :view-id id :input input :state state
                                 :cleanup-fns nil))
               (when subscribe-fn
-                (let ((cleanup
+                (let* ((instance supertag-view--instance)
+                       (cleanup
                        (funcall subscribe-fn input state
                                 (lambda (&rest _event)
                                   (when (buffer-live-p buffer)
                                     (with-current-buffer buffer
-                                      (supertag-view-refresh)))))))
-                  (setf (plist-get supertag-view--instance :cleanup-fns)
-                        (if (functionp cleanup) (list cleanup) cleanup)))))
+                                      (when (and (eq instance supertag-view--instance)
+                                                 (supertag-view--context-p buffer))
+                                        (supertag-view-refresh buffer))))))))
+                  (let ((cleanups (if (functionp cleanup) (list cleanup) cleanup)))
+                    (if (eq instance supertag-view--instance)
+                        (setf (plist-get instance :cleanup-fns) cleanups)
+                      ;; A synchronous subscription callback may close the view.
+                      (dolist (fn cleanups) (funcall fn)))))))
             (display-buffer buffer (or display-action
                                        (plist-get view :display-action)))
             buffer)
@@ -681,37 +707,45 @@ STATS is a list of (label . value) pairs."
 
 
 (defun supertag-view--refresh-instance ()
-  "Refresh the current buffer's View Runtime instance."
-  (let* ((view-id (plist-get supertag-view--instance :view-id))
-         (view (supertag-view-get view-id)))
-    (unless view
-      (user-error "Unknown view: %s" view-id))
-    (let* ((input (plist-get supertag-view--instance :input))
-           (state-fn (plist-get view :state-fn))
-           (capture-fn (plist-get view :capture-selection-fn))
-           (restore-fn (plist-get view :restore-selection-fn))
-           (selection (when capture-fn (funcall capture-fn)))
-           (state (if state-fn (funcall state-fn input) input)))
+  "Refresh the current Runtime instance without reviving a closed one."
+  (supertag-view--require-context)
+  (let* ((instance supertag-view--instance)
+         (view (supertag-view-get (plist-get instance :view-id)))
+         (input (plist-get instance :input))
+         (state-fn (plist-get view :state-fn))
+         (capture-fn (plist-get view :capture-selection-fn))
+         (restore-fn (plist-get view :restore-selection-fn))
+         (selection (when capture-fn (funcall capture-fn)))
+         (state (if state-fn (funcall state-fn input) input)))
+    (when (eq instance supertag-view--instance)
       (let ((inhibit-read-only t))
         (funcall (plist-get view :render-fn) state))
-      (setf (plist-get supertag-view--instance :state) state)
-      (when restore-fn
-        (funcall restore-fn selection)))))
+      (when (eq instance supertag-view--instance)
+        (setf (plist-get instance :state) state)
+        (when restore-fn (funcall restore-fn selection))))))
 
 (defun supertag-view-refresh (&optional buffer)
-  "Refresh BUFFER or the current view buffer."
+  "Refresh BUFFER or the current live view buffer."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer))))
   (interactive)
-  ;; A manual refresh is also a cheap opportunity to follow a clean session's
-  ;; newer database revision, rather than rendering stale in-memory state.
-  (when (fboundp 'supertag--follow-store)
-    (supertag--follow-store))
   (let ((target (or buffer (current-buffer))))
     (unless (buffer-live-p target)
       (user-error "View buffer is not live"))
     (with-current-buffer target
-      (unless supertag-view--instance
-        (user-error "Not in a view buffer"))
-      (supertag-view--refresh-instance))))
+      (supertag-view--require-context)
+      (unless supertag-view--refreshing
+        (let ((supertag-view--refreshing t)
+              (instance supertag-view--instance))
+          ;; Validate the target before following Store state, and keep the
+          ;; selected buffer from changing which view this invocation refreshes.
+          (when (fboundp 'supertag--follow-store)
+            (supertag--follow-store))
+          (when (and (buffer-live-p target)
+                     (eq instance (buffer-local-value 'supertag-view--instance target)))
+            (with-current-buffer target
+              (supertag-view--refresh-instance))))))))
+
 
 ;; ============================================================================
 ;; Configuration Persistence

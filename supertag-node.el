@@ -13,7 +13,7 @@
 ;; supertag-view-helper-find-node-location,
 ;; supertag-capture-finalize-node-at-point,
 ;; supertag-enable-org-capture-integration and supertag-disable-org-capture-integration.
-;; Dependencies: cl-lib, org, org-capture, org-id, org-element, subr-x, supertag-core-store,
+;; Dependencies: cl-lib, org, org-capture, org-id, org-element, subr-x, pulse, supertag-core-store,
 ;; supertag-link (ordinary Relation provider), supertag-core-persistence, supertag-service-org.
 ;; Tag membership is loaded lazily.  Identity, transactions and persistence
 ;; remain shared providers; Link formatting belongs to supertag-link.
@@ -31,6 +31,7 @@
 (require 'org-id)
 (require 'org-element)
 (require 'subr-x)
+(require 'pulse)
 (require 'supertag-core-store)
 ;; Ordinary Relation providers load Link only on first use.
 (autoload 'supertag-relation-delete-for-node "supertag-link")
@@ -537,6 +538,17 @@ return."
 
 ;;; Shared navigation recovery
 
+(defun supertag-ui--reveal-navigation-target ()
+  "Expose the destination near the window top and briefly highlight its title.
+Only adjust the selected window when it displays the destination buffer."
+  (when (eq (window-buffer (selected-window)) (current-buffer))
+    (when (derived-mode-p 'org-mode)
+      (org-fold-show-context 'link-search)
+      (when (org-at-heading-p) (org-fold-show-entry)))
+    (recenter (min 3 (max 0 (/ (window-body-height) 4))))
+    (pulse-momentary-highlight-region
+     (line-beginning-position) (min (point-max) (1+ (line-end-position))))))
+
 (defun supertag-ui-navigate-with-recovery (node-id &optional other-window)
   "Navigate to NODE-ID, restoring the caller context if navigation fails.
 OTHER-WINDOW has the same meaning as in `supertag-goto-node'.  Return that
@@ -551,9 +563,9 @@ function's native result unchanged."
                     success
                     (and location
                          (eq (current-buffer) (marker-buffer location))
-                         (save-excursion
-                           (supertag-node-location-goto-current-buffer node-id))))
-              (unless success
+                         (= (point) (marker-position location))))
+              (if success
+                  (supertag-ui--reveal-navigation-target)
                 (supertag-ui--restore-find-context context))
               result)
           ((error quit)
