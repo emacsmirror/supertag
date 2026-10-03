@@ -4,7 +4,7 @@
 
 This document describes how Supertag's synchronization works, keeping three things apart:
 incremental Org-text-to-database sync, local database saving and backup, and moving Org text
-with Git.
+and portable metadata with Git.
 
 ## Three layers, not one
 
@@ -12,12 +12,12 @@ with Git.
 |---|---|---|---|
 | Org → database | your Org text into the local database projection | Supertag auto-sync | skip this round, keep the state, never delete source text |
 | Local database save/backup | `supertag-db.el` and daily snapshots | Supertag persistence | refuse to overwrite, keep the old file and snapshots |
-| Git text sync | Org text only | `supertag-git.el` | pause and wait, or report; never silently drop text |
+| Git sync | Org text and portable metadata | `supertag-git.el` | pause and wait, or report; never silently drop text |
 
-The Git layer is **not** database sync: it commits Org text only, and each machine rescans
-that text and rebuilds its projection locally. Things that live only in the database
-(automation rules, some settings, local tag-projection state) do not travel with Git; the
-database itself is protected by its own backup mechanism instead.
+The Git layer **does not copy the entire database**. Org text and `.supertag-metadata.eld`
+travel together. Portable metadata includes Tag definitions (stable IDs, names, aliases,
+inheritance) and automation rules. Node projections, machine-local paths/positions, indexes,
+sync state, execution history, and other settings remain local. Keep database backups too.
 
 ## Org → database (incremental sync)
 
@@ -52,7 +52,7 @@ worktree toplevel itself — not a subdirectory inside some repository.
 ```
 
 Then `M-x supertag-git-setup`: it checks that the directory is in a Git repository (running
-`git init` if not), writes the ignore rules, commits the current Org text, and offers an
+`git init` if not), writes the ignore rules, exports metadata, commits Org text and metadata, and offers an
 optional remote URL (leave it empty for a local-only repository). If old local data (database,
 backups, ...) is already tracked by Git, it first asks whether to stop tracking those paths;
 the files stay on disk and are not deleted. A successful remote answer pushes once; a failed
@@ -66,17 +66,17 @@ is `M-x supertag-git-sync-now`.
 ## Second machine
 
 `M-x supertag-git-clone`: clones into an empty directory, sets it as the sync directory **for
-the current session only**, rebuilds the local projection and saves the local database. If the
+the current session only**, imports metadata before rebuilding the local projection and saves the local database. If the
 next startup should use the same directory, put `supertag-sync-directories` into init (before
 `(require 'supertag)`). Then turn on `M-x supertag-git-sync-mode` as before. Each machine keeps
-its own database file; only Org text passes through Git.
+its own database file; Org text and portable metadata pass through Git.
 
 ## What Git actually syncs
 
 The auto-commit scope is narrow:
 
 - **Committed**: `*.org` recursively under the sync directory, plus the repository root's
-  `.gitignore`.
+  `.gitignore` and `.supertag-metadata.eld`.
 - **Not committed**: the data directory, `supertag-db.el`, the backup directory, the sync
   state file, the presence file, `.gitattributes`; Emacs lock/auto-save/backup files
   (`.#note.org`, `#note.org#`, `note.org~`); ordinary attachments are outside the auto-commit
@@ -92,7 +92,7 @@ half-finished text does not get into history.
 
 ## Timing, offline, conflicts
 
-- **Auto-commit**: saving Org starts a timer; the commit happens after
+- **Auto-commit**: saving Org or changing Tags/automation rules starts a timer; the commit happens after
   `supertag-git-sync-commit-debounce` (30 seconds by default) of quiet, and further edits keep
   postponing it.
 - **Auto-pull**: a `git fetch` every `supertag-git-sync-pull-interval` (300 seconds by
@@ -104,12 +104,40 @@ half-finished text does not get into history.
   postponed and the blocking files are named; Supertag never saves, reverts or kills your
   buffers. The next cycle continues after you save. Saved-but-uncommitted Org edits are
   committed first, then the pull proceeds.
-- **Conflicts**: an unresolved Org conflict pauses auto-sync, opening the first conflicted
+- **Conflicts**: an unresolved Org or metadata conflict pauses auto-sync, opening the first conflicted
   file in `smerge-mode` (conflicted files are not imported into the database). Resolve, save,
   then run `M-x supertag-git-sync-now` to continue.
 - **Bounds**: there is no promise of lossless arbitrary concurrency. Two machines editing the
   same text hand it to Git; if Git cannot merge, the sync stops and waits for you. If you would
   rather not handle conflicts, stagger your edits and sync often.
+
+## Metadata merging and safety
+
+- The versioned file is plain data, never loaded/evaluated as code. Each entity occupies one
+  deterministic line. Local creation/modification timestamps are excluded. Retired field
+  definitions are not exported; Org properties continue to travel in Org text.
+- Export runs before committing; import runs after merging, before projecting Org changes.
+  Metadata-only changes also schedule commits. Run `supertag-git-setup` again to seed an older
+  repository. Upgrade all participating devices before using metadata sync.
+- A baseline in the local Store supports entity-level three-way comparison of baseline,
+  local facts, and file contents. Disjoint edits survive; competing edits or edit/delete
+  conflicts stop without overwriting either side. Duplicate Tag tokens, missing parents and
+  inheritance cycles are rejected. First contact merges only compatible records: an old
+  machine with the same Tag name but a different ID must reconcile that identity conflict.
+  A new machine should preferably start with an empty local Store.
+- Resolve Git text conflicts with `smerge-mode`, save, and run `supertag-git-sync-now`.
+  A `Metadata conflict` without Git markers means the file conflicts with retained in-memory
+  edits. Compare the reported collection/ID with the Tag/rule and reconcile that record in
+  the file or Store before retrying. Do not delete the file as a conflict workaround: after
+  a baseline exists, deleting it means deleting previously synchronized metadata.
+- Invalid formats, unknown versions, symlinks, and unsaved metadata buffers refuse sync.
+  Invalid/conflicted metadata also postpones this vault's Org projection to avoid creating
+  wrong Tag identities. Draft buffers are never saved or discarded for you.
+- **Use trusted repositories only.** Import does not run automation actions, but imported
+  enabled rules subsequently respond to events/timers normally. Rule parameters travel as
+  written, including explicitly configured paths or sensitive values; init.el and function
+  implementations do not. Install named custom functions on each device, adapt device-specific
+  rule paths, and never put credentials in rules.
 
 ## The database layer
 

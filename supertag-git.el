@@ -1,10 +1,10 @@
-;;; supertag-git.el --- Org text Git synchronization -*- lexical-binding: t; -*-
+;;; supertag-git.el --- Org and portable metadata Git synchronization -*- lexical-binding: t; -*-
 ;; Commands: supertag-git-setup, supertag-git-clone, supertag-git-sync-now,
 ;; supertag-git-sync-mode.
 ;; Dependencies: cl-lib, subr-x, smerge-mode, supertag-core-persistence,
-;; supertag-services-sync.
+;; supertag-services-sync, supertag-git-metadata.
 ;;; Commentary:
-;; Git transports Org files.  Store is a local projection, never a merge input.
+;; Git transports Org files and portable metadata, never the complete Store.
 ;; One configured root, scoped staging, serialized async transport, explicit
 ;; conflict resolution through smerge-mode and sync-now.
 ;;; Code:
@@ -13,6 +13,7 @@
 (require 'smerge-mode)
 (require 'supertag-core-persistence)
 (require 'supertag-services-sync)
+(require 'supertag-git-metadata)
 (defvar supertag--config-guard-allow)
 (declare-function supertag-config-guard--capture "supertag-vault" ())
 (defgroup supertag-git nil "Org text synchronization." :group 'supertag)
@@ -362,7 +363,7 @@ works identically for an org file as for the database file."
     (supertag--persistence--buffer-has-conflict-markers-p)))
 
 (defun supertag-git-sync--live-conflicted-org-files (root)
-  "Return `.org' files under ROOT that are still unmerged (per
+  "Return Org and portable metadata files under ROOT still unmerged (per
 `supertag-git-sync--unmerged-paths'), computed FRESH from git's current
 index state every time this is called.  Text markers are not required:
 modify/delete and rename/delete conflicts have unmerged index entries but
@@ -375,7 +376,7 @@ The cache alone cannot describe conflicts before mode enable after a restart."
   (let ((true-root (supertag-git--truename-dir root))
         conflicted)
     (dolist (rel (supertag-git-sync--unmerged-paths root))
-      (when (string-match-p "\\.org\\'" rel)
+      (when (or (string-suffix-p ".org" rel) (equal rel supertag-git-metadata-file))
         (push (file-truename (expand-file-name rel true-root)) conflicted)))
     (nreverse conflicted)))
 
@@ -462,13 +463,20 @@ in a previous commit's context lines is not a false positive."
              (lambda (path) (supertag-git-sync--auto-commit-path-p root path))
              (delete-dups (split-string (cdr result) "\0" t))))))
 
+(defvar supertag-git-sync--metadata-error nil
+  "Last metadata reconciliation error; blocks pushing and reports pending work.")
+(defvar supertag-git-sync--metadata-unsubscribe nil
+  "Function that removes this mode's metadata listener.")
+
 (defun supertag-git-sync--owned-changes-p (root)
-  "Return non-nil when auto-commit-owned paths have changes in ROOT."
-  (when-let* ((paths (supertag-git-sync--commit-pathspecs root)))
-    (let ((result (apply #'supertag-git--run root
-                         "status" "--porcelain=v1" "-z" "--untracked-files=all" "--" paths)))
-      (unless (supertag-git--ok-p result) (user-error "%s" (cdr result)))
-      (> (length (cdr result)) 0))))
+  "Return non-nil for portable Store changes or owned file edits in ROOT."
+  (or supertag-git-sync--metadata-error
+      (supertag-git-metadata-pending-p root)
+      (when-let* ((paths (supertag-git-sync--commit-pathspecs root)))
+        (let ((result (apply #'supertag-git--run root
+                             "status" "--porcelain=v1" "-z" "--untracked-files=all" "--" paths)))
+          (unless (supertag-git--ok-p result) (user-error "%s" (cdr result)))
+          (> (length (cdr result)) 0)))))
 
 (defun supertag-git--editor-ephemera-path-p (path)
   "Return non-nil for editor ephemera that must never be committed.
@@ -483,10 +491,11 @@ change and gets committed."
         (and (string-prefix-p "#" name) (string-suffix-p "#" name)))))
 
 (defun supertag-git-sync--auto-commit-path-p (root path)
-  "Return non-nil when PATH is owned Org text, excluding local data."
+  "Return non-nil when PATH is owned text or metadata, excluding local data."
   (and (not (supertag-git--local-data-path-p root path))
        (not (supertag-git--editor-ephemera-path-p path))
-       (or (string-suffix-p ".org" path) (equal path ".gitignore"))))
+       (or (string-suffix-p ".org" path) (equal path ".gitignore")
+           (equal path supertag-git-metadata-file))))
 
 (defun supertag-git--assert-no-staged-markers (root)
   "Refuse ROOT's staged conflict markers without changing the index."
@@ -528,8 +537,34 @@ refusal.  EXTRA names explicitly confirmed local-data removals in setup."
              (funcall callback result))
          (delete-file backup))))))
 
+(defun supertag-git-sync--metadata-prepare (root &optional export)
+  "Reconcile ROOT, optionally EXPORT, or report a safe, retryable refusal."
+  (condition-case err
+      (progn
+        (when (supertag-git--local-data-path-p root supertag-git-metadata-file)
+          (user-error "Portable metadata overlaps machine-local storage: %s"
+                      supertag-git-metadata-file))
+        (when (and export
+                   (supertag-git--ok-p
+                    (supertag-git--run root "check-ignore" "-q" "--" supertag-git-metadata-file)))
+          (user-error "Portable metadata is excluded by Git ignore rules: %s"
+                      supertag-git-metadata-file))
+        (supertag-git-metadata-reconcile root export)
+        (setq supertag-git-sync--metadata-error nil)
+        t)
+    (error
+     (setq supertag-git-sync--metadata-error (error-message-string err))
+     (message "Supertag metadata sync stopped: %s" supertag-git-sync--metadata-error)
+     nil)))
+
+(defun supertag-git-sync--metadata-changed (path &rest _)
+  "Schedule portable metadata changes at Store PATH without import echoes."
+  (when (and (not supertag-git-metadata--importing)
+             (memq (car path) '(:tags :automations)))
+    (supertag-git-sync--schedule-commit)))
+
 (defun supertag-git-sync--fire-commit ()
-  "Stage owned Org text with index guards, then commit and push asynchronously."
+  "Export metadata, stage owned text, then commit and push asynchronously."
   (setq supertag-git-sync--commit-timer nil)
   (when (and supertag-git-sync--vault-root (not supertag-git--conflicted-files)
              (not supertag-git-sync--in-flight))
@@ -539,6 +574,8 @@ refusal.  EXTRA names explicitly confirmed local-data removals in setup."
             (when-let* ((unmerged (supertag-git-sync--unmerged-paths root)))
               (user-error "Unresolved merge paths: %s" (string-join unmerged ", ")))
             (supertag-git--assert-index-scope root)
+            (unless (supertag-git-sync--metadata-prepare root t)
+              (user-error "%s" supertag-git-sync--metadata-error))
             (when-let* ((paths (supertag-git-sync--commit-pathspecs root)))
               (setq supertag-git-sync--in-flight t)
               (supertag-git--stage-checked
@@ -621,7 +658,8 @@ treat as offline degradation. Always clears
                root (list "merge" "--no-edit" "@{upstream}")
                (lambda (merge-result)
                  (supertag-git-sync--after-merge merge-result root)
-                 (if (not (supertag-git--ok-p merge-result))
+                 (if (or (not (supertag-git--ok-p merge-result))
+                         supertag-git-sync--metadata-error)
                      (setq supertag-git-sync--in-flight nil)
                    (supertag-git-sync--run-git
                     root (list "push")
@@ -673,7 +711,8 @@ sitting local until some unrelated new edit happens to trigger
 does so itself on every branch when it runs; this function does so
 directly on the no-push branch)."
   (let ((ahead (supertag-git-sync--refresh-pending-count root)))
-    (if (and (not supertag-git--conflicted-files) ahead (> ahead 0))
+    (if (and (not supertag-git--conflicted-files)
+             (not supertag-git-sync--metadata-error) ahead (> ahead 0))
         (supertag-git-sync--push root)
       (setq supertag-git-sync--in-flight nil))))
 
@@ -701,12 +740,19 @@ staged markers, unmerged paths, `supertag-git-sync--in-flight'
 serialization -- applies unchanged, and its own push falls back to fetch +
 merge + retry once the remote has moved on, which is exactly the real
 three-way merge this cycle wanted."
+  ;; Also reconcile changes brought in by an external Git client while Emacs
+  ;; was running, even if our next fetch reports already up to date.
+  (when (and supertag-git-sync--vault-root (not supertag-git--conflicted-files)
+             (not supertag-git-sync--in-flight)
+             (not (supertag-git-sync--unmerged-paths supertag-git-sync--vault-root)))
+    (supertag-git-sync--metadata-prepare supertag-git-sync--vault-root))
   (when (and supertag-git-sync--vault-root (not supertag-git--conflicted-files)
              (not supertag-git-sync--in-flight)
              (supertag-git-sync--owned-changes-p supertag-git-sync--vault-root))
     (supertag-git-sync--fire-commit))
   (when (and supertag-git-sync--vault-root (not supertag-git--conflicted-files)
-             (not supertag-git-sync--in-flight))
+             (not supertag-git-sync--in-flight)
+             (not supertag-git-sync--metadata-error))
     (setq supertag-git-sync--in-flight t)
     (let ((root supertag-git-sync--vault-root))
       (supertag-git-sync--run-git
@@ -765,8 +811,13 @@ three-way merge this cycle wanted."
 
 (defun supertag-git-sync--skip-conflicted-file-advice (orig-fn file &rest args)
   "Keep unresolved Org text out of the existing sync processor."
-  (if (member (file-truename (expand-file-name file))
-              supertag-git--conflicted-files)
+  (if (or (member (file-truename (expand-file-name file))
+                  supertag-git--conflicted-files)
+          (and supertag-git-sync--vault-root
+               (supertag-git--ancestor-p supertag-git-sync--vault-root file)
+               (or supertag-git-sync--metadata-error
+                   (member (expand-file-name supertag-git-metadata-file supertag-git-sync--vault-root)
+                           supertag-git--conflicted-files))))
       (progn
         (message "supertag-git-sync: skipping import of %s -- unresolved merge conflict; resolve with smerge-mode, save, then run supertag-git-sync-now."
                  file)
@@ -780,7 +831,9 @@ root -- saves anywhere else in Emacs must never trigger a vault commit."
   (when (and (bound-and-true-p supertag-git-sync-mode)
              supertag-git-sync--vault-root
              buffer-file-name
-             (string-suffix-p ".org" buffer-file-name)
+             (or (string-suffix-p ".org" buffer-file-name)
+                 (equal buffer-file-name
+                        (expand-file-name supertag-git-metadata-file supertag-git-sync--vault-root)))
              (supertag-git--ancestor-p supertag-git-sync--vault-root buffer-file-name))
     (supertag-git-sync--schedule-commit)))
 
@@ -835,8 +888,9 @@ local, as do conventional .supertag and backups directories."
           :remote-configured-p (and valid (supertag-git-setup--existing-origin-url root)))))
 
 (defun supertag-git-sync--commit-candidate-pathspecs (_root)
-  "Allow only Org text recursively and the root ignore file."
-  '("*.org" ":(top,literal).gitignore"))
+  "Allow Org text recursively, root portable metadata and the root ignore file."
+  (list "*.org" ":(top,literal).gitignore"
+        (concat ":(top,literal)" supertag-git-metadata-file)))
 
 (defun supertag-git--ignore-literal (path)
   "Quote dynamic PATH as one literal Git ignore pattern, or return nil.
@@ -877,7 +931,7 @@ RETIRED paths have separately been confirmed for removal from tracking."
 
 ;;;###autoload
 (defun supertag-git-setup ()
-  "Configure the sole Org root for text-only Git synchronization."
+  "Configure the sole Org root for Org and portable metadata synchronization."
   (interactive)
   (let* ((root (supertag-git-setup--pick-root))
          (repo (supertag-git--repo-toplevel root)))
@@ -895,6 +949,8 @@ RETIRED paths have separately been confirmed for removal from tracking."
                               (mapcar (lambda (p) (concat ":(literal)" p)) retired))))
           (unless (supertag-git--ok-p result) (user-error "%s" (cdr result)))))
       (supertag-git--prepare-ignore root retired)
+      (unless (supertag-git-sync--metadata-prepare root t)
+        (user-error "%s" supertag-git-sync--metadata-error))
       (let ((paths (supertag-git-sync--commit-pathspecs root)))
         (when paths
           (let ((supertag-git-sync--synchronous t))
@@ -905,7 +961,7 @@ RETIRED paths have separately been confirmed for removal from tracking."
         (when (supertag-git-sync--staged-conflict-markers-p root)
           (user-error "Resolve conflict markers before committing"))
         (when (= 1 (car (supertag-git--run root "diff" "--cached" "--quiet")))
-          (let ((result (supertag-git--run root "commit" "-m" "Supertag: sync Org text only")))
+          (let ((result (supertag-git--run root "commit" "-m" "Supertag: sync Org and portable metadata")))
             (unless (supertag-git--ok-p result) (user-error "%s" (cdr result))))))
       (when (supertag-git-setup--configure-remote root)
         (let ((result (supertag-git-setup--push root)))
@@ -924,6 +980,8 @@ RETIRED paths have separately been confirmed for removal from tracking."
     (user-error "Clone destination must be empty"))
   (supertag-git--run-clone remote-url local-directory)
   (supertag-git--prepare-ignore local-directory)
+  (unless (supertag-git-sync--metadata-prepare local-directory)
+    (user-error "%s" supertag-git-sync--metadata-error))
   (let ((supertag--config-guard-allow t))
     (setq supertag-sync-directories (list (supertag-git--truename-dir local-directory))))
   (when (fboundp 'supertag-config-guard--capture) (supertag-config-guard--capture))
@@ -975,7 +1033,8 @@ the set a merge would write -- so this names the buffers that must not be
 left to overwrite merged text on their next save.  Paths are absolute,
 truenamed, and match the ones `supertag-git--project-files' uses."
   (let ((result (supertag-git--run root "diff" "--name-only" "-z"
-                                   "HEAD...@{upstream}" "--" "*.org")))
+                                   "HEAD...@{upstream}" "--" "*.org"
+                                   supertag-git-metadata-file)))
     (when (supertag-git--ok-p result)
       (let ((true-root (supertag-git--truename-dir root)) files)
         (dolist (rel (split-string (cdr result) "\0" t))
@@ -1008,7 +1067,7 @@ report as soon as none remains, and never touch the buffers themselves."
 
 (defun supertag-git--project-files (root changed deleted)
   "Queue CHANGED Org paths and orphan nodes from DELETED paths under ROOT."
-  (dolist (rel changed)
+  (dolist (rel (cl-remove-if-not (lambda (p) (string-suffix-p ".org" p)) changed))
     (let ((file (file-truename (expand-file-name rel root))))
       (when (and (supertag-git--ancestor-p root file) (file-exists-p file)
                  (not (member file supertag-git--conflicted-files)))
@@ -1024,6 +1083,7 @@ report as soon as none remains, and never touch the buffers themselves."
                          (file-relative-name file root))
               (revert-buffer t t t))))
         (supertag-async-enqueue file))))
+  (setq deleted (cl-remove-if-not (lambda (p) (string-suffix-p ".org" p)) deleted))
   (when deleted
     (supertag-sync--snapshot-set (supertag-sync--snapshot-build))
     (dolist (rel deleted)
@@ -1058,8 +1118,9 @@ merge that got through neither way.  Never silently does nothing."
           ((supertag-git--ok-p result)
            (supertag-git-sync--clear-merge-refused-warning)
            (condition-case err
-               (let ((delta (supertag-git--projection-delta root)))
-                 (supertag-git--project-files root (car delta) (cdr delta)))
+               (when (supertag-git-sync--metadata-prepare root)
+                 (let ((delta (supertag-git--projection-delta root)))
+                   (supertag-git--project-files root (car delta) (cdr delta))))
              (error (message "Git projection deferred to periodic sync: %s" (error-message-string err)))))
           (t
            ;; git refused the merge (typically a dirty tracked file we do not
@@ -1087,6 +1148,8 @@ Return nil while unsaved drafts or conflict markers remain."
       (dolist (file files)
         (unless (supertag-git-sync--auto-commit-path-p root (file-relative-name file root))
           (user-error "Local data cannot be staged; run supertag-git-setup: %s" file)))
+      (unless (supertag-git-sync--metadata-prepare root)
+        (user-error "%s" supertag-git-sync--metadata-error))
       (let ((supertag-git-sync--synchronous t))
         (supertag-git--stage-checked
          root (mapcar (lambda (f) (concat ":(literal)" (file-relative-name f root))) files)
@@ -1131,7 +1194,7 @@ Return nil while unsaved drafts or conflict markers remain."
 
 (defun supertag-git-sync--local-safety-summary (&optional root)
   "Describe Org transport's local pending changes in ROOT."
-  (format "Local Org changes: %s; pending commits: %d"
+  (format "Local Org/metadata changes: %s; pending commits: %d"
           (if (supertag-git-sync--owned-changes-p (or root supertag-git-sync--vault-root)) "yes" "no")
           supertag-git-sync--pending-push-count))
 
@@ -1183,13 +1246,19 @@ Return nil while unsaved drafts or conflict markers remain."
       (setq supertag-git-sync-mode nil)
       (user-error "Configure one Git root with supertag-git-setup first"))
     (setq supertag-git-sync--vault-root (plist-get status :repo-root)
-          supertag-git-sync--offline-warned nil supertag-git--conflicted-files nil)
+          supertag-git-sync--offline-warned nil supertag-git--conflicted-files nil
+          supertag-git-sync--metadata-error nil)
+    (when supertag-git-sync--metadata-unsubscribe
+      (funcall supertag-git-sync--metadata-unsubscribe))
+    (setq supertag-git-sync--metadata-unsubscribe
+          (supertag-subscribe :store-changed #'supertag-git-sync--metadata-changed))
     (add-hook 'after-save-hook #'supertag-git-sync--on-file-saved)
     (add-hook 'kill-emacs-query-functions #'supertag-git-sync--query-exit)
     (advice-add 'supertag-sync--process-single-file :around #'supertag-git-sync--skip-conflicted-file-advice)
     (add-function :after after-focus-change-function #'supertag-git-sync--maybe-focus-pull)
     (let ((files (supertag-git-sync--live-conflicted-org-files supertag-git-sync--vault-root)))
       (if files (supertag-git--pause files)
+        (supertag-git-sync--metadata-prepare supertag-git-sync--vault-root)
         (supertag-git--resume-timers)
         (unless supertag-git-sync--in-flight
           (setq supertag-git-sync--in-flight t)
@@ -1204,6 +1273,10 @@ Return nil while unsaved drafts or conflict markers remain."
   (supertag-git--cancel-timers)
   (when (timerp supertag-git-sync--exit-wait-timer) (cancel-timer supertag-git-sync--exit-wait-timer))
   (setq supertag-git-sync--exit-wait-timer nil)
+  (when supertag-git-sync--metadata-unsubscribe
+    (funcall supertag-git-sync--metadata-unsubscribe)
+    (setq supertag-git-sync--metadata-unsubscribe nil))
+  (setq supertag-git-sync--metadata-error nil)
   (remove-hook 'after-save-hook #'supertag-git-sync--on-file-saved)
   (remove-hook 'kill-emacs-query-functions #'supertag-git-sync--query-exit)
   (remove-function after-focus-change-function #'supertag-git-sync--maybe-focus-pull)
@@ -1213,7 +1286,8 @@ Return nil while unsaved drafts or conflict markers remain."
 ;;;###autoload
 (define-minor-mode supertag-git-sync-mode
   "Synchronize the sole Org Git root; resolve conflicts with smerge then sync-now.
-Only Org files and the root ignore file are staged.  Store remains local.
+Only Org, portable metadata and the root ignore file are staged.
+The full Store and runtime state remain local.
 Transport is asynchronous, serialized, and retries a rejected push once."
   :global t :lighter (:eval (supertag-git-sync--lighter)) :group 'supertag-git-sync
   (if supertag-git-sync-mode (supertag-git-sync--enable) (supertag-git-sync--disable)))

@@ -1,5 +1,32 @@
 * Changelog
 * [Unreleased]
+
+* [2.0.0] - 2026-10-02
+** Supertag V2: a new version line
+- Restart product version numbering at 2.0.0 for the Org-first V2 architecture.
+  Legacy 5.x/6.x release numbers belong to V1; this is not a code downgrade.
+- Use ordinary Org capture and properties; dedicated fields/capture/table
+  workflows are retired. Search, discovery and views use the local projection.
+- Product numbering is independent of database format versions: existing
+  persistence and migration version identifiers are unchanged.
+** Portable metadata in Git sync
+- Sync Tag definitions (stable IDs, names, aliases and inheritance) and
+  automation rules through =.supertag-metadata.eld= alongside Org files.
+- Export before committing and import before Org projection. Metadata-only
+  edits use the existing debounce; existing Git users need no new configuration.
+- Keep the full database, node paths/positions, indexes and runtime state local.
+- Persist a local reconciliation baseline; preserve concurrent local edits and
+  refuse conflicting entity edits, malformed snapshots and invalid Tag graphs.
+- Validate resolved metadata before continuing a Git merge; block pushing and
+  Org projection while metadata is invalid. Import does not execute rule actions.
+- Document trusted-repository requirements and first-contact identity conflicts
+  in the English and Chinese sync guides.
+** Package compilation
+- Eliminate byte/native compilation warnings in formal modules; exclude
+  experimental Tag Cards and development sources from package compilation.
+- Add compilation regressions and retire the invalid Stream window-return test.
+
+* Historical development notes (before the V2 release)
 ** Setup wizard retired
 - Removed =supertag-setup= and its private wizard helpers, its autoload, the
   menu wrapper/entry, and the wizard-specific child-process tests (VAULT-E).

@@ -1,5 +1,9 @@
 > 中文: [README_CN.md](README_CN.md)
 
+> **Version line:** Supertag V2 starts at `v2.0.0`. Earlier `v5.x`/`v6.x`
+> releases belong to the previous product line; the new number is not a code
+> downgrade. Database format versions are independent and unchanged.
+
 ## Where V2 came from
 
 I use Emacs and Org. In V1 I kept adding features to Supertag, and each one added a layer of
@@ -128,11 +132,11 @@ No API key, no database server to run; your existing Org files work as they are.
 
 ### Optional: Git backup and sync
 
-Git can auto-commit and push the Org text under your sync directory, and other machines pull
-and rebuild their own notes; a local commit is a version record, not a remote backup.
+Git can auto-commit and push Org text, Tag definitions (aliases and inheritance), and automation
+rules under your sync directory. Other machines pull and rebuild their own notes; a local commit is a version record, not a remote backup.
 
-The database, and the rules and configuration that live in it, do not travel with Git — keep a
-separate backup for them. On the first machine, `M-x supertag-git-setup` creates the repository;
+Portable metadata travels in `.supertag-metadata.eld`. The full database, machine-local paths,
+indexes, sync state, and other settings remain local — keep a separate database backup. On the first machine, `M-x supertag-git-setup` creates the repository;
 on the second, `M-x supertag-git-clone` clones and rebuilds; after that,
 `M-x supertag-git-sync-mode` turns on automatic sync (it is not persistent — enable it again
 after a restart, or put it in init). Manual sync is `M-x supertag-git-sync-now`. The full

@@ -2,6 +2,9 @@
 
 > English: [README.md](README.md)
 
+> **版本说明：** Supertag V2 从 `v2.0.0` 重新编号。此前的 `v5.x` / `v6.x`
+> 属于上一代产品，这次不是代码降级；数据库格式版本独立维护，不随产品版本重置。
+
 ## V2 是怎么来的
 
 我用 Emacs 和 Org。V1 里我给 Supertag 加了很多功能，每加一个，输入就多一层手续：先想这条笔记属于哪里，再决定标题、标签、要不要建节点。功能变多的同时，有一天我发现，自己开发系统的时间远远大于写笔记的时间，这跟初衷反过来了。
@@ -84,9 +87,9 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 
 ### 可选：Git 备份与同步
 
-可以用 Git 自动提交并推送同步目录里的 Org 文本，其他机器拉取后各自重建笔记；本地提交只是版本记录，不是远程备份。
+可以用 Git 自动提交并推送同步目录里的 Org 文本、Tag 定义（别名和继承）及自动化规则，其他机器拉取后各自重建笔记；本地提交只是版本记录，不是远程备份。
 
-数据库以及存在数据库里的规则、配置不随 Git 同步，要另留备份。第一台机器 `M-x supertag-git-setup` 建仓库，第二台 `M-x supertag-git-clone` 克隆并重建，之后用 `M-x supertag-git-sync-mode` 打开自动同步（不持久，重启后要再启用，或写进 init）；手动同步 `M-x supertag-git-sync-now`。完整机制与配置见 [doc/sync_cn.md](doc/sync_cn.md)。
+可移植元数据保存在根目录的 `.supertag-metadata.eld`；完整数据库、本机路径、索引、同步状态和其他配置不随 Git 同步，要另留备份。第一台机器 `M-x supertag-git-setup` 建仓库，第二台 `M-x supertag-git-clone` 克隆并重建，之后用 `M-x supertag-git-sync-mode` 打开自动同步（不持久，重启后要再启用，或写进 init）；手动同步 `M-x supertag-git-sync-now`。完整机制与配置见 [doc/sync_cn.md](doc/sync_cn.md)。
 
 ### 相似笔记
 
