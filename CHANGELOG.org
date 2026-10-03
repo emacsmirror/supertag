@@ -1,9 +1,9 @@
 * Changelog
 * [Unreleased]
 
-* [2.0.0] - 2026-10-02
+* [0.1.1] - 2026-10-02
 ** Supertag V2: a new version line
-- Restart product version numbering at 2.0.0 for the Org-first V2 architecture.
+- Restart product version numbering at 0.1.1 for the Org-first V2 architecture.
   Legacy 5.x/6.x release numbers belong to V1; this is not a code downgrade.
 - Use ordinary Org capture and properties; dedicated fields/capture/table
   workflows are retired. Search, discovery and views use the local projection.

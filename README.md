@@ -1,6 +1,6 @@
 > 中文: [README_CN.md](README_CN.md)
 
-> **Version line:** Supertag V2 starts at `v2.0.0`. Earlier `v5.x`/`v6.x`
+> **Version line:** Supertag V2 starts at `v0.1.1`. Earlier `v5.x`/`v6.x`
 > releases belong to the previous product line; the new number is not a code
 > downgrade. Database format versions are independent and unchanged.
 
