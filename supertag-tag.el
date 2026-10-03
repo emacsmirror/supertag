@@ -2014,7 +2014,9 @@ once per Tag per theme instead of once per match."
         (puthash key (supertag-view-style--compute-tag-face tag-id (cdr key))
                  supertag-view-style--face-cache))))
 
-(defun supertag-view-style--clear-face-cache ()
+(defun supertag-view-style--clear-face-cache (&rest _)
+  ;; 也挂在 `enable-theme-functions' 上，该 hook 会传 1 个参数(主题)；
+  ;; 参数忽略。原先声明为 0 参，导致每次启用主题都 wrong-number-of-arguments。
   "Drop every computed tag face.
 The lightness band depends on `background-mode', so a theme change must not
 leave the previous theme's colours cached."
