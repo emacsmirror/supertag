@@ -113,6 +113,12 @@ half-finished text does not get into history.
 
 ## Metadata merging and safety
 
+Existing rules using retired `:on-field-change` / `:update-field` vocabulary
+travel unchanged as historical data. They do not block export and are not
+automatically converted into property rules. Transport does not restore retired
+runtime behavior; new V2 rules still require supported triggers/actions, and
+unknown vocabulary is rejected with the rule ID.
+
 - The versioned file is plain data, never loaded/evaluated as code. Each entity occupies one
   deterministic line. Local creation/modification timestamps are excluded. Retired field
   definitions are not exported; Org properties continue to travel in Org text.

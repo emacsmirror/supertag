@@ -65,6 +65,41 @@
                (supertag-store-get-collection (car schema))))
     (supertag-git-metadata--sort records)))
 
+(defun supertag-git-metadata--validation-actions (actions)
+  "Copy ACTIONS for validation, admitting the retired :update-field name.
+This is only a validation adapter, not a migration or an executable rule."
+  (mapcar
+   (lambda (action)
+     (let ((copy (copy-tree action)))
+       (when (eq (plist-get copy :action) :update-field)
+         (setq copy (plist-put copy :action :update-property)))
+       (when (eq (plist-get copy :action) :case)
+         (dolist (branch (plist-get (plist-get copy :params) :branches))
+           (when (plist-member branch :actions)
+             (setf (plist-get branch :actions)
+                   (supertag-git-metadata--validation-actions
+                    (plist-get branch :actions))))))
+       copy))
+   actions))
+
+(defun supertag-git-metadata--validate-automation (entity)
+  "Validate portable ENTITY, preserving known retired rule vocabulary.
+Old rules are durable user data, even when V2 refuses to create them.
+Only a disposable copy uses current names to check the surrounding shape;
+the original trigger, actions and enabled flag travel unchanged."
+  (let ((copy (copy-tree entity)))
+    (when (eq (supertag-automation--normalize-trigger (plist-get copy :trigger))
+              :on-field-change)
+      (setq copy (plist-put copy :trigger :on-property-change)))
+    (setq copy (plist-put copy :actions
+                          (supertag-git-metadata--validation-actions
+                           (plist-get copy :actions))))
+    (condition-case err
+        (supertag--validate-automation-data copy)
+      (error (error "Metadata automation %s (%s): %s"
+                    (plist-get entity :id) (plist-get entity :name)
+                    (error-message-string err))))))
+
 (defun supertag-git-metadata--validate (records)
   "Validate RECORDS completely before any Store mutation."
   (unless (and (proper-list-p records) (supertag-git-metadata--data-p records))
@@ -102,7 +137,7 @@
                 (when-let* ((owner (gethash token tokens)))
                   (unless (equal owner id) (error "Metadata tag token collision: %s" token)))
                 (puthash token id tokens)))
-          (supertag--validate-automation-data entity))))
+          (supertag-git-metadata--validate-automation entity))))
     ;; Validate the complete incoming graph, not against the old local graph.
     (let ((done (make-hash-table :test 'equal)))
       (cl-labels ((visit (id trail)

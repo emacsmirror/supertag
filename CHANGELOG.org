@@ -1,5 +1,11 @@
 * Changelog
 * [Unreleased]
+** Preserve historical automation rules during metadata sync
+- Accept the known retired =:on-field-change= and =:update-field= vocabulary
+  when transporting persisted rules, including nested case actions. Preserve
+  the original data and enabled state without executing or migrating rules.
+- Keep V2 rule creation strict and reject unknown vocabulary with the rule ID.
+
 
 * [0.1.1] - 2026-10-02
 ** Supertag V2: a new version line

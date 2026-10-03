@@ -1319,3 +1319,39 @@ and still leaves `supertag-git-sync--in-flight' cleared."
                  (lambda (&rest _) (ert-fail "Import executed automation"))))
         (supertag-git-metadata-reconcile root))
       (should (equal "new" (plist-get (supertag-tag-get "tag") :name))))))
+
+(ert-deftest supertag-git-metadata-legacy-field-rules-roundtrip-unchanged ()
+  (supertag-git-test-with-vault
+    (dolist (trigger '(:on-field-change ":on-field-change" :on-change))
+      (let* ((id (format "legacy-%s-%s" (type-of trigger) trigger))
+             (rule (list :id id :name id :trigger trigger :enabled t
+                         :condition '(field-equals "status" "old")
+                         :actions '((:action :case :params
+                                     (:branches ((:default t :actions
+                                                  ((:action :update-field
+                                                    :params (:field "status" :value "new")))))))))))
+        ;; Existing persisted data, not creation of a new V2 rule.
+        (supertag-store-put-entity :automations id rule)))
+    (let ((before (supertag-git-metadata-snapshot)))
+      (cl-letf (((symbol-function 'supertag-rule-execute)
+                 (lambda (&rest _) (ert-fail "Import ran a legacy rule"))))
+        (supertag-git-metadata-reconcile root t)
+        (should (equal before (supertag-git-metadata-snapshot)))
+        (should (equal before (supertag-git-metadata-read root)))
+        (let ((supertag--store nil))
+          (supertag--ensure-store)
+          (supertag-git-metadata-reconcile root)
+          (should (equal before (supertag-git-metadata-snapshot))))))))
+
+(ert-deftest supertag-git-metadata-unknown-rules-still-refused-with-id ()
+  (supertag-git-test-with-vault
+    (dolist (rule '((:id "bad-trigger" :name "Bad trigger" :trigger :typo
+                    :actions ((:action :add-tag :params (:tag "x"))))
+                   (:id "bad-action" :name "Bad action" :trigger :on-field-change
+                    :actions ((:action :typo)))))
+      (let ((error (should-error (supertag-git-metadata--validate-automation rule))))
+        (should (string-match-p (plist-get rule :id) (error-message-string error)))))
+    (should-error
+     (supertag-automation-create
+      '(:name "Still retired" :trigger :on-field-change
+        :actions ((:action :update-field :params (:field "x" :value "y"))))))))
