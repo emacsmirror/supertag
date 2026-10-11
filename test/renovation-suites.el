@@ -19,6 +19,7 @@
     ("git" ("test/git-test.el" . "^supertag-git-"))
     ("semantic" ("test/semantic-test.el" . t))
     ("ai" ("test/ai-test.el" . t))
+    ("enrich" ("test/enrich-test.el" . t))
     ("embark" ("test/embark-test.el" . t))
     ("tag-merge-plan" ("test/tag-merge-plan-test.el" . t))
     ("tag-path" ("test/tag-path-hierarchy-test.el" . t))

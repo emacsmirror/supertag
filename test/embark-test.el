@@ -165,7 +165,7 @@
     (supertag-embark-setup)
     (should (eq (car embark-target-finders) #'supertag-embark-target-finder))
     (should (= 6 (length embark-keymap-alist)))
-    (dolist (spec '((node "RET" "v" "t" "r" "l" "d" "m" "M" "p" "x")
+    (dolist (spec '((node "RET" "v" "t" "r" "l" "d" "m" "M" "p" "x" "e")
                     (tag "RET" "r" "c" "R" "D") (link "RET" "d")
                     (concept "RET" "l") (node-reference "RET" "v" "t" "r") (region "RET" "l" "t" "p")))
       (let* ((type (intern (concat "supertag-" (symbol-name (car spec)))))

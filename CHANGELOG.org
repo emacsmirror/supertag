@@ -1,5 +1,23 @@
 * Changelog
 * [Unreleased]
+** Enrich a heading from its sources (experimental)
+- New command =supertag-enrich-at-point=, also =e= in the Embark node
+  actions, opens a review of the heading's own lines.  A line that links to
+  a source line (=[[chai:ID::LINE]]= or =[[file:PATH::LINE]]=), or a heading
+  whose =SOURCE= property does, as in notes exported by Chai, shows the
+  paragraph of the source it came from; the part the note already holds
+  stands out from the context it left behind.  No model is involved.
+- A line without a link is looked up in the Chai library and expanded by
+  Superchat in one request.  An expansion is kept only when it comes with a
+  quote that is found word for word in the retrieved passage.  The lookup
+  tries the heading's own source, then a book visible in the frame, then
+  books being read, then the whole library.
+- Each card shows =ORIGIN=, =ENRICH=, =QUOTE= and =FROM= rows.  =i= inserts
+  the text below the line, =r= replaces the line, =I= inserts every result
+  after one confirmation, =RET= opens the source at the quoted words.
+  Written text ends with a link to its source.  A line edited since the
+  review is refused, and the Org file is never saved for you.
+- Chai and Superchat are optional; neither is required to load Supertag.
 ** A heading gets its creation time when it gets a tag
 - Adding a tag to a heading that has no =CREATED= property now writes one,
   on the line right below =:ID:=, as in =:CREATED: 2026-10-09 17:47=.

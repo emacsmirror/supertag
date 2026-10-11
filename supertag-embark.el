@@ -5,7 +5,7 @@
 ;; Dependencies: cl-lib, org, org-element, subr-x, supertag-node,
 ;; supertag-service-org, supertag-link,
 ;; supertag-view-node, supertag-view-stream, supertag-concept,
-;; supertag-ai; optional embark registration via with-eval-after-load.
+;; supertag-ai, supertag-enrich; optional embark registration via with-eval-after-load.
 ;; Tag member writes use supertag-tag through the loaded feature closure.
 
 ;;; Commentary:
@@ -24,6 +24,7 @@
 (require 'supertag-view-stream)
 (require 'supertag-concept)
 (require 'supertag-ai)
+(require 'supertag-enrich)
 
 (declare-function supertag-service-org-remove-tag "supertag-tag"
                   (node-id tag-name &optional repair-projection))
@@ -260,6 +261,11 @@ Delegates to the single physical-link writer in supertag-link."
   (supertag-embark--require-target :node)
   (supertag-ai-extract-properties))
 
+(defun supertag-embark-node-enrich (&optional _target)
+  "Run `supertag-enrich-at-point' for the node containing point."
+  (supertag-embark--require-target :node)
+  (supertag-enrich-at-point))
+
 (defun supertag-embark-node-promote (&optional _target)
   "Run `supertag-promote' for the node containing point."
   (supertag-embark--require-target :node)
@@ -398,7 +404,8 @@ Delegates to the single physical-link writer in supertag-link."
   "m" #'supertag-embark-node-move
   "M" #'supertag-embark-node-move-and-link
   "p" #'supertag-embark-node-promote
-  "x" #'supertag-embark-node-extract-properties)
+  "x" #'supertag-embark-node-extract-properties
+  "e" #'supertag-embark-node-enrich)
 
 (defvar-keymap supertag-embark-tag-map
   "RET" #'supertag-embark-tag-view
