@@ -4,7 +4,7 @@
 (defconst supertag-renovation-default
   '("contract" "compat" "identity" "vault" "view-framework" "node-view-extra" "automation-actions" "extractor" "persistence-restore" "multi-instance" "mention-extra" "saved-projection" "property-automation"
     "move" "promote" "stream" "find-node" "add-link" "discovery"
-    "query-links" "query-tag-completion" "legacy-query-compat" "migrate" "storage-format" "property-consumers" "tag-change" "named-link-query" "tag-path" "tag-merge-plan" "tag-manager" "embark" "ai" "semantic" "git" "compiler"))
+    "query-links" "query-tag-completion" "legacy-query-compat" "migrate" "storage-format" "property-consumers" "property-hint" "tag-change" "named-link-query" "tag-path" "tag-merge-plan" "tag-manager" "embark" "ai" "semantic" "git" "compiler"))
 (defconst supertag-renovation-suites
   '(("compiler" ("test/compiler-regression-test.el" . "^supertag-compiler-"))
     ("multi-instance" ("test/multi-instance-test.el" . t))
@@ -35,6 +35,7 @@
      ("test/keyword-line-affiliation-test.el" . "^supertag-keyword-line-")
      ("test/created-property-test.el" . "^supertag-created-property-"))
     ("property-consumers" ("test/property-consumers-test.el" . t))
+    ("property-hint" ("test/property-hint-test.el" . t))
     ("migrate-fields" ("test/migrate-fields-test.el" . t))
     ("vault" ("test/vault-test.el" . "^supertag-vault-"))
     ("view-framework" ("test/view-framework-test.el" . t)

@@ -289,6 +289,7 @@ is in [doc/customization.md](doc/customization.md).
 - Initial setup: [doc/setup.md](doc/setup.md)
 - Automation rules: [doc/automation.md](doc/automation.md)
 - Query syntax: [doc/query.md](doc/query.md)
+- Property hints and completion: [doc/properties.md](doc/properties.md)
 - Sync and multiple machines: [doc/sync.md](doc/sync.md)
 - Migration (package rename and V1→V2 upgrade): [doc/migration.md](doc/migration.md)
 - Unlinked mentions, behaviour bounds: [doc/mentions.md](doc/mentions.md)

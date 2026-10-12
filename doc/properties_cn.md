@@ -1,0 +1,86 @@
+# 属性提示与补全
+
+> English: [properties.md](properties.md)
+
+属性是 Org 抽屉里的纯文本。抽屉本身不说明一个键只能取固定几个值还是可以随便填，也不说明
+有哪些值。Supertag 在你打字的地方，也就是抽屉里，回答这两个问题。
+
+## 闭合键与开放键
+
+**闭合键**的允许值按 Org 的方式声明：一个不带 `:ETC` 的 `KEY_ALL` 属性。Org 从三处读取
+声明，离得近的优先：
+
+```org
+:PROPERTIES:
+:STATUS_ALL: todo doing done
+:END:
+```
+
+```org
+#+PROPERTY: STATUS_ALL todo doing done
+```
+
+```elisp
+(setq org-global-properties '(("STATUS_ALL" . "todo doing done")))
+```
+
+其余的键都是**开放键**。以 `:ETC` 结尾的声明也算开放：那些值只是建议。
+
+闭合是一种约定。在抽屉里打字不会被拦住；提示会指出不在选项内的值，仅此而已。Org 自己的
+`org-set-property`（`C-c C-x p`）则要求必须从声明的选项里选。
+
+Supertag 自己不保存任何声明。一个键是否闭合只由 Org 的 `KEY_ALL` 决定，数据库里不记录。
+
+## 提示
+
+光标在属性行的任意位置时，回显区显示键名、类型和选项：
+
+| 行 | 提示 |
+|---|---|
+| `:STATUS: done` | `STATUS · closed · todo doing done` |
+| `:STATUS: active` | `STATUS · closed · todo doing done · active is not an option` |
+| `:COUNTRY: 日本` | `COUNTRY · open · 日本 \| 法国` |
+| `:WEBSITE: https://…` | `WEBSITE · open` |
+
+- 闭合键按声明的顺序列出选项。
+- 开放键列出库里用过不止一次的值，用得多的在前，最多
+  `supertag-property-hint-max-values` 个。值从不重复的键只显示类型。
+- 由程序维护的键（`ID`、`CREATED`、`SUPERTAG_*`，以及
+  `supertag-property-system-key-regexp` 匹配的其余键）不提示。
+
+提示是一个 ElDoc 来源，所以 Supertag 会在 Org buffer 里打开 ElDoc。光标不在属性行上时，
+回显区不受影响。
+
+## 补全
+
+候选由 Corfu 显示。
+
+**值。** 在 `:KEY: ` 之后，闭合键按声明顺序给出选项。开放键给出所有用过的值，用得多的
+在前，每个值旁边是使用它的节点数。
+
+**键。** 在抽屉里新起一行，打 `:` 和开头几个字母，从用过的键里补全。与当前标题有相同
+标签的节点用过的键排在前面。每个候选旁显示类型和使用它的节点数，如
+`STATUS  closed · 15`。抽屉里已有的键和由程序维护的键不出现。选中一个键后会补上 `: `，
+并接着给出它的值。
+
+**空值。** 一次编辑之后，空值会立刻给出候选：打完 `:KEY:` 后的空格、把值删掉、或选中
+一个键。光标只是经过空值时什么都不显示。这只针对闭合键和有重复值的开放键；网址这类自由
+文本的键不会弹出。如果你用自己的命令编辑，把它们加进
+`supertag-property-popup-commands`。
+
+## 同一个键在不同标签下含义不同时
+
+一个抽屉里只有一个 `STATUS`，而 `STATUS_ALL` 按文件或子树生效，不按标签。如果书和任务都
+需要状态而选项不同，就给它们不同的键名，比如 `BOOK_STATUS` 和 `STATUS`，再分别声明。
+Supertag 不从前缀推导任何东西，它只是一个名字。
+
+## 关闭
+
+在 Supertag 启动前把 `supertag-property-hints` 设为 nil。只想在某个 buffer 里开关，用
+`M-x supertag-property-mode`。
+
+## 写配置时
+
+`supertag-property-usage` 返回库里用了哪些键、各用了多少次、有哪些值；
+`supertag-property-names` 返回所有属性名；`supertag-property-key-info` 返回光标处某个键
+的类型和取值。请用这几个函数，不要直接读节点集合。

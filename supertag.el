@@ -30,7 +30,8 @@
 
 ;; Commands: supertag-init; startup/exit/Org hooks assemble existing owner entrypoints.
 ;; Dependencies: cl-lib, org, org-id, subr-x, supertag-vault, ht, supertag-core-store,
-;; supertag-query, supertag-core-persistence, supertag-node, supertag-tag, supertag-automation,
+;; supertag-query, supertag-core-persistence, supertag-node, supertag-tag, supertag-property,
+;; supertag-automation,
 ;; supertag-services-sync, supertag-link, supertag-mention, supertag-api, supertag-discovery,
 ;; supertag-view-framework, supertag-concept, supertag-view-node, supertag-view-stream,
 ;; supertag-ai, supertag-semantic, supertag-embark, supertag-migrate. Lazy Doctor and Git
@@ -112,6 +113,7 @@ Files without the selected persistent identity remain ordinary Org files."
 ;; --- Entity Operations (ops) ---
 (require 'supertag-node)
 (require 'supertag-tag)
+(require 'supertag-property)
 
 ;; --- Automation System ---
 (require 'supertag-automation)
@@ -212,12 +214,14 @@ This function loads all necessary components and sets up the environment."
 
     ;; Step 11: Enable completion globally
     (global-supertag-ui-completion-mode 1)
+    (global-supertag-property-mode 1)
 
     ;; Step 12: Enable completion in already-open org buffers
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
         (when (derived-mode-p 'org-mode)
-          (supertag-ui-completion-mode 1))))
+          (supertag-ui-completion-mode 1)
+          (supertag-property-enable))))
 
     ;; Step 13: Enable runtime config guard after successful init
     (setq supertag--initialized t)

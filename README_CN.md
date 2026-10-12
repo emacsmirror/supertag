@@ -213,6 +213,7 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 - 初始配置：[doc/setup_cn.md](doc/setup_cn.md)
 - 自动化规则：[doc/automation_cn.md](doc/automation_cn.md)
 - 查询语法：[doc/query_cn.md](doc/query_cn.md)
+- 属性提示与补全：[doc/properties_cn.md](doc/properties_cn.md)
 - 同步与多机：[doc/sync_cn.md](doc/sync_cn.md)
 - 迁移（包改名与 V1→V2 升级）：[doc/migration_cn.md](doc/migration_cn.md)
 - 未链接提及的行为边界：[doc/mentions_cn.md](doc/mentions_cn.md)

@@ -1,5 +1,25 @@
 * Changelog
 * [Unreleased]
+** Property hints and completion in drawers
+- With point on a property line, the echo area now names the key's type
+  and its options, as in =STATUS · closed · todo doing done=.  A closed key
+  has allowed values declared the Org way (=STATUS_ALL= without =:ETC=, in
+  a drawer, a =#+PROPERTY:= line or =org-global-properties=); every other
+  key is open and lists the values used more than once.  A value outside
+  the options of a closed key is pointed out and never blocked.
+- Typing a value completes from the declared options or from the values
+  the vault already uses.  Typing =:= and a key on a new drawer line
+  completes from the keys in use, each shown with its type and the number
+  of nodes using it; accepting one continues with its values.  An empty
+  value offers its candidates right after an edit.
+- This turns on ElDoc in Org buffers.  New options:
+  =supertag-property-hints= (nil turns all of it off),
+  =supertag-property-hint-max-values=, =supertag-property-popup-commands=,
+  =supertag-property-system-key-regexp=.  See =doc/properties.md=.
+- New Lisp entry points =supertag-property-usage=,
+  =supertag-property-names= and =supertag-property-key-info= report which
+  keys and values the vault uses, so a configuration need not read the
+  Store's node collection itself.
 ** Enrich a heading from its sources (experimental)
 - New command =supertag-enrich-at-point=, also =e= in the Embark node
   actions, opens a review of the heading's own lines.  A line that links to

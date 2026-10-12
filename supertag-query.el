@@ -4,7 +4,7 @@
 ;; supertag-query-describe-syntax. Lisp entry points include
 ;; supertag-note-query-read-node, supertag-query-node-detail,
 ;; supertag-query-node-ids and supertag-query-evaluate.
-;; Dependencies: cl-lib, subr-x, supertag-core-store, org, org-table.
+;; Dependencies: cl-lib, subr-x, supertag-core-store, supertag-property, org, org-table.
 ;; Formula grammar, evaluation, rollups and dataset/entity read adapters live here.
 ;; Node, Tag and Relation ordinary providers load on demand; Store owns physical indexes;
 ;; Text/date/file projection scans are local reads; Tag indexes remain derived.
@@ -16,6 +16,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'supertag-core-store)
+(require 'supertag-property)
 (require 'org)
 (require 'org-table)
 
@@ -1675,12 +1676,7 @@ reimplement parsing or execution."
 
 (defun supertag-query-block--live-property-names ()
   "Return property names present in node projections."
-  (let (names)
-    (maphash (lambda (_id node)
-               (cl-loop for (key _value) on (plist-get node :properties) by #'cddr
-                        do (push (string-remove-prefix ":" (format "%s" key)) names)))
-             (supertag-store-get-collection :nodes))
-    (sort (delete-dups names) #'string<)))
+  (supertag-property-names))
 
 (defun supertag-query-block--read-tag-name ()
   "Read a tag name, completing against live tags when available."
