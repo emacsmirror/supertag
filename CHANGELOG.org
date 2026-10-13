@@ -1,5 +1,20 @@
 * Changelog
 * [Unreleased]
+** Streams of any query, and substreams
+- =M-x supertag-view-stream-all= opens the stream of every node, and
+  =M-x supertag-view-stream-find= the stream of any query condition.
+- In a Stream, =f= adds one more condition and opens that substream; =u=
+  opens the stream it was narrowed from.  A tag Stream still includes the
+  tag's descendants after it is narrowed.
+- A Stream shows its newest =supertag-view-stream-max-nodes= nodes (default
+  200) and says so in the header line; =m= shows twice as many.  Drawing all
+  1,900 nodes of one notes directory took 4.4 s, the newest 200 take 0.12 s.
+- A Stream lists its nodes newest first.  Set =supertag-view-stream-order=
+  to =oldest-first= for the earlier order.
+- The creation-day label above a Stream's nodes is an uppercase filled label
+  (=supertag-view-stream-date-face=), so days and node titles no longer look
+  alike.
+- A stored node without an ID no longer stops a Stream from opening.
 ** Summary panels (experimental)
 - A summary is the information panel of one tag.  =supertag-summary-design=
   asks for a tag, a name and one sentence saying what you want to see; a

@@ -18,7 +18,9 @@
   "Run BODY with an isolated Store and subscriber table."
   (declare (indent 0))
   `(let ((supertag--store nil)
-         (supertag--subscribers (make-hash-table :test 'equal)))
+         (supertag--subscribers (make-hash-table :test 'equal))
+         ;; Most tests state their expected rows oldest first.
+         (supertag-view-stream-order 'oldest-first))
      (supertag--ensure-store)
      (supertag-view-stream--register-view)
      ,@body))
@@ -109,10 +111,10 @@
                   (should (derived-mode-p 'supertag-view-stream-mode))
                   (should (equal (plist-get supertag-view--instance :view-id)
                                  'stream))
-                  (should (= (how-many "^2025-11-02 Sun$"
+                  (should (= (how-many "^ 2025-11-02 SUN $"
                                        (point-min) (point-max))
                              1))
-                  (should (= (how-many "^2025-11-03 Mon$"
+                  (should (= (how-many "^ 2025-11-03 MON $"
                                        (point-min) (point-max))
                              1))
                   (should-not (string-match-p "07:14" (buffer-string)))
@@ -135,8 +137,8 @@
                                               (buffer-string)))
                   (goto-char (point-min))
                   (should (eq (get-text-property (point) 'font-lock-face)
-                              'org-level-3))
-                  (search-forward "2025-11-02 Sun")
+                              'supertag-view-stream-date-face))
+                  (search-forward " 2025-11-02 SUN ")
                   (search-forward "Package archives")
                   (should (equal (buffer-substring-no-properties
                                   (line-beginning-position)
@@ -155,7 +157,7 @@
                                   (1- (point)) 'supertag-entity-id)
                                  "node-1"))
                   (search-forward "Second package")
-                  (search-forward "2025-11-03 Mon")
+                  (search-forward "2025-11-03 MON")
                   (search-forward "Next day"))))))
       (supertag-view-stream-test--kill-buffers))))
 
@@ -534,6 +536,140 @@
                                                    :input)
                                         :node-id))))))
       (supertag-view-stream-test--kill-buffers))))
+
+;;; Substreams: every node, a query, narrowing and widening
+
+(defun supertag-view-stream-test--put-substream-fixture ()
+  "Put three nodes: two tagged diary, one of them done, and one untagged."
+  (supertag-view-stream-test--put-tag "diary")
+  (supertag-view-stream-test--put-tag "diary/happy" "diary")
+  (supertag-store-put-entity
+   :nodes "node-1"
+   (list :id "node-1" :type :node :title "First" :tags '("diary")
+         :properties '(:STATUS "done") :created-at '(0 10 0 0)))
+  (supertag-store-put-entity
+   :nodes "node-2"
+   (list :id "node-2" :type :node :title "Second" :tags '("diary/happy")
+         :properties '(:STATUS "todo") :created-at '(0 20 0 0)))
+  (supertag-store-put-entity
+   :nodes "node-3"
+   (list :id "node-3" :type :node :title "Third" :tags nil
+         :properties '(:STATUS "done") :created-at '(0 30 0 0))))
+
+(defun supertag-view-stream-test--ids (input)
+  "Return the ordered node IDs of the stream state for INPUT."
+  (mapcar (lambda (node) (plist-get node :id))
+          (plist-get (supertag-view-stream--build-state input) :nodes)))
+
+(ert-deftest supertag-view-stream-without-a-condition-holds-every-node ()
+  (supertag-view-stream-test--with-store
+    (supertag-view-stream-test--put-substream-fixture)
+    (should (equal (supertag-view-stream-test--ids nil)
+                   '("node-1" "node-2" "node-3")))
+    (should (equal (supertag-view-stream--buffer-name nil)
+                   "*Supertag Stream*"))
+    (should (equal (supertag-view-stream--label nil) "all"))))
+
+(ert-deftest supertag-view-stream-query-selects-a-substream ()
+  (supertag-view-stream-test--with-store
+    (supertag-view-stream-test--put-substream-fixture)
+    (should (equal (supertag-view-stream-test--ids
+                    '(:query (property "STATUS" "done")))
+                   '("node-1" "node-3")))))
+
+(ert-deftest supertag-view-stream-query-narrows-a-tag-and-its-descendants ()
+  "A tag keeps the nodes of the tags that extend it when a query narrows it."
+  (supertag-view-stream-test--with-store
+    (supertag-view-stream-test--put-substream-fixture)
+    (should (equal (supertag-view-stream-test--ids '(:tag "diary"))
+                   '("node-1" "node-2")))
+    (should (equal (supertag-view-stream-test--ids
+                    '(:tag "diary" :query (property "STATUS" "todo")))
+                   '("node-2")))
+    (should (equal (supertag-view-stream-test--ids
+                    '(:tag "diary" :query (property "STATUS" "done")))
+                   '("node-1")))))
+
+(ert-deftest supertag-view-stream-narrowing-adds-one-condition-and-up-removes-it ()
+  (let* ((tagged '(:tag "diary"))
+         (one (supertag-view-stream--narrowed tagged '(term "a")))
+         (two (supertag-view-stream--narrowed one '(term "b")))
+         (three (supertag-view-stream--narrowed two '(term "c"))))
+    (should (equal one '(:tag "diary" :query (term "a"))))
+    (should (equal two '(:tag "diary" :query (and (term "a") (term "b")))))
+    (should (equal three
+                   '(:tag "diary"
+                     :query (and (term "a") (term "b") (term "c")))))
+    (should (equal (supertag-view-stream--widened three) two))
+    (should (equal (supertag-view-stream--widened two) one))
+    (should (equal (supertag-view-stream--widened one) tagged))
+    (should (equal (supertag-view-stream--widened tagged) nil))
+    (should (eq (supertag-view-stream--widened nil) 'none))
+    (should (equal (supertag-view-stream--narrowed nil '(term "a"))
+                   '(:query (term "a"))))
+    (should (equal (supertag-view-stream--widened '(:query (term "a")))
+                   nil))))
+
+(ert-deftest supertag-view-stream-find-and-up-open-the-substream-and-its-parent ()
+  (supertag-view-stream-test--with-store
+    (unwind-protect
+        (save-window-excursion
+          (supertag-view-stream-test--put-substream-fixture)
+          (let ((main (supertag-view-stream "diary")))
+            (with-current-buffer main
+              (should (equal header-line-format " #diary   2 nodes ")))
+            (let ((sub (with-current-buffer main
+                         (cl-letf (((symbol-function
+                                     'supertag-query-block--build-condition)
+                                    (lambda ()
+                                      '(property "STATUS" "todo"))))
+                           (supertag-view-stream-find)))))
+              (should-not (eq sub main))
+              (with-current-buffer sub
+                (should (equal header-line-format
+                               " #diary  (property \"STATUS\" \"todo\")   1 nodes "))
+                (should (string-match-p "Second" (buffer-string)))
+                (should-not (string-match-p "First" (buffer-string)))
+                (should (eq (supertag-view-stream-up) main))))
+            (let ((all (with-current-buffer main (supertag-view-stream-up))))
+              (should (equal (buffer-name all) "*Supertag Stream*"))
+              (with-current-buffer all
+                (should (equal header-line-format " all   3 nodes "))
+                (should-error (supertag-view-stream-up)
+                              :type 'user-error)))))
+      (supertag-view-stream-test--kill-buffers))))
+
+(ert-deftest supertag-view-stream-shows-the-newest-nodes-up-to-the-limit ()
+  (supertag-view-stream-test--with-store
+    (unwind-protect
+        (save-window-excursion
+          (supertag-view-stream-test--put-substream-fixture)
+          (let ((supertag-view-stream-max-nodes 2))
+            (should (equal (supertag-view-stream-test--ids nil)
+                           '("node-2" "node-3")))
+            (should (equal (supertag-view-stream-test--ids '(:limit nil))
+                           '("node-1" "node-2" "node-3")))
+            (let ((main (supertag-view-stream-all)))
+              (with-current-buffer main
+                (should (equal header-line-format
+                               " all   newest 2 of 3 nodes "))
+                (should (eq (supertag-view-stream-more) main))
+                (should (equal header-line-format " all   3 nodes "))
+                (should-error (supertag-view-stream-more)
+                              :type 'user-error)))))
+      (supertag-view-stream-test--kill-buffers))))
+
+(ert-deftest supertag-view-stream-default-order-is-newest-first ()
+  (should (eq (default-value 'supertag-view-stream-order) 'newest-first))
+  (supertag-view-stream-test--with-store
+    (supertag-view-stream-test--put-substream-fixture)
+    (supertag-view-stream-test--put-node "undated" "Undated" nil "" nil)
+    (let ((supertag-view-stream-order 'newest-first))
+      (should (equal (supertag-view-stream-test--ids '(:limit nil))
+                     '("node-3" "node-2" "node-1" "undated")))
+      (let ((supertag-view-stream-max-nodes 2))
+        (should (equal (supertag-view-stream-test--ids nil)
+                       '("node-3" "node-2")))))))
 
 (provide 'test-view-stream)
 

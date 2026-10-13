@@ -10,7 +10,9 @@
 ;; Commands: supertag-view-stream-mode, supertag-view-stream-edit-mode, supertag-view-stream,
 ;; supertag-view-stream-next-node, supertag-view-stream-previous-node,
 ;; supertag-view-stream-open-node-view, supertag-view-stream-edit,
-;; supertag-view-stream-edit-finish, supertag-view-stream-edit-abort, supertag-view-stream-quit.
+;; supertag-view-stream-edit-finish, supertag-view-stream-edit-abort, supertag-view-stream-quit,
+;; supertag-view-stream-all, supertag-view-stream-find, supertag-view-stream-up,
+;; supertag-view-stream-more.
 ;; Dependencies: cl-lib, org, subr-x, time-date, supertag-node, supertag-services-sync,
 ;; supertag-service-org, supertag-view-framework, supertag-view-node.
 ;;; Code:
@@ -27,6 +29,8 @@
 
 ;; Tag rows print a Tag's name, never its opaque stable ID.
 (declare-function supertag-tag--name "supertag-tag" (tag-id))
+(declare-function supertag-query-node-ids "supertag-query" (query-sexp))
+(declare-function supertag-query-block--build-condition "supertag-query" ())
 
 (defgroup supertag-view-stream nil
   "Chronological title views for tagged nodes."
@@ -37,6 +41,28 @@
 The body is the node's stored `:content'; no source file is opened.  A
 truncated body ends its last line with `…'.  nil means no limit."
   :type '(choice (const :tag "No limit" nil) (integer :tag "Lines"))
+  :group 'supertag-view-stream)
+
+(defcustom supertag-view-stream-max-nodes 200
+  "Maximum nodes a Stream shows; the newest are kept.
+Drawing a Stream costs time for each node, and a Stream is drawn again
+whenever the Store changes.  The header line says how many nodes were left
+out, and `supertag-view-stream-more' doubles the number for one Stream.
+nil means no limit."
+  :type '(choice (const :tag "No limit" nil) (integer :tag "Nodes"))
+  :group 'supertag-view-stream)
+
+(defcustom supertag-view-stream-order 'newest-first
+  "Order of the nodes in a Stream, by creation time.
+`newest-first' puts the latest node at the top, `oldest-first' at the
+bottom.  Nodes without a creation time come last either way."
+  :type '(choice (const :tag "Newest first" newest-first)
+                 (const :tag "Oldest first" oldest-first))
+  :group 'supertag-view-stream)
+
+(defface supertag-view-stream-date-face
+  '((t :inherit supertag-view-chip2))
+  "Face for the creation-day label above a Stream's nodes."
   :group 'supertag-view-stream)
 
 (defface supertag-view-stream-title-face
@@ -75,6 +101,9 @@ truncated body ends its last line with `…'.  nil means no limit."
     (define-key map (kbd "p") #'supertag-view-stream-previous-node)
     (define-key map (kbd "e") #'supertag-view-stream-edit)
     (define-key map (kbd "v") #'supertag-view-stream-open-node-view)
+    (define-key map (kbd "f") #'supertag-view-stream-find)
+    (define-key map (kbd "u") #'supertag-view-stream-up)
+    (define-key map (kbd "m") #'supertag-view-stream-more)
     (define-key map (kbd "g") #'supertag-view-refresh)
     (define-key map (kbd "q") #'supertag-view-stream-quit)
     map)
@@ -123,16 +152,62 @@ truncated body ends its last line with `…'.  nil means no limit."
      (right-time nil)
      (t (string< left-id right-id)))))
 
+(defun supertag-view-stream--node-newer-p (left right)
+  "Return non-nil when LEFT should appear before RIGHT, newest first.
+Nodes without a creation time still come after every dated node."
+  (let ((left-time (supertag-view-stream--created-time left))
+        (right-time (supertag-view-stream--created-time right)))
+    (if (and left-time right-time
+             (not (time-equal-p left-time right-time)))
+        (time-less-p right-time left-time)
+      (supertag-view-stream--node-before-p left right))))
+
+(defun supertag-view-stream--input-ids (input)
+  "Return the IDs of the nodes INPUT selects, in no particular order.
+INPUT carries `:tag', `:query', both or neither.  A tag selects its nodes
+and those of every tag that extends it; a query narrows that set; an INPUT
+with neither selects every node."
+  (let ((tag (plist-get input :tag))
+        (query (plist-get input :query)))
+    (cond
+     ((and tag query)
+      (let ((wanted (make-hash-table :test 'equal)))
+        (dolist (id (supertag-query-node-ids query))
+          (puthash id t wanted))
+        (cl-remove-if-not (lambda (id) (gethash id wanted))
+                          (supertag-view-api-nodes-by-tag tag t))))
+     (tag (supertag-view-api-nodes-by-tag tag t))
+     (query (supertag-query-node-ids query))
+     ;; A Store can hold a record under an empty key; it is no node.
+     (t (cl-remove-if-not
+         (lambda (id) (and (stringp id) (not (string-empty-p id))))
+         (supertag-view-api-list-entity-ids '(:type :nodes)))))))
+
 (defun supertag-view-stream--build-state (input)
   "Build data-only Stream state from Runtime INPUT."
   (let ((tag (plist-get input :tag)))
-    (unless (and (stringp tag) (not (string-empty-p tag)))
+    (when (and (plist-member input :tag)
+               (not (and (stringp tag) (not (string-empty-p tag)))))
       (user-error "Stream View requires a tag"))
-    (let* ((node-ids (supertag-view-api-nodes-by-tag tag t))
-           (nodes (supertag-view-api-get-entities :nodes node-ids)))
+    (let* ((newest-first (eq supertag-view-stream-order 'newest-first))
+           (nodes (cl-stable-sort
+                   (copy-sequence
+                    (supertag-view-api-get-entities
+                     :nodes (supertag-view-stream--input-ids input)))
+                   (if newest-first
+                       #'supertag-view-stream--node-newer-p
+                     #'supertag-view-stream--node-before-p)))
+           (total (length nodes))
+           (limit (if (plist-member input :limit)
+                      (plist-get input :limit)
+                    supertag-view-stream-max-nodes)))
       (list :tag tag
-            :nodes (cl-stable-sort (copy-sequence nodes)
-                                   #'supertag-view-stream--node-before-p)))))
+            :query (plist-get input :query)
+            :total total
+            :nodes (cond
+                    ((not (and (integerp limit) (> total limit))) nodes)
+                    (newest-first (cl-subseq nodes 0 (max limit 0)))
+                    (t (last nodes (max limit 0))))))))
 
 (defun supertag-view-stream--node-title (node)
   "Return the display title for NODE."
@@ -221,7 +296,7 @@ overlay and every row command cover the title and the body together."
           :content (string-join (cons title body) "\n"))))
 
 (defun supertag-view-stream--group-nodes-by-date (nodes)
-  "Return chronological date groups for sorted NODES."
+  "Return date groups for sorted NODES, in the order NODES are in."
   (let (groups)
     (dolist (node nodes)
       (let ((date (or (supertag-view-stream--node-date node) "No date")))
@@ -232,14 +307,28 @@ overlay and every row command cover the title and the body together."
               (cons (car group) (nreverse (cdr group))))
             (nreverse groups))))
 
+(defun supertag-view-stream--label (input)
+  "Return the text that names the stream INPUT selects.
+INPUT is a Runtime input or a state; both carry `:tag' and `:query'."
+  (let ((tag (plist-get input :tag))
+        (query (plist-get input :query)))
+    (cond
+     ((and tag query)
+      (format "#%s  %S" (supertag-view-stream--tag-label tag) query))
+     (tag (concat "#" (supertag-view-stream--tag-label tag)))
+     (query (format "%S" query))
+     (t "all"))))
+
 (defun supertag-view-stream--date-group-widget (group)
   "Return the Widget tree for date GROUP."
   (list :type :stack
         :spacing 0
         :children
         (cons (list :type :text
-                    :content (propertize (car group)
-                                         'font-lock-face 'org-level-3))
+                    :content (propertize
+                              (concat " " (upcase (car group)) " ")
+                              'font-lock-face
+                              'supertag-view-stream-date-face))
               (mapcar #'supertag-view-stream--node-widget (cdr group)))))
 
 (defun supertag-view-stream--widgets (state)
@@ -251,9 +340,8 @@ overlay and every row command cover the title and the body together."
                     (mapcar #'supertag-view-stream--date-group-widget
                             (supertag-view-stream--group-nodes-by-date nodes))))
       (list (list :type :text
-                  :content (format "No nodes for #%s."
-                                   (supertag-view-stream--tag-label
-                                    (plist-get state :tag))))))))
+                  :content (format "No nodes for %s."
+                                   (supertag-view-stream--label state)))))))
 
 (defun supertag-view-stream--add-entity-properties ()
   "Copy stable Widget keys to the shared entity ID property."
@@ -276,14 +364,24 @@ overlay and every row command cover the title and the body together."
    (supertag-view-stream--widgets state) state)
   (supertag-view-stream--add-entity-properties)
   (setq header-line-format
-        (format " #%s   %d nodes "
-                (supertag-view-stream--tag-label (plist-get state :tag))
-                (length (plist-get state :nodes))))
+        (let ((shown (length (plist-get state :nodes)))
+              (total (or (plist-get state :total) 0)))
+          (if (> total shown)
+              (format " %s   newest %d of %d nodes "
+                      (supertag-view-stream--label state) shown total)
+            (format " %s   %d nodes "
+                    (supertag-view-stream--label state) shown))))
   (font-lock-flush))
 
 (defun supertag-view-stream--buffer-name (input)
   "Return a Stream buffer name for INPUT."
-  (format "*Supertag Stream: %s*" (plist-get input :tag)))
+  (let ((tag (plist-get input :tag))
+        (query (plist-get input :query)))
+    (cond
+     ((and tag query) (format "*Supertag Stream: %s %S*" tag query))
+     (tag (format "*Supertag Stream: %s*" tag))
+     (query (format "*Supertag Stream: %S*" query))
+     (t "*Supertag Stream*"))))
 
 (defun supertag-view-stream--resolve-main-buffer ()
   "Return the current Stream buffer, or nil outside Stream View."
@@ -392,17 +490,15 @@ overlay and every row command cover the title and the body together."
      :restore-selection-fn #'supertag-view-stream--restore-selection
      :display-action '(display-buffer-same-window))))
 
-;;;###autoload
-(defun supertag-view-stream (&optional tag)
-  "Open a title Stream for TAG and all `:extends` descendants."
-  (interactive
-   (list (plist-get (supertag-view--read-tag) :value)))
-  (unless (and (stringp tag) (not (string-empty-p tag)))
-    (user-error "Stream View requires a tag"))
+;;; Opening a stream and its substreams
+
+(defun supertag-view-stream--open (input &optional origin)
+  "Open the stream INPUT selects and return its buffer.
+ORIGIN is the window configuration `supertag-view-stream-quit' restores;
+it defaults to the current one."
   (supertag-view-stream--register-view)
-  (let* ((origin (current-window-configuration))
-         (buffer (supertag-view-open
-                  'stream (list :tag tag))))
+  (let* ((origin (or origin (current-window-configuration)))
+         (buffer (supertag-view-open 'stream input)))
     (pop-to-buffer buffer)
     (with-current-buffer buffer
       (setq-local supertag-view-stream--origin-window-configuration origin))
@@ -410,6 +506,114 @@ overlay and every row command cover the title and the body together."
       (when id
         (supertag-view-stream--select-node buffer id)))
     buffer))
+
+;;;###autoload
+(defun supertag-view-stream (&optional tag)
+  "Open a title Stream for TAG and all `:extends` descendants."
+  (interactive
+   (list (plist-get (supertag-view--read-tag) :value)))
+  (unless (and (stringp tag) (not (string-empty-p tag)))
+    (user-error "Stream View requires a tag"))
+  (supertag-view-stream--open (list :tag tag)))
+
+;;;###autoload
+(defun supertag-view-stream-all ()
+  "Open the stream of every node."
+  (interactive)
+  (supertag-view-stream--open nil))
+
+(defun supertag-view-stream--narrowed (input condition)
+  "Return INPUT narrowed by query CONDITION.
+Conditions accumulate in one top-level `and', so each narrowing adds one
+and `supertag-view-stream-up' removes the last."
+  (let* ((query (plist-get input :query))
+         (query (cond
+                 ((null query) condition)
+                 ((eq (car-safe query) 'and) (append query (list condition)))
+                 (t (list 'and query condition))))
+         (tag (plist-get input :tag)))
+    (append (and tag (list :tag tag)) (list :query query))))
+
+(defun supertag-view-stream--widened (input)
+  "Return the input of the stream INPUT was narrowed from, or `none'.
+Dropping the last condition gives the parent; a stream of one tag came
+from the stream of every node, which has no parent."
+  (let ((tag (plist-get input :tag))
+        (query (plist-get input :query)))
+    (cond
+     ((and (eq (car-safe query) 'and) (cddr query))
+      (let ((kept (butlast (cdr query))))
+        (append (and tag (list :tag tag))
+                (list :query (if (cdr kept) (cons 'and kept) (car kept))))))
+     (query (and tag (list :tag tag)))
+     (tag nil)
+     (t 'none))))
+
+(defun supertag-view-stream--read-condition (raw)
+  "Read one query condition; RAW non-nil reads it as typed text."
+  (if raw
+      (let ((text (read-string "Query: ")))
+        (condition-case nil
+            (car (read-from-string text))
+          (error (user-error "Not a query: %s" text))))
+    (supertag-query-block--build-condition)))
+
+(defun supertag-view-stream-more ()
+  "Show twice as many nodes in the current Stream."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
+  (interactive)
+  (supertag-view--require-context 'stream)
+  (let* ((main (or (supertag-view-stream--resolve-main-buffer)
+                   (user-error "Not in a Stream View")))
+         (instance (buffer-local-value 'supertag-view--instance main))
+         (state (plist-get instance :state))
+         (shown (length (plist-get state :nodes))))
+    (unless (> (or (plist-get state :total) 0) shown)
+      (user-error "Every node of this stream is shown"))
+    (supertag-view-stream--open
+     (plist-put (copy-sequence (plist-get instance :input))
+                :limit (* 2 (max shown 1)))
+     (buffer-local-value 'supertag-view-stream--origin-window-configuration
+                         main))))
+
+;;;###autoload
+(defun supertag-view-stream-find (&optional raw)
+  "Narrow to the nodes that also match one more query condition.
+In a Stream this opens a substream of the stream at hand; elsewhere it
+opens a substream of every node.  The condition is built from prompts;
+with prefix argument RAW it is typed as a query expression."
+  (interactive "P")
+  (let* ((main (supertag-view-stream--resolve-main-buffer))
+         (input (and main
+                     (plist-get (buffer-local-value 'supertag-view--instance
+                                                    main)
+                                :input)))
+         (origin (and main
+                      (buffer-local-value
+                       'supertag-view-stream--origin-window-configuration
+                       main)))
+         (condition (supertag-view-stream--read-condition raw)))
+    (supertag-view-stream--open
+     (supertag-view-stream--narrowed input condition) origin)))
+
+(defun supertag-view-stream-up ()
+  "Open the stream the current one was narrowed from."
+  (declare (completion (lambda (_command buffer)
+                         (supertag-view--context-p buffer 'stream))))
+  (interactive)
+  (supertag-view--require-context 'stream)
+  (let* ((main (or (supertag-view-stream--resolve-main-buffer)
+                   (user-error "Not in a Stream View")))
+         (parent (supertag-view-stream--widened
+                  (plist-get (buffer-local-value 'supertag-view--instance main)
+                             :input))))
+    (when (eq parent 'none)
+      (user-error "This is the stream of every node"))
+    (supertag-view-stream--open
+     parent
+     (buffer-local-value 'supertag-view-stream--origin-window-configuration
+                         main))))
 
 (defun supertag-view-stream--move (delta)
   "Move DELTA nodes in the current Stream."

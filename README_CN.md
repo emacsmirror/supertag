@@ -61,6 +61,8 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 
 `M-x supertag-view-stream` 按标签（含子标签）把节点排开，适合顺着一个主题重读。
 
+`M-x supertag-view-stream-all` 是全部节点的流，`M-x supertag-view-stream-find` 是任意查询的流。在流里按 `f` 再加一个条件，打开对应的子流；按 `u` 回到它的上一级。节点按从新到旧排列（`supertag-view-stream-order`）。很长的流只显示最新的 200 个节点（`supertag-view-stream-max-nodes`），按 `m` 显示两倍。
+
 `M-x supertag-discovery` 则是随机翻出一批笔记的完整正文；想找某个话题时按 `s` 搜全库，看中的引用能插回出发的那条笔记。
 
 回顾的时机由你决定，Supertag 不做复习安排。
@@ -177,6 +179,7 @@ promote 的定制是核心理念，配置只有两层：模板数据，以及把
 | 记录与整理 | `supertag-tag-rename`、`supertag-delete-tag-everywhere` | 重命名标签；在整库删除标签 |
 | 查看与回顾 | `supertag-view-node` | 节点页：未链接提及、相似笔记等都在这里 |
 | 查看与回顾 | `supertag-view-stream` | 按标签（含子标签）把节点排开 |
+| 查看与回顾 | `supertag-view-stream-all` / `supertag-view-stream-find` | 全部节点的流 / 任意查询的流；`f` 收窄，`u` 返回 |
 | 查看与回顾 | `supertag-discovery` | 随机翻出笔记；`s` 搜索全库，看中的引用能插回出发的笔记 |
 | 查看与回顾 | `supertag-mention-mode` | 在正文里标出已知概念的标题与别名，只提示，不写链接 |
 | 查询与自动化 | `supertag-add-query-block`、`supertag-query-build`、`supertag-query-describe-syntax` | 插入查询块；交互式拼查询；查看语法速查 |
