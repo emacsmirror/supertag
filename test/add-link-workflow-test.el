@@ -453,7 +453,9 @@
   (let* ((tmp (file-truename (make-temp-file "supertag-template-stale-vault-" t)))
          (configured (expand-file-name "configured" tmp))
          (stale (expand-file-name "stale" tmp))
-         (program (expand-file-name invocation-name invocation-directory)))
+         (program (expand-file-name invocation-name invocation-directory))
+         (deps (split-string (or (getenv "SUPERTAG_DEPS_LOADPATH") "")
+                             path-separator t)))
     (unwind-protect
         (progn
           (make-directory configured)
@@ -469,6 +471,9 @@
                         (setq user-emacs-directory ,tmp
                               package-enable-at-startup nil)
                         (package-initialize)
+                        ;; This child loads the whole package, TextUI
+                        ;; included, which need not be an installed package.
+                        (dolist (dir ',deps) (add-to-list 'load-path dir))
                         (add-to-list 'load-path ,supertag-add-link-test--root)
                         (setq supertag-sync-directories (list ,configured)
                               supertag-sync-directories-mode 'vaults
