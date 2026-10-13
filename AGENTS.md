@@ -16,6 +16,18 @@ layers, which form rules are enforced by code and which are only prompted,
 actions, and the safety boundary. A rule it marks Enforced or Accepted has
 a test in `test/summary-test.el`; keep it that way.
 
+## `doc/` is for user documentation only
+
+`doc/` holds the documents a Supertag user reads: setup, query, sync,
+automation, properties and the like, each with its `_cn` translation. It is
+not a place for documents produced while developing: task briefs, work
+reports, investigation notes, benchmarks, plans (`brief-*.md`,
+`report-*.md`, and anything of that kind).
+
+Write such a file under `.scratch/` instead, never in `doc/`. `.scratch/` is
+ignored by git, so nothing there is committed; the briefs and reports that
+were once in `doc/` by mistake are now in `.scratch/briefs/`.
+
 ## Tests: a child Emacs that cannot find TextUI
 
 On this machine TextUI is the sibling checkout `../textui`, not an installed
