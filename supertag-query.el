@@ -282,6 +282,29 @@ FILTER is a function receiving an automation plist and returning non-nil."
      (supertag-relation-named-document-link-p relation relation-name))
    (supertag-query-relations-from node-id :reference :document-link)))
 
+(defun supertag-property-links-to (link)
+  "Return the IDs of the nodes with a property value that links to LINK.
+LINK is \"TYPE:PATH\" as written in the Org link.  A stored link that goes
+on to a place inside the same target, PATH::SEARCH, matches as well.  For
+the node link types id and denote the references of the node are read, so
+this also finds links written in the body."
+  (let* ((colon (string-search ":" link))
+         (type (substring link 0 colon))
+         (path (substring link (1+ colon)))
+         (inside (concat path "::"))
+         matches)
+    (dolist (pair (supertag-query-nodes (lambda (_id data) data)))
+      (when (if (member type '("id" "denote"))
+                (member path (plist-get (cdr pair) :ref-to))
+              (cl-some (lambda (stored)
+                         (and (equal (plist-get stored :type) type)
+                              (let ((there (plist-get stored :path)))
+                                (or (equal there path)
+                                    (string-prefix-p inside there)))))
+                       (plist-get (cdr pair) :property-links)))
+        (push (car pair) matches)))
+    (nreverse matches)))
+
 (defun supertag-query-named-links-to (node-id &optional relation-name)
   "Return Org named links to NODE-ID, optionally matching RELATION-NAME."
   (cl-remove-if-not
@@ -528,6 +551,13 @@ This function is compatible with the old query syntax."
       `(:type property
               :key ,(supertag-query-normalize-property-key (car args))
               :value ,(cadr args)))
+     ((eq op 'links-to)
+      (unless (and (= (length args) 1)
+                   (stringp (car args))
+                   (string-match-p "\\`[^:]+:." (car args)))
+        (error "'links-to' operator expects one \"TYPE:PATH\" string, but got %S"
+               args))
+      `(:type links-to :link ,(car args)))
      ((eq op 'after)
       (unless (= (length args) 1)
         (error "'after' operator expects one date string argument, but got %S" args))
@@ -679,6 +709,9 @@ This uses indexes for O(1) lookups instead of O(n) table scans."
                        (equal (plist-get properties key) value))
               (push (car pair) matches))))
         (nreverse matches)))
+
+     ((eq ast-type 'links-to)
+      (supertag-property-links-to (plist-get ast :link)))
 
      ((eq ast-type 'after)
       (let ((query-time (supertag-query--resolve-date-string (plist-get ast :date))))
@@ -1643,6 +1676,7 @@ reimplement parsing or execution."
 (defconst supertag-query-block--operators
   '(("tag"     . "(tag NAME) -- nodes carrying tag NAME")
     ("property" . "(property KEY VALUE) -- nodes whose property KEY equals VALUE")
+    ("links-to" . "(links-to LINK) -- nodes with a property value linking to LINK")
     ("term"    . "(term WORD) -- full-text search over title/content")
     ("after"   . "(after DATE) -- nodes dated after DATE")
     ("before"  . "(before DATE) -- nodes dated before DATE")
@@ -1738,6 +1772,8 @@ COMBINATOR is \"and\"/\"or\" (a string) or the symbol `and'/`or'."
       ("property" (let ((key (supertag-query-block--read-property-name)))
                     (supertag-query-block--make-condition
                      op key (read-string (format "Value for property `%s': " key)))))
+      ("links-to" (supertag-query-block--make-condition
+                   op (read-string "Link (TYPE:PATH): ")))
       ("term" (supertag-query-block--make-condition op (read-string "Search term: ")))
       ("after" (supertag-query-block--make-condition
                 op (supertag-query-block--read-date "After date")))
@@ -1816,6 +1852,7 @@ Leaf conditions
   (tag NAME)             nodes carrying tag NAME
   (PROPERTY VALUE)       custom Org property equals VALUE, e.g. (status \"doing\")
   (property KEY VALUE)   explicit property lookup, including reserved names
+  (links-to LINK)        a property value holds a link to LINK, e.g. \"chai:BOOK\"
   (todo STATE...)        Org TODO state; multiple states match any (case-sensitive)
   (priority VALUE...)    Org priority, e.g. (priority \"A\")
   (term WORD)            substring search over node title/content

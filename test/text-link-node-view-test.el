@@ -204,6 +204,12 @@
 (ert-deftest supertag-text-link-after-save-async-edits-are-independent ()
   "The daily save queue independently adds, retargets and removes both kinds."
   (supertag-text-link-test--with-vault
+    ;; A link in a property value is a reference of its own, so the drawer's
+    ;; link goes first: this test follows the links in the body.
+    (with-current-buffer (find-file-noselect source-file)
+      (goto-char (point-min))
+      (re-search-forward "^:SUPPORTS:.*\n")
+      (replace-match ""))
     (supertag-text-link-test--save-body-through-async
      source-file "[[id:target-id]]\n[[supports:target-id]]\n")
     (should (= 1 (length (supertag-query-ordinary-references-from "source-id"))))

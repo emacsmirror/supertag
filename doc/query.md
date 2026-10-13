@@ -91,6 +91,7 @@ are not projected yet and cannot be found.
 |---|---|
 | `(tag NAME)` | nodes carrying a tag |
 | `(property KEY VALUE)` | Org property; keys are case-insensitive, values match exactly. `field` is an older input alias; new queries should use `property` |
+| `(links-to LINK)` | nodes with a property value that links to `LINK`, written `"TYPE:PATH"`; see [properties.md](properties.md) |
 | `(term WORD)` | case-insensitive substring match in title and body |
 | `(todo STATE...)` | the heading's Org TODO keyword; case-sensitive, several states match any. `task` is an older spelling and still works |
 | `(priority PRIORITY...)` | the heading's priority; several values match any |

@@ -1,5 +1,18 @@
 * Changelog
 * [Unreleased]
+** Links in property values
+- A link to a node written in a property value, such as
+  =:SEE: [[id:ID][Title]]=, is now a reference of the node and shows in the
+  target's backlinks.  Org reads a property value as plain text, so these
+  links were not seen before.
+- Links of other types are recorded when the type is listed in the new
+  option =supertag-property-link-types=, for example =("chai" "https")=.
+  One value can hold several links.
+- The new query condition =(links-to "TYPE:PATH")= and the function
+  =supertag-property-links-to= find the nodes that link to a target.
+- Existing notes are read again when next saved; run
+  =supertag-reindex-org= after changing the option.
+
 ** Property hints and completion in drawers
 - With point on a property line, the echo area now names the key's type
   and its options, as in =STATUS · closed · todo doing done=.  A closed key

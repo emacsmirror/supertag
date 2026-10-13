@@ -363,9 +363,20 @@ this option can extend that contract, but cannot remove Document Facts."
 
 (defconst supertag-sync-document-fact-hash-props
   '(:title :raw-value :olp :tags :todo :priority :scheduled :deadline
-    :tag-occurrences :unresolved-tags :content :properties :ref-to :named-links :file
+    :tag-occurrences :unresolved-tags :content :properties :ref-to :named-links :property-links :file
     :level :position :pos :parent-id :link-type)
   "Document Projection properties that must participate in node hashes.")
+
+(defcustom supertag-property-link-types nil
+  "Org link types to record when a property value holds them.
+A link to a node in a property value, such as [[id:ID][Title]], is always a
+reference of the node and needs no entry here.  This option is for links
+that point outside the vault: with (\"chai\" \"https\") a value holding
+[[chai:BOOK][Title]] is kept as one of the node's property links, which the
+query condition (links-to \"chai:BOOK\") and `supertag-property-links-to'
+read.  Reindex the vault after changing it."
+  :type '(repeat string)
+  :group 'supertag)
 
 (defcustom supertag-sync-smart-detection-enabled nil
   "If non-nil, enable smart detection to skip unchanged files during sync.
@@ -2095,6 +2106,29 @@ are intentionally excluded."
   (when elements
     (org-element-map elements 'link #'supertag--link-reference-target)))
 
+(defun supertag--property-value-links (properties)
+  "Return the bracket links written in the values of PROPERTIES.
+PROPERTIES is the plist `supertag--parse-properties' returns.  Org reads a
+property value as plain text, so the links are found in the string.  Each
+is (:key KEY :type TYPE :path PATH :description DESCRIPTION), in order."
+  (let (links)
+    (cl-loop
+     for (key value) on properties by #'cddr
+     when (stringp value)
+     do (let ((position 0))
+          (while (string-match org-link-bracket-re value position)
+            (setq position (match-end 0))
+            (let ((target (match-string 1 value))
+                  (description (match-string 2 value)))
+              (when (string-match "\\`\\([[:alnum:]][-+._[:alnum:]]*\\):\\(.+\\)\\'"
+                                  target)
+                (push (list :key (substring (symbol-name key) 1)
+                            :type (match-string 1 target)
+                            :path (match-string 2 target)
+                            :description description)
+                      links))))))
+    (nreverse links)))
+
 (defun supertag--link-named-relation (link)
   "Return (:relation-name NAME :target-id ID) for named node LINK, or nil."
   (unless (supertag--generated-reference-context-p link)
@@ -2494,18 +2528,33 @@ Returns: :content (string)."
 (defun supertag-extractor--refs (headline _file _ctx)
   "Extract source-authored link references from a headline's direct content.
 Only extracts from non-headline children and excludes generated Org views.
-Returns: :ref-to (list of UUID strings)."
+Links in the values of the heading's own properties count as well: one to a
+node is a reference like a link in the body, one whose type is in
+`supertag-property-link-types' is kept as a property link.
+Returns: :ref-to (list of UUID strings), :named-links and :property-links."
   (let* ((contents-begin (org-element-property :contents-begin headline))
-         (refs-to (supertag--extract-refs
-                   (when contents-begin
-                     (cl-remove-if (lambda (el) (eq (org-element-type el) 'headline))
-                                   (org-element-contents headline))))))
-    (list :ref-to (cl-delete-duplicates refs-to :test #'equal)
-          :named-links
-          (supertag--extract-named-links
-           (when contents-begin
-             (cl-remove-if (lambda (el) (eq (org-element-type el) 'headline))
-                           (org-element-contents headline)))))))
+         (own (when contents-begin
+                (cl-remove-if (lambda (el) (eq (org-element-type el) 'headline))
+                              (org-element-contents headline))))
+         (in-values (supertag--property-value-links
+                     (supertag--parse-properties headline)))
+         refs named kept)
+    (dolist (link in-values)
+      (let ((type (plist-get link :type))
+            (path (plist-get link :path)))
+        (cond
+         ((member type '("id" "denote")) (push path refs))
+         ((supertag-text-link-relation-type-p type)
+          (push (list :relation-name type :target-id path) named))
+         ((member type supertag-property-link-types) (push link kept)))))
+    (append
+     (list :ref-to (cl-delete-duplicates
+                    (append (supertag--extract-refs own) (nreverse refs))
+                    :test #'equal)
+           :named-links
+           (delete-dups (append (supertag--extract-named-links own)
+                                (nreverse named))))
+     (when kept (list :property-links (nreverse kept))))))
 
 (defun supertag-extractor--setup-defaults ()
   "Register all built-in extractors with default priorities."

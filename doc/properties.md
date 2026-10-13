@@ -76,6 +76,43 @@ shows nothing. This applies to closed keys and to open keys with repeated values
 free-text key such as a URL never pops up. If you edit with commands of your own, add them
 to `supertag-property-popup-commands`.
 
+## Links in property values
+
+Org reads a property value as plain text, so a link written there is not a link to Org.
+Supertag reads it anyway:
+
+```org
+:PROPERTIES:
+:ID:        a1b2
+:SEE:       [[id:c3d4][Another note]]
+:REFERENCE: [[chai:20261006T164701][A book]] [[chai:20260927T052022][Another book]]
+:END:
+```
+
+- A link to a node (`id:`, `denote:`) is a reference of the node, the same as one written
+  in the body. It appears in the target's backlinks, with nothing to configure.
+- A link of any other type is recorded when its type is listed in
+  `supertag-property-link-types`:
+
+  ```elisp
+  (setq supertag-property-link-types '("chai" "https"))
+  ```
+
+  One value can hold several links; each is recorded with the key it was written under.
+
+To find the nodes that link to something, use the query condition `links-to`, or
+`supertag-property-links-to` from Lisp:
+
+```elisp
+(links-to "chai:20261006T164701")
+```
+
+A link that goes on to a place inside the same target, such as
+`chai:20261006T164701::42`, is found by the shorter form as well.
+
+Notes already in the vault are read again when they are next saved. After changing
+`supertag-property-link-types`, run `M-x supertag-reindex-org` to pick up the rest.
+
 ## When a key means different things under different tags
 
 A drawer holds one `STATUS`, and `STATUS_ALL` applies to a file or a subtree, not to a tag.

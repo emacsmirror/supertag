@@ -68,6 +68,40 @@ Supertag 自己不保存任何声明。一个键是否闭合只由 Org 的 `KEY_
 文本的键不会弹出。如果你用自己的命令编辑，把它们加进
 `supertag-property-popup-commands`。
 
+## 属性值里的链接
+
+Org 把属性值当作纯文本，写在里面的链接对 Org 来说不是链接。Supertag 仍然会读它：
+
+```org
+:PROPERTIES:
+:ID:        a1b2
+:SEE:       [[id:c3d4][另一条笔记]]
+:REFERENCE: [[chai:20261006T164701][一本书]] [[chai:20260927T052022][另一本书]]
+:END:
+```
+
+- 指向节点的链接（`id:`、`denote:`）是这个节点的一条引用，和写在正文里的一样，会出现在
+  目标的反向链接里，不需要任何配置。
+- 其它类型的链接，只有类型列在 `supertag-property-link-types` 里才会被记录：
+
+  ```elisp
+  (setq supertag-property-link-types '("chai" "https"))
+  ```
+
+  一个值里可以有多个链接，每个都连同它所在的键一起记录。
+
+要找出哪些节点链接到某个目标，用查询条件 `links-to`，或在 Lisp 里调
+`supertag-property-links-to`：
+
+```elisp
+(links-to "chai:20261006T164701")
+```
+
+链接如果还指向目标内部的某个位置，如 `chai:20261006T164701::42`，用较短的写法也能查到。
+
+库里已有的笔记在下次保存时会重新读取。改了 `supertag-property-link-types` 之后，运行
+`M-x supertag-reindex-org` 让其余笔记生效。
+
 ## 同一个键在不同标签下含义不同时
 
 一个抽屉里只有一个 `STATUS`，而 `STATUS_ALL` 按文件或子树生效，不按标签。如果书和任务都

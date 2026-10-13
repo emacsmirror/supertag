@@ -82,6 +82,7 @@ Lisp 入口：
 |---|---|
 | `(tag NAME)` | 带某标签的节点 |
 | `(property KEY VALUE)` | Org 属性；键不区分大小写，值精确匹配。`field` 是旧的输入别名，新查询请用 `property` |
+| `(links-to LINK)` | 属性值里有链接指向 `LINK` 的节点，写成 `"类型:路径"`；见 [properties_cn.md](properties_cn.md) |
 | `(term WORD)` | 在标题和正文里做不分大小写的子串匹配 |
 | `(todo STATE...)` | 标题的 Org TODO 关键字；大小写敏感，多个任一匹配。`task` 是旧写法，仍可用 |
 | `(priority PRIORITY...)` | 标题的优先级，多个任一匹配 |
