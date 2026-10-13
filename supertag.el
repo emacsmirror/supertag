@@ -163,6 +163,21 @@ Files without the selected persistent identity remain ordinary Org files."
 (autoload 'supertag-git-sync-now "supertag-git"
   "Synchronize the current Supertag Git vault immediately." t)
 
+;; --- Summary panels (optional) ---
+;; Loaded on first use: the panels need TextUI's widgets, which the rest of
+;; the package does not load.
+(autoload 'supertag-summary-design "supertag-summary"
+  "Have the model lay out a summary panel over the notes of a tag." t)
+(autoload 'supertag-summary-revise "supertag-summary"
+  "Have the model change a summary panel as one sentence asks." t)
+(autoload 'supertag-summary-open "supertag-summary"
+  "Show a summary panel, drawn from the notes as they are now." t)
+(autoload 'supertag-summary-component "supertag-summary"
+  "Have the model write a component that summary panels can call." t)
+(autoload 'supertag-summary-rekey-tag "supertag-summary"
+  "Point every kept panel made for one Tag ID at another.")
+(add-hook 'supertag-tag-rekey-functions #'supertag-summary-rekey-tag)
+
 ;; --- Initialization ---
 (defun supertag-init ()
  "Initialize the Supertag system.

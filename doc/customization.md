@@ -13,6 +13,7 @@ source files; where a long default is elided, the source is authoritative.
 - [Database and backups](#database-and-backups)
 - [Views and palettes](#views-and-palettes)
 - [Tag display and completion](#tag-display-and-completion)
+- [Property hints and completion](#property-hints-and-completion)
 - [Links and context backlinks](#links-and-context-backlinks)
 - [Concepts and unlinked mentions](#concepts-and-unlinked-mentions)
 - [Creation templates and capture](#creation-templates-and-capture)
@@ -133,10 +134,16 @@ Source: [`../supertag-core-persistence.el`](../supertag-core-persistence.el),
 | `supertag-view-tag-cards-favorite-groups` | `nil` | tag IDs shown as favourite groups in Tag Cards |
 | `supertag-view-tag-cards-manifesto` | `'("MAKE ROOM" "FOR THE UNEXPECTED." "Tags are fuel. The connections are computed for you: click any + row to narrow.")` | the three lines under the Tag Cards masthead |
 | `supertag-view-tag-cards-palette` | `'neon` | buffer-local palette for Tag Cards |
+| `supertag-summary-directory` | `nil` | where summary panels are kept, one `NAME.org.summary` each; nil means `summaries/` under the sync directory (so Git carries them), or under the data directory when none is set |
+| `supertag-summary-palette` | `'paper` | buffer-local palette for summary panels |
+| `supertag-summary-skip-file-regexp` | `"archive\\.org\\'"` | notes in files whose name matches are left out of every summary panel; nil leaves nothing out |
+| `supertag-summary-timeout` | `180` | seconds a model may take to write a panel or a component |
+| `supertag-summary-run-timeout` | `20` | seconds a panel's layout code may run in its child Emacs before it is stopped |
 
 Source: [`../supertag-view-framework.el`](../supertag-view-framework.el),
 [`../supertag-view-node.el`](../supertag-view-node.el),
-[`../supertag-view-tag-cards.el`](../supertag-view-tag-cards.el)
+[`../supertag-view-tag-cards.el`](../supertag-view-tag-cards.el),
+[`../supertag-summary.el`](../supertag-summary.el)
 
 ## Tag display and completion
 
@@ -151,6 +158,17 @@ Source: [`../supertag-view-framework.el`](../supertag-view-framework.el),
 | `supertag-view-style-unresolved-tag-face-properties` | `'(:inherit shadow)` | face properties for unregistered tokens (inherit shadow by default) |
 
 Source: [`../supertag-tag.el`](../supertag-tag.el)
+
+## Property hints and completion
+
+| Option | Default | Effect |
+|---|---|---|
+| `supertag-property-hints` | `t` | show the type and options of the property key at point and complete keys and values in drawers; this also enables ElDoc in Org buffers |
+| `supertag-property-hint-max-values` | `6` | how many used values the hint lists for an open key |
+| `supertag-property-popup-commands` | self-insert, delete and Corfu insert commands | commands after which an empty property value offers its candidates; add your own editing commands here |
+| `supertag-property-system-key-regexp` | `ID`, `CUSTOM_ID`, `CATEGORY`, `CREATED`, `REF_ID`, `SOURCE_FILE_PATH`, `ARCHIVE_*`, `EXPORT_*`, `SUPERTAG_*` | keys that programs maintain: no hint, never a candidate |
+
+Source: [`../supertag-property.el`](../supertag-property.el). Behaviour: [properties.md](properties.md).
 
 ## Links and context backlinks
 

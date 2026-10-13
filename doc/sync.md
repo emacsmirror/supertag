@@ -75,8 +75,10 @@ its own database file; Org text and portable metadata pass through Git.
 
 The auto-commit scope is narrow:
 
-- **Committed**: `*.org` recursively under the sync directory, plus the repository root's
-  `.gitignore` and `.supertag-metadata.eld`.
+- **Committed**: `*.org` and `*.org.summary` recursively under the sync directory, plus the
+  repository root's `.gitignore` and `.supertag-metadata.eld`. A `NAME.org.summary` file keeps
+  one summary panel or one of its components (see [`../summary.md`](../summary.md)); it is
+  data, never parsed as notes and never evaluated.
 - **Not committed**: the data directory, `supertag-db.el`, the backup directory, the sync
   state file, the presence file, `.gitattributes`; Emacs lock/auto-save/backup files
   (`.#note.org`, `#note.org#`, `note.org~`); ordinary attachments are outside the auto-commit
@@ -106,7 +108,8 @@ half-finished text does not get into history.
   committed first, then the pull proceeds.
 - **Conflicts**: an unresolved Org or metadata conflict pauses auto-sync, opening the first conflicted
   file in `smerge-mode` (conflicted files are not imported into the database). Resolve, save,
-  then run `M-x supertag-git-sync-now` to continue.
+  then run `M-x supertag-git-sync-now` to continue. A summary panel changed on two machines
+  conflicts the same way; until it is resolved the panel shows a notice instead of its layout.
 - **Bounds**: there is no promise of lossless arbitrary concurrency. Two machines editing the
   same text hand it to Git; if Git cannot merge, the sync stops and waits for you. If you would
   rather not handle conflicts, stagger your edits and sync often.

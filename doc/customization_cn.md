@@ -10,6 +10,7 @@
 - [数据库与备份](#数据库与备份)
 - [视图与调色板](#视图与调色板)
 - [标签显示与补全](#标签显示与补全)
+- [属性提示与补全](#属性提示与补全)
 - [链接与上下文反链](#链接与上下文反链)
 - [概念与未链接提及](#概念与未链接提及)
 - [创建预设与采集](#创建预设与采集)
@@ -108,8 +109,13 @@
 | `supertag-view-tag-cards-favorite-groups` | `nil` | Tag Cards 里作为收藏分组显示的标签 ID |
 | `supertag-view-tag-cards-manifesto` | `'("MAKE ROOM" "FOR THE UNEXPECTED." "Tags are fuel. The connections are computed for you: click any + row to narrow.")` | Tag Cards 报头下的三行文字 |
 | `supertag-view-tag-cards-palette` | `'neon` | Tag Cards 的局部调色板 |
+| `supertag-summary-directory` | `nil` | summary 面板存放的目录，一块面板一个 `名字.org.summary`；nil 表示同步目录下的 `summaries/`（这样会随 Git 同步），没有同步目录时放在数据目录下 |
+| `supertag-summary-palette` | `'paper` | summary 面板的局部调色板 |
+| `supertag-summary-skip-file-regexp` | `"archive\\.org\\'"` | 文件名匹配的笔记不进入任何 summary 面板；nil 表示不排除 |
+| `supertag-summary-timeout` | `180` | 模型编写一块面板或一个组件最多用多少秒 |
+| `supertag-summary-run-timeout` | `20` | 面板的版式代码在子进程 Emacs 里最多运行多少秒，超时即停止 |
 
-源码：[`../supertag-view-framework.el`](../supertag-view-framework.el)、[`../supertag-view-node.el`](../supertag-view-node.el)、[`../supertag-view-tag-cards.el`](../supertag-view-tag-cards.el)
+源码：[`../supertag-view-framework.el`](../supertag-view-framework.el)、[`../supertag-view-node.el`](../supertag-view-node.el)、[`../supertag-view-tag-cards.el`](../supertag-view-tag-cards.el)、[`../supertag-summary.el`](../supertag-summary.el)
 
 ## 标签显示与补全
 
@@ -124,6 +130,17 @@
 | `supertag-view-style-unresolved-tag-face-properties` | `'(:inherit shadow)` | 未注册 token 的面属性（默认继承 shadow） |
 
 源码：[`../supertag-tag.el`](../supertag-tag.el)
+
+## 属性提示与补全
+
+| 选项 | 默认值 | 作用 |
+|---|---|---|
+| `supertag-property-hints` | `t` | 光标在属性行上时提示键的类型和选项，并在抽屉里补全键和值；同时会在 Org buffer 里打开 ElDoc |
+| `supertag-property-hint-max-values` | `6` | 提示里开放键最多列出多少个用过的值 |
+| `supertag-property-popup-commands` | 输入、删除和 Corfu 插入类命令 | 这些命令之后，空的属性值会弹出候选；自己的编辑命令可以加进来 |
+| `supertag-property-system-key-regexp` | `ID`、`CUSTOM_ID`、`CATEGORY`、`CREATED`、`REF_ID`、`SOURCE_FILE_PATH`、`ARCHIVE_*`、`EXPORT_*`、`SUPERTAG_*` | 由程序维护的键：不提示，也不进候选 |
+
+源码：[`../supertag-property.el`](../supertag-property.el)。行为说明：[properties_cn.md](properties_cn.md)。
 
 ## 链接与上下文反链
 

@@ -1373,3 +1373,78 @@ and still leaves `supertag-git-sync--in-flight' cleared."
      (supertag-automation-create
       '(:name "Still retired" :trigger :on-field-change
         :actions ((:action :update-field :params (:field "x" :value "y"))))))))
+
+;;; Summary panels: one more owned file type, NAME.org.summary
+
+(ert-deftest supertag-git-summary-panel-is-owned-text ()
+  "A summary panel is staged, scheduled and committed like a note."
+  (supertag-git-test-with-vault
+    (let ((panel (expand-file-name "summaries/board.org.summary" root)))
+      (dolist (path '("summaries/board.org.summary"
+                      "summaries/components/week-heat.org.summary"))
+        (should (supertag-git-sync--auto-commit-path-p root path)))
+      (dolist (path '("summaries/board.summary" "summaries/board.org.summary~"
+                      "summaries/.#board.org.summary" "summaries/board.data"))
+        (should-not (supertag-git-sync--auto-commit-path-p root path)))
+      (supertag-git-sync-mode 1)
+      (supertag-git-test-write root "summaries/board.org.summary" "(:format 1)\n")
+      (supertag-git-test-write root "credentials.txt" "synthetic only")
+      ;; Code writes a panel, so no save hook sees it; its writer says so.
+      (when (timerp supertag-git-sync--commit-timer)
+        (cancel-timer supertag-git-sync--commit-timer))
+      (setq supertag-git-sync--commit-timer nil)
+      (should-not (supertag-git-sync-file-written
+                   (expand-file-name "credentials.txt" root)))
+      (should-not (supertag-git-sync-file-written
+                   (expand-file-name "outside.org.summary" tmp)))
+      (should-not supertag-git-sync--commit-timer)
+      (should (supertag-git-sync-file-written panel))
+      (should (timerp supertag-git-sync--commit-timer))
+      ;; The index-scope guard accepts a staged panel and nothing else new.
+      (supertag-git-test-run root "add" "summaries/board.org.summary")
+      (supertag-git--assert-index-scope root)
+      (supertag-git-test-run root "add" "credentials.txt")
+      (should-error (supertag-git--assert-index-scope root) :type 'user-error)
+      (supertag-git-test-run root "reset" "--" "credentials.txt")
+      (supertag-git-sync-mode -1)
+      (should (member "summaries/board.org.summary"
+                      (supertag-git--tracked-files root)))
+      (should-not (member "credentials.txt" (supertag-git--tracked-files root))))))
+
+(ert-deftest supertag-git-summary-panel-is-not-parsed-as-notes ()
+  "The Org scan never reads a summary panel, whatever it contains."
+  (supertag-git-test-with-vault
+    (supertag-git-test-write
+     root "summaries/fake.org.summary"
+     "* Heading\n:PROPERTIES:\n:ID: summary-fake-node\n:END:\n")
+    (should (eq 'complete (plist-get (supertag-reindex-org) :status)))
+    (should-not (supertag-node-get "summary-fake-node"))
+    (should (supertag-node-get "stable"))))
+
+(ert-deftest supertag-git-conflicted-summary-panel-pauses-and-resumes ()
+  "A panel changed on both machines is resolved like a conflicted note."
+  (supertag-git-test-with-vault
+    (let ((panel (expand-file-name "summaries/board.org.summary" root)))
+      (supertag-git-sync-mode 1)
+      (supertag-git-test-write root "summaries/board.org.summary"
+                               "(:format 1 :code \"local\")\n")
+      (supertag-git-test-run root "add" "summaries/board.org.summary")
+      (supertag-git-test-run root "commit" "-m" "Local panel")
+      (supertag-git-test-write peer "summaries/board.org.summary"
+                               "(:format 1 :code \"remote\")\n")
+      (supertag-git-test-run peer "add" "summaries/board.org.summary")
+      (supertag-git-test-run peer "commit" "-m" "Remote panel")
+      (supertag-git-test-run peer "push")
+      (supertag-git-sync--schedule-commit)
+      (supertag-git-sync-now)
+      (should (member (file-truename panel) supertag-git--conflicted-files))
+      (should (string-match-p "^<<<<<<< " (supertag-document-test-disk panel)))
+      (with-current-buffer (get-file-buffer panel)
+        (should smerge-mode)
+        (erase-buffer)
+        (insert "(:format 1 :code \"local\")\n")
+        (save-buffer))
+      (should (supertag-git-sync-now))
+      (should-not supertag-git--conflicted-files)
+      (should-not (supertag-git-sync--unmerged-paths root))
+      (should (= 0 (supertag-git-sync--rev-count root "@{upstream}..HEAD"))))))

@@ -376,7 +376,8 @@ The cache alone cannot describe conflicts before mode enable after a restart."
   (let ((true-root (supertag-git--truename-dir root))
         conflicted)
     (dolist (rel (supertag-git-sync--unmerged-paths root))
-      (when (or (string-suffix-p ".org" rel) (equal rel supertag-git-metadata-file))
+      (when (or (supertag-git--owned-text-path-p rel)
+                (equal rel supertag-git-metadata-file))
         (push (file-truename (expand-file-name rel true-root)) conflicted)))
     (nreverse conflicted)))
 
@@ -490,11 +491,17 @@ change and gets committed."
         (string-suffix-p "~" name)
         (and (string-prefix-p "#" name) (string-suffix-p "#" name)))))
 
+(defun supertag-git--owned-text-path-p (path)
+  "Return non-nil when PATH is Org text or a summary panel.
+A summary panel, NAME.org.summary, is a data file that syncs like a note."
+  (or (string-suffix-p ".org" path)
+      (string-suffix-p ".org.summary" path)))
+
 (defun supertag-git-sync--auto-commit-path-p (root path)
   "Return non-nil when PATH is owned text or metadata, excluding local data."
   (and (not (supertag-git--local-data-path-p root path))
        (not (supertag-git--editor-ephemera-path-p path))
-       (or (string-suffix-p ".org" path) (equal path ".gitignore")
+       (or (supertag-git--owned-text-path-p path) (equal path ".gitignore")
            (equal path supertag-git-metadata-file))))
 
 (defun supertag-git--assert-no-staged-markers (root)
@@ -831,11 +838,23 @@ root -- saves anywhere else in Emacs must never trigger a vault commit."
   (when (and (bound-and-true-p supertag-git-sync-mode)
              supertag-git-sync--vault-root
              buffer-file-name
-             (or (string-suffix-p ".org" buffer-file-name)
+             (or (supertag-git--owned-text-path-p buffer-file-name)
                  (equal buffer-file-name
                         (expand-file-name supertag-git-metadata-file supertag-git-sync--vault-root)))
              (supertag-git--ancestor-p supertag-git-sync--vault-root buffer-file-name))
     (supertag-git-sync--schedule-commit)))
+
+(defun supertag-git-sync-file-written (file)
+  "Schedule a commit for FILE, an owned text file that code just wrote.
+`after-save-hook' never sees a file written without a buffer, such as a
+summary panel, so its writer calls this instead.  Return non-nil when a
+commit was scheduled."
+  (when (and (bound-and-true-p supertag-git-sync-mode)
+             supertag-git-sync--vault-root
+             (supertag-git--owned-text-path-p file)
+             (supertag-git--ancestor-p supertag-git-sync--vault-root file))
+    (supertag-git-sync--schedule-commit)
+    t))
 
 (defun supertag-git-setup--pick-root (&optional _ignored)
   "Return the sole configured Org root, independent of Store location."
@@ -888,8 +907,8 @@ local, as do conventional .supertag and backups directories."
           :remote-configured-p (and valid (supertag-git-setup--existing-origin-url root)))))
 
 (defun supertag-git-sync--commit-candidate-pathspecs (_root)
-  "Allow Org text recursively, root portable metadata and the root ignore file."
-  (list "*.org" ":(top,literal).gitignore"
+  "Allow Org text and summary panels recursively, root metadata and ignore file."
+  (list "*.org" "*.org.summary" ":(top,literal).gitignore"
         (concat ":(top,literal)" supertag-git-metadata-file)))
 
 (defun supertag-git--ignore-literal (path)

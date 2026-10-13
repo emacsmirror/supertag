@@ -3457,6 +3457,11 @@ values."
           (cl-incf changed))))
     changed))
 
+(defvar supertag-tag-rekey-functions nil
+  "Functions called with OLD-ID and NEW-ID after a Tag got a new ID.
+For what names a Tag by ID outside the Store, such as a summary panel file.
+A function that fails is reported and does not undo the new ID.")
+
 (defun supertag-tag-rename--rekey (old-id new-id)
   "Give the Tag OLD-ID the fresh stable ID NEW-ID.
 Every `:extends' edge and every node `:tags' entry that names OLD-ID is
@@ -3487,6 +3492,11 @@ The old ID is dropped from the Tag's own aliases.  Returns NEW-ID."
        tags)
       (supertag-update '(:tags) result))
     (supertag-tag-rename--rewrite-nodes (list (cons old-id new-id))))
+  (dolist (function supertag-tag-rekey-functions)
+    (condition-case err
+        (funcall function old-id new-id)
+      (error (message "Supertag: %s could not follow Tag %s to %s: %s"
+                      function old-id new-id (error-message-string err)))))
   new-id)
 
 (defun supertag-tag-rename--repoint-extends (old-id new-id)

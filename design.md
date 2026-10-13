@@ -7,7 +7,8 @@ accent colors used as filled blocks, one monospace size, uppercase
 slash-separated labels, ornament built from characters. This file is the
 single source of truth for how a view looks. Data rules for views
 (read-only, org-native, system proposes) live elsewhere; this file is only
-about form.
+about form. Summary panels, whose layout a model writes and which can act
+on entries, follow this file for form and `summary.md` for everything else.
 
 ## 1. One size, hierarchy by contrast
 

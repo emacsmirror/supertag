@@ -66,7 +66,9 @@ Git 层**不复制整个数据库**：Org 文本和 `.supertag-metadata.eld` 一
 
 自动提交的范围很窄：
 
-- **会提交**：同步目录下递归的 `*.org`，以及仓库根目录的 `.gitignore` 和 `.supertag-metadata.eld`。
+- **会提交**：同步目录下递归的 `*.org` 和 `*.org.summary`，以及仓库根目录的 `.gitignore` 和
+  `.supertag-metadata.eld`。一个 `名字.org.summary` 文件保存一块 summary 面板或它的一个组件
+  （见 [`../summary.md`](../summary.md)）；它是数据，不会被当成笔记解析，也从不被执行。
 - **不提交**：数据目录、`supertag-db.el`、备份目录、同步状态文件、presence 文件、
   `.gitattributes`；Emacs 的锁文件/自动保存/备份文件（`.#note.org`、`#note.org#`、
   `note.org~`）；普通附件同样不在自动提交范围内。
@@ -92,7 +94,8 @@ Git 层**不复制整个数据库**：Org 文本和 `.supertag-metadata.eld` 一
   继续。工作区里已保存但还没提交的 Org 改动会先走一次提交，再拉取。
 - **冲突**：合并出现未解决的 Org 或元数据冲突时会暂停自动同步，用 `smerge-mode` 打开第一个
   冲突文件（冲突文件不会被导入数据库）。解决、保存后执行 `M-x supertag-git-sync-now`
-  继续。
+  继续。两台机器改了同一块 summary 面板时冲突方式相同；解决之前，这块面板只显示一条提示，
+  不显示版式。
 - **边界**：这里没有“任意并发自动无损”的承诺。两台机器同时改同一段文本会交给 Git
   合并，解决不了就停下来等你；不想处理冲突，就让改动错开时间并勤同步。
 

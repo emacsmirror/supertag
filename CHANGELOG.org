@@ -1,5 +1,31 @@
 * Changelog
 * [Unreleased]
+** Summary panels (experimental)
+- A summary is the information panel of one tag.  =supertag-summary-design=
+  asks for a tag, a name and one sentence saying what you want to see; a
+  model writes the layout and Supertag draws it with TextUI.
+  =supertag-summary-revise= changes a panel with one more sentence, and
+  =supertag-summary-open= shows a kept panel.
+- The records come from the Store every time a panel is drawn.  No model
+  reads a note: designing a panel sends the title, state and tags of six
+  records as a sample, and nothing else.  Opening a kept panel needs no
+  model and no Superchat.
+- An entry can carry a link that opens its note and a state button that
+  changes its TODO state in the Org file; the panel then redraws with point
+  on the same entry.
+- The model's code never runs in your session.  It is checked against a
+  list of allowed functions, run in a child Emacs, and what it returns is
+  rebuilt here from numbers and plain text.  What a link or a button does
+  always comes from Supertag.
+- =supertag-summary-component= has the model write a named drawing that
+  later panels call.
+- A panel is kept as =NAME.org.summary= under =summaries/= in the sync
+  directory, as data that is read and never evaluated.  Git sync now
+  commits this file type, so panels travel to other machines; a panel
+  changed on two machines is resolved like a conflicted note.
+- New options: =supertag-summary-directory=, =supertag-summary-palette=,
+  =supertag-summary-skip-file-regexp=, =supertag-summary-timeout=,
+  =supertag-summary-run-timeout=.  =summary.md= is the design contract.
 ** Links in property values
 - A link to a node written in a property value, such as
   =:SEE: [[id:ID][Title]]=, is now a reference of the node and shows in the
